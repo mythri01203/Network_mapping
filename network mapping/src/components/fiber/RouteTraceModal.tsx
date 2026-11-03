@@ -1,21 +1,35 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { Activity, TriangleAlert, MapPin, Route, X } from 'lucide-react';
 import {
-  X,
-  Activity,
-  AlertTriangle,
-  Search,
-  MapPin
-} from 'lucide-react';
-
-const statusPill: Record<string, string> = {
-  Pass: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-  Warning: 'text-amber-800 bg-amber-50 border-amber-200',
-  Fail: 'text-rose-700 bg-rose-50 border-rose-200',
-  Unknown: 'text-slate-600 bg-slate-50 border-slate-200'
-};
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  Modal,
+  SearchInput,
+  SectionLabel,
+  StatTile,
+  StatusBadge,
+  cn,
+} from '../ui';
+import type { BadgeTone } from '../ui';
 
 const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
+const formatDbm = (v?: number) => (v !== undefined ? `${v.toFixed(1)} dBm` : '—');
+
+const BUDGET_TILE_TONE: Record<string, 'good' | 'warn' | 'bad' | 'default'> = {
+  Pass: 'good',
+  Warning: 'warn',
+  Fail: 'bad',
+  Unknown: 'default',
+};
+
+const HOP_TONE: Record<string, BadgeTone> = {
+  Normal: 'green',
+  Warning: 'amber',
+  Faulty: 'red',
+};
 
 export const RouteTraceModal: React.FC = () => {
   const {
@@ -34,7 +48,9 @@ export const RouteTraceModal: React.FC = () => {
 
   const [searchTarget, setSearchTarget] = useState('');
 
-  if (!isRouteTraceModalOpen) return null;
+  useEffect(() => {
+    if (isRouteTraceModalOpen) setSearchTarget('');
+  }, [isRouteTraceModalOpen]);
 
   const traceAndFly = (id: string, lat?: number, lng?: number) => {
     if (traceNetworkPath(id) && lat !== undefined && lng !== undefined) {
@@ -67,200 +83,184 @@ export const RouteTraceModal: React.FC = () => {
 
     // Faults, closures, splitters and PON ports are resolved by the context.
     if (!traceNetworkPath(searchTarget.trim())) {
-      showToast('warning', 'No Match', `Nothing matching "${searchTarget.trim()}" was found.`);
+      showToast('warning', 'No match', `Nothing matching "${searchTarget.trim()}" was found.`);
     }
   };
 
   const quickTargets = customers.slice(0, 5);
   const summary = activeTraceSummary;
+  const close = () => setIsRouteTraceModalOpen(false);
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-              <Activity className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-slate-900">Advanced Optical Route Trace</h2>
-              <p className="text-[11px] text-slate-500">End-to-End OLT to Customer ONT Physical & Logical Path</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            {activeTracePath && (
-              <button
-                onClick={clearTrace}
-                className="px-2.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
+    <Modal
+      open={isRouteTraceModalOpen}
+      onClose={close}
+      title="Route trace"
+      description="End-to-end OLT to customer ONT path with optical budget"
+      icon={Route}
+      size="xl"
+      bodyClassName="p-0"
+      headerActions={
+        activeTracePath ? (
+          <Button variant="ghost" size="sm" icon={X} onClick={clearTrace}>
+            Clear trace
+          </Button>
+        ) : undefined
+      }
+      footer={<Button variant="secondary" onClick={close}>Close</Button>}
+    >
+      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+        <form onSubmit={handleSearchTrace} className="flex gap-2">
+          <SearchInput
+            className="flex-1"
+            value={searchTarget}
+            onValueChange={setSearchTarget}
+            placeholder="Customer ID or name, ONT serial, equipment, cable, fault or PON port"
+            data-autofocus
+          />
+          <Button type="submit" variant="primary" icon={Activity}>
+            Trace route
+          </Button>
+        </form>
+
+        {quickTargets.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 overflow-x-auto">
+            <span className="mr-1 shrink-0 text-xs text-slate-500">Quick trace</span>
+            {quickTargets.map(c => (
+              <Button
+                key={c.id}
+                variant="secondary"
+                size="xs"
+                title={c.name}
+                onClick={() => traceAndFly(c.id, c.lat, c.lng)}
+                className="font-mono"
               >
-                Clear trace
-              </button>
-            )}
-            <button
-              onClick={() => setIsRouteTraceModalOpen(false)}
-              className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+                {c.id}
+              </Button>
+            ))}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Quick Search Bar */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-          <form onSubmit={handleSearchTrace} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Trace by customer ID or name, ONT serial, equipment, cable, fault or PON port..."
-                value={searchTarget}
-                onChange={e => setSearchTarget(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 shadow-xs"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-            >
-              Trace Route
-            </button>
-          </form>
-
-          {/* Quick Trace Buttons */}
-          {quickTargets.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-2 overflow-x-auto text-[11px]">
-              <span className="text-slate-400 font-semibold mr-1">Quick Trace:</span>
-              {quickTargets.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => traceAndFly(c.id, c.lat, c.lng)}
-                  title={c.name}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg font-mono text-blue-700 transition-colors"
-                >
-                  {c.id}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Trace Flow Sequence */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {activeTracePath && activeTracePath.length > 0 ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-bold text-xs text-slate-800">
-                  {summary?.targetLabel ? `${summary.targetLabel} ? ` : ''}
-                  {activeTracePath.length} nodes &bull; {formatLength(summary?.totalLengthMeters ?? 0)} &bull; {(summary?.totalLossDb ?? 0).toFixed(2)} dB loss
-                </span>
-                {summary && (
-                  <span className={`border px-2.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill[summary.budgetStatus]}`}>
-                    {summary.estimatedRxDbm !== undefined
-                      ? `Est. Rx ${summary.estimatedRxDbm.toFixed(1)} dBm (${summary.budgetStatus})`
-                      : `Link budget: ${summary.budgetStatus}`}
-                  </span>
-                )}
+      <div className="space-y-4 px-5 py-4">
+        {activeTracePath && activeTracePath.length > 0 ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-slate-900">
+                  {summary?.targetLabel || 'Traced path'}
+                </div>
+                <div className="tabular text-xs text-slate-500">
+                  {activeTracePath.length} nodes · {formatLength(summary?.totalLengthMeters ?? 0)} · {(summary?.totalLossDb ?? 0).toFixed(2)} dB loss
+                </div>
               </div>
-
               {summary && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
-                    <div className="text-slate-500">OLT Tx power</div>
-                    <div className="font-mono font-bold text-slate-800">{summary.txPowerDbm !== undefined ? `${summary.txPowerDbm.toFixed(1)} dBm` : 'n/a'}</div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
-                    <div className="text-slate-500">Estimated Rx</div>
-                    <div className="font-mono font-bold text-slate-800">{summary.estimatedRxDbm !== undefined ? `${summary.estimatedRxDbm.toFixed(1)} dBm` : 'n/a'}</div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
-                    <div className="text-slate-500">Measured Rx</div>
-                    <div className="font-mono font-bold text-slate-800">{summary.measuredRxDbm !== undefined ? `${summary.measuredRxDbm.toFixed(1)} dBm` : 'n/a'}</div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
-                    <div className="text-slate-500">Downstream customers</div>
-                    <div className="font-mono font-bold text-slate-800">{summary.downstreamCustomerCount}</div>
-                  </div>
-                </div>
+                <StatusBadge
+                  status={summary.budgetStatus}
+                  size="md"
+                  label={
+                    summary.estimatedRxDbm !== undefined
+                      ? `Est. Rx ${summary.estimatedRxDbm.toFixed(1)} dBm · ${summary.budgetStatus}`
+                      : `Link budget: ${summary.budgetStatus}`
+                  }
+                />
               )}
+            </div>
 
-              {summary && summary.warnings.length > 0 && (
-                <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-[11px] text-amber-900 space-y-1">
-                  {summary.warnings.map((w, i) => (
-                    <div key={i} className="flex items-start gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                      <span>{w}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {summary && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatTile label="OLT Tx power" value={<span className="font-mono text-base">{formatDbm(summary.txPowerDbm)}</span>} />
+                <StatTile
+                  label="Estimated Rx"
+                  value={<span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm)}</span>}
+                  tone={BUDGET_TILE_TONE[summary.budgetStatus] ?? 'default'}
+                />
+                <StatTile label="Measured Rx" value={<span className="font-mono text-base">{formatDbm(summary.measuredRxDbm)}</span>} />
+                <StatTile label="Downstream customers" value={<span className="tabular text-base">{summary.downstreamCustomerCount}</span>} />
+              </div>
+            )}
 
-              {/* Vertical Detailed Step Trace */}
-              <div className="relative pl-6 space-y-4 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-blue-600 before:via-emerald-500 before:to-blue-600">
+            {summary && summary.warnings.length > 0 && (
+              <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {summary.warnings.map((w, i) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <TriangleAlert size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div>
+              <SectionLabel>Path</SectionLabel>
+              <ol className="relative mt-2">
                 {activeTracePath.map((hop, idx) => {
                   const isFaulty = hop.status === 'Faulty';
                   const isWarning = hop.status === 'Warning';
+                  const isLast = idx === activeTracePath.length - 1;
                   const canFly = hop.lat !== undefined && hop.lng !== undefined;
                   return (
-                    <div key={`${hop.id}-${idx}`} className="relative group">
-                      <div className={`absolute -left-6 top-1.5 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center font-bold text-[10px] shadow-sm ${
-                        isFaulty ? 'bg-rose-600 text-white animate-pulse' : isWarning ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'
-                      }`}>
+                    <li key={`${hop.id}-${idx}`} className="relative flex gap-3 pb-3 last:pb-0">
+                      {!isLast && <span className="absolute left-[9.5px] top-6 bottom-0 w-px bg-slate-200" aria-hidden />}
+                      <span
+                        className={cn(
+                          'relative z-10 mt-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold tabular',
+                          isFaulty
+                            ? 'border-red-600 bg-red-600 text-white'
+                            : isWarning
+                            ? 'border-amber-500 bg-amber-500 text-white'
+                            : 'border-slate-300 bg-white text-slate-600'
+                        )}
+                      >
                         {idx + 1}
-                      </div>
-
-                      <div className={`p-3.5 rounded-xl border transition-all ${
-                        isFaulty
-                          ? 'bg-rose-50 border-rose-300 shadow-sm'
-                          : isWarning
-                          ? 'bg-amber-50 border-amber-200'
-                          : 'bg-slate-50 border-slate-200/80 hover:bg-white hover:shadow-xs'
-                      }`}>
+                      </span>
+                      <div
+                        className={cn(
+                          'min-w-0 flex-1 rounded-md border px-3 py-2',
+                          isFaulty ? 'border-red-200 bg-red-50/60' : isWarning ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white'
+                        )}
+                      >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                            {hop.type} &bull; {hop.id}
-                          </span>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Badge tone="neutral">{hop.type}</Badge>
+                            <span className="truncate font-mono text-xs text-slate-500">{hop.id}</span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
                             {canFly && (
-                              <button
-                                type="button"
+                              <IconButton
+                                icon={MapPin}
+                                label="Show on map"
+                                size="xs"
                                 onClick={() => flyToLocation(hop.lat!, hop.lng!, 18)}
-                                title="Show on map"
-                                className="p-0.5 text-slate-400 hover:text-blue-600"
-                              >
-                                <MapPin className="w-3.5 h-3.5" />
-                              </button>
+                              />
                             )}
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isFaulty ? 'bg-rose-200 text-rose-800' : isWarning ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {hop.status}
-                            </span>
+                            <StatusBadge status={hop.status} tone={HOP_TONE[hop.status]} />
                           </div>
                         </div>
-                        <div className="font-bold text-xs text-slate-900 mt-1">{hop.name}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">{hop.details}</div>
+                        <div className="mt-1 text-[13px] font-medium text-slate-900">{hop.name}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{hop.details}</div>
                         {(hop.lengthMeters !== undefined || hop.lossDb !== undefined || hop.cumulativeLossDb !== undefined) && (
-                          <div className="flex flex-wrap gap-3 mt-1.5 text-[10px] font-mono text-slate-600">
+                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px] text-slate-600">
                             {hop.lengthMeters !== undefined && <span>Length {formatLength(hop.lengthMeters)}</span>}
                             {hop.lossDb !== undefined && <span>Loss {hop.lossDb.toFixed(2)} dB</span>}
                             {hop.cumulativeLossDb !== undefined && <span>Cumulative {hop.cumulativeLossDb.toFixed(2)} dB</span>}
                           </div>
                         )}
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ol>
             </div>
-          ) : (
-            <div className="text-center py-12 text-slate-400">
-              <Activity className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-              <div>Search for a customer, ONT serial, equipment or cable to begin route tracing</div>
-            </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <EmptyState
+            icon={Activity}
+            title="No active trace"
+            description="Search for a customer, ONT serial, equipment or cable to trace its optical path."
+          />
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };
