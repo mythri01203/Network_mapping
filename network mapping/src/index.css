@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Map styles */
+.leaflet-container {
+  font-family: inherit;
+  width: 100%;
+  height: 100%;
+  background: #e2e8f0;
+  z-index: 1;
+}
+
+/* Pulsing trace animations */
+@keyframes dash-pulse {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+.fiber-trace-active {
+  stroke-dasharray: 8, 8;
+  animation: dash-pulse 1s linear infinite;
+}
+
+.fiber-fault-pulse {
+  stroke-dasharray: 6, 6;
+  animation: dash-pulse 0.6s linear infinite;
+}
+
+/* Custom Marker Styling */
+.gis-equipment-marker {
+  transition: transform 0.15s ease-out;
+  cursor: pointer;
+}
+
+.gis-equipment-marker:hover {
+  transform: scale(1.18);
+  z-index: 1000 !important;
+}
+
+.gis-equipment-marker.selected {
+  transform: scale(1.25);
+  filter: drop-shadow(0 0 10px rgba(12, 135, 235, 0.8));
+  z-index: 1001 !important;
+}
+
+.gis-equipment-marker.faulty {
+  filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9));
+  animation: marker-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes marker-pulse {
+  0%, 100% {
+    transform: scale(1.1);
+  }
+  50% {
+    transform: scale(1.28);
+  }
+}
+
+/* Tooltip custom styling */
+.leaflet-tooltip.gis-tooltip {
+  background-color: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.leaflet-tooltip-top:before {
+  border-top-color: rgba(15, 23, 42, 0.92);
+}

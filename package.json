@@ -1,0 +1,13 @@
+{
+  "name": "fiber-gis-network-mapping-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FiberGIS – Advanced Fiber Network Mapping and Management System",
+  "scripts": {
+    "dev": "npm --prefix \"network mapping\" run dev",
+    "build": "npm --prefix \"network mapping\" run build",
+    "start": "npm --prefix \"network mapping\" start",
+    "server": "npm --prefix \"network mapping\" run server"
+  }
+}
+
