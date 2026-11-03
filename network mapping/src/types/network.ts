@@ -445,15 +445,32 @@ export interface AuditLog {
   action: string;
   details: string;
   assetId: string;
-  assetType: 'Equipment' | 'Cable' | 'Core' | 'Customer' | 'Fault' | 'WorkOrder';
+  assetType: 'Equipment' | 'Cable' | 'Core' | 'Customer' | 'Fault' | 'WorkOrder' | 'Zone' | 'Document' | 'Closure' | 'System';
 }
 
 export interface TracePathNode {
-  type: 'OLT' | 'PON' | 'ODF' | 'Feeder' | 'FDMS' | 'Distribution' | 'Closure' | 'FDT' | 'Splitter' | 'FAT' | 'Drop' | 'ONT' | 'Customer';
+  type:
+    | 'OLT'
+    | 'PON'
+    | 'ODF'
+    | 'Feeder'
+    | 'FDMS'
+    | 'Distribution'
+    | 'Closure'
+    | 'FDT'
+    | 'Splitter'
+    | 'FAT'
+    | 'Drop'
+    | 'ONT'
+    | 'Customer'
+    | 'Equipment';
   id: string;
   name: string;
   details: string;
   status: 'Normal' | 'Warning' | 'Faulty';
   lat?: number;
   lng?: number;
+  lengthMeters?: number;
+  lossDb?: number;
+  cumulativeLossDb?: number;
 }

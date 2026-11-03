@@ -28,26 +28,48 @@ export function generateLogicalPorts(eq: Equipment): EquipmentPort[] {
   const total = eq.totalPorts || 0;
   if (!total) return [];
 
-  const used = eq.usedPorts || 0;
-  const reserved = Math.min(2, Math.max(0, total - used - 1));
-  const damaged = used < total ? 1 : 0;
+  // Derive statuses only from the recorded counts: never invent damaged ports.
+  const used = Math.min(Math.max(eq.usedPorts || 0, 0), total);
+  const available = Math.min(Math.max(eq.availablePorts ?? total - used, 0), total - used);
+  const reserved = total - used - available;
 
   return Array.from({ length: total }, (_, i) => {
     const n = i + 1;
     let status: LogicalPortStatus = 'Available';
     if (n <= used) status = 'Used';
     else if (n <= used + reserved) status = 'Reserved';
-    else if (n === total && damaged) status = 'Damaged';
 
     return {
       id: `${eq.id}-P${n.toString().padStart(3, '0')}`,
       portNumber: n,
       portType: portTypeForEquipment(eq.type),
       status,
-      assignedDate: status === 'Used' ? eq.installedDate : undefined,
-      remarks: status === 'Damaged' ? 'Marked damaged during inspection' : undefined
+      assignedDate: status === 'Used' ? eq.installedDate : undefined
     };
   });
+}
+
+/** Marks the first matching port (by number, else first Available) as Used/Available and returns updated counts. */
+export function setPortUsage(eq: Equipment, portNumber: number | undefined, used: boolean, customerId?: string) {
+  const ports = generateLogicalPorts(eq).map(p => ({ ...p }));
+  let target = portNumber !== undefined ? ports.find(p => p.portNumber === portNumber) : undefined;
+  if (used && (!target || target.status === 'Used' || target.status === 'Damaged')) {
+    target = ports.find(p => p.status === 'Available') || ports.find(p => p.status === 'Reserved');
+  }
+  if (!used && !target && customerId) target = ports.find(p => p.customerId === customerId);
+  if (target) {
+    target.status = used ? 'Used' : 'Available';
+    target.customerId = used ? customerId : undefined;
+    target.assignedDate = used ? new Date().toISOString().split('T')[0] : undefined;
+  }
+  const summary = summarizePorts(ports);
+  return {
+    ...eq,
+    logicalPorts: ports,
+    totalPorts: summary.total,
+    usedPorts: summary.used,
+    availablePorts: summary.available
+  };
 }
 
 export function summarizePorts(ports: EquipmentPort[]) {

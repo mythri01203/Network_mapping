@@ -23,6 +23,7 @@ export const OperationsHubView: React.FC = () => {
   const {
     workOrders,
     updateWorkOrderStatus,
+    addWorkOrder,
     faults,
     equipments,
     cables,
@@ -64,29 +65,23 @@ export const OperationsHubView: React.FC = () => {
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle) {
+    if (!newTitle.trim()) {
       showToast('error', 'Missing Title', 'Please enter a work order title.');
       return;
     }
 
-    const newOrder: WorkOrder = {
-      id: `WO-${Date.now().toString().slice(-5)}`,
-      title: newTitle,
+    addWorkOrder({
+      title: newTitle.trim(),
       type: newType,
       priority: newPriority,
-      status: 'Assigned',
-      technicianName: newTechName,
-      technicianPhone: newTechPhone,
-      scheduledDate: new Date().toISOString().split('T')[0],
-      notes: newNotes,
-      photos: []
-    };
-
-    workOrders.unshift(newOrder);
+      status: newTechName.trim() ? 'Assigned' : 'Pending',
+      technicianName: newTechName.trim(),
+      technicianPhone: newTechPhone.trim(),
+      notes: newNotes.trim()
+    });
     setIsNewOrderModalOpen(false);
     setNewTitle('');
     setNewNotes('');
-    showToast('success', 'Work Order Created', `Dispatched ${newOrder.id} to ${newOrder.technicianName}`);
   };
 
   const getPriorityBadge = (priority: WorkOrder['priority']) => {

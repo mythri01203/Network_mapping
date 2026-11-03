@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { estimateRxForSplitter, budgetStatusFor } from '../../lib/trace';
 import {
   X,
   Users,
-  CheckCircle2,
-  AlertTriangle,
-  MapPin,
-  Check,
-  Router,
-  Wifi,
-  Sparkles,
-  ArrowRight
+  Check
 } from 'lucide-react';
+
+const isCustomerTerminalType = (type: string) =>
+  type === 'FAT' || type.includes('Terminal Box') || type === 'Distribution Point';
+
+const newOntSerial = () => `HWTC-ONT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
 export const CustomerWizardModal: React.FC = () => {
   const {
@@ -20,6 +19,10 @@ export const CustomerWizardModal: React.FC = () => {
     equipments,
     splitters,
     cables,
+    closures,
+    customers,
+    faults,
+    selectedObject,
     connectCustomerToPort,
     flyToLocation,
     showToast
@@ -29,44 +32,82 @@ export const CustomerWizardModal: React.FC = () => {
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
-  const [area, setArea] = useState('Koramangala 4th Block');
+  const [area, setArea] = useState('');
   const [building, setBuilding] = useState('');
   const [flatNumber, setFlatNumber] = useState('');
-  const [lat, setLat] = useState<number>(12.9360);
-  const [lng, setLng] = useState<number>(77.6295);
+  const [lat, setLat] = useState('');
+  const [lng, setLng] = useState('');
 
   const [serviceType, setServiceType] = useState<'Fiber Broadband' | 'Triple Play' | 'Enterprise Fiber' | 'Cable TV'>('Fiber Broadband');
   const [plan, setPlan] = useState('FTTH Ultra 300 Mbps');
 
-  // Network connection selections
-  const availableTerminals = equipments.filter(e => e.type === 'FAT' || e.type.includes('Terminal Box'));
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string>(availableTerminals[0]?.id || 'FAT-01');
+  // Only terminals that actually host a splitter can serve a subscriber.
+  const availableTerminals = useMemo(
+    () => equipments.filter(e => isCustomerTerminalType(e.type) && splitters.some(s => s.terminalBoxId === e.id)),
+    [equipments, splitters]
+  );
+  const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
+  const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
+  const [selectedPortNumber, setSelectedPortNumber] = useState<number | null>(null);
 
-  // Splitters in chosen terminal
-  const terminalSplitters = splitters.filter(s => s.terminalBoxId === selectedTerminalId);
-  const [selectedSplitterId, setSelectedSplitterId] = useState<string>(terminalSplitters[0]?.id || 'SP-01');
-
-  // Current splitter and its output ports
-  const activeSplitter = splitters.find(s => s.id === selectedSplitterId) || terminalSplitters[0];
-  const [selectedPortNumber, setSelectedPortNumber] = useState<number>(() => {
-    const firstFree = activeSplitter?.outputPorts.find(p => p.status === 'Available');
-    return firstFree ? firstFree.portNumber : 1;
-  });
-
-  const [ontSerial, setOntSerial] = useState(`HWTC-ONT-${Date.now().toString().slice(-4)}`);
+  const [ontSerial, setOntSerial] = useState(newOntSerial);
   const [routerModel, setRouterModel] = useState('Huawei OptiXstar Wi-Fi 6');
 
-  if (!isCustomerWizardOpen) return null;
+  const selectedTerminal = equipments.find(e => e.id === selectedTerminalId);
+  const terminalSplitters = splitters.filter(s => s.terminalBoxId === selectedTerminalId);
+  const activeSplitter = terminalSplitters.find(s => s.id === selectedSplitterId);
 
-  const handleTerminalChange = (termId: string) => {
+  const firstFreePort = (splitterId: string) =>
+    splitters.find(s => s.id === splitterId)?.outputPorts.find(p => p.status === 'Available')?.portNumber ?? null;
+
+  const selectTerminal = (termId: string) => {
     setSelectedTerminalId(termId);
-    const sp = splitters.find(s => s.terminalBoxId === termId);
-    if (sp) {
-      setSelectedSplitterId(sp.id);
-      const freePort = sp.outputPorts.find(p => p.status === 'Available');
-      if (freePort) setSelectedPortNumber(freePort.portNumber);
+    const term = equipments.find(e => e.id === termId);
+    const termSplitters = splitters.filter(s => s.terminalBoxId === termId);
+    const sp = termSplitters.find(s => s.outputPorts.some(p => p.status === 'Available')) || termSplitters[0];
+    setSelectedSplitterId(sp?.id || '');
+    setSelectedPortNumber(sp ? firstFreePort(sp.id) : null);
+    if (term) {
+      setLat((term.lat + 0.0003).toFixed(6));
+      setLng((term.lng + 0.0003).toFixed(6));
+      setArea(term.area || '');
     }
   };
+
+  // Re-initialise the form each time the wizard opens (prefer the FAT selected on the map).
+  useEffect(() => {
+    if (!isCustomerWizardOpen) return;
+    setName('');
+    setMobile('');
+    setAddress('');
+    setBuilding('');
+    setFlatNumber('');
+    setOntSerial(newOntSerial());
+    const selectedId = selectedObject?.type === 'equipment' ? selectedObject.data?.id : undefined;
+    const preferred =
+      availableTerminals.find(t => t.id === selectedId) ||
+      availableTerminals.find(t => splitters.some(s => s.terminalBoxId === t.id && s.outputPorts.some(p => p.status === 'Available'))) ||
+      availableTerminals[0];
+    if (preferred) selectTerminal(preferred.id);
+    else {
+      setSelectedTerminalId('');
+      setSelectedSplitterId('');
+      setSelectedPortNumber(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCustomerWizardOpen]);
+
+  const estimate = useMemo(() => {
+    if (!selectedTerminal || !activeSplitter) return null;
+    const custLat = parseFloat(lat);
+    const custLng = parseFloat(lng);
+    const dropLen = Number.isFinite(custLat) && Number.isFinite(custLng)
+      ? Math.round(Math.hypot((custLat - selectedTerminal.lat) * 111320, (custLng - selectedTerminal.lng) * 111320 * Math.cos(custLat * Math.PI / 180)))
+      : 30;
+    return estimateRxForSplitter(selectedTerminal, activeSplitter, { equipments, cables, splitters, closures, customers, faults }, dropLen);
+  }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults]);
+
+  if (!isCustomerWizardOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,30 +116,42 @@ export const CustomerWizardModal: React.FC = () => {
       showToast('error', 'Validation Error', 'Please enter customer subscriber name.');
       return;
     }
+    if (!selectedTerminalId || !activeSplitter || selectedPortNumber === null) {
+      showToast('error', 'Validation Error', 'Select a terminal, splitter and a free output port.');
+      return;
+    }
+    const custLat = parseFloat(lat);
+    const custLng = parseFloat(lng);
+    if (!Number.isFinite(custLat) || !Number.isFinite(custLng) || Math.abs(custLat) > 90 || Math.abs(custLng) > 180) {
+      showToast('error', 'Invalid Location', 'Enter a valid latitude (-90..90) and longitude (-180..180).');
+      return;
+    }
 
     const connected = connectCustomerToPort({
-      name,
-      mobile: mobile || '+91 98450 00000',
-      address: address || 'Main Road Residence',
-      area,
-      building: building || undefined,
-      flatNumber: flatNumber || undefined,
-      lat,
-      lng,
+      name: name.trim(),
+      mobile: mobile.trim(),
+      address: address.trim(),
+      area: area.trim() || selectedTerminal?.area,
+      building: building.trim() || undefined,
+      flatNumber: flatNumber.trim() || undefined,
+      lat: custLat,
+      lng: custLng,
       serviceType,
       plan,
       terminalBoxId: selectedTerminalId,
-      splitterId: selectedSplitterId,
+      splitterId: activeSplitter.id,
       splitterOutputPort: selectedPortNumber,
-      ontSerialNumber: ontSerial,
+      ontSerialNumber: ontSerial.trim(),
       routerModel
     });
 
     if (connected) {
-      flyToLocation(lat, lng, 18);
+      flyToLocation(connected.lat, connected.lng, 18);
       setIsCustomerWizardOpen(false);
     }
   };
+
+  const rxStatus = budgetStatusFor(estimate?.rxDbm);
 
   return (
     <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
@@ -196,9 +249,10 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Access Terminal (FAT)</label>
                 <select
                   value={selectedTerminalId}
-                  onChange={e => handleTerminalChange(e.target.value)}
+                  onChange={e => selectTerminal(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
+                  {availableTerminals.length === 0 && <option value="">No terminal with a splitter</option>}
                   {availableTerminals.map(term => (
                     <option key={term.id} value={term.id}>{term.name} ({term.id})</option>
                   ))}
@@ -209,7 +263,10 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Splitter Module</label>
                 <select
                   value={selectedSplitterId}
-                  onChange={e => setSelectedSplitterId(e.target.value)}
+                  onChange={e => {
+                    setSelectedSplitterId(e.target.value);
+                    setSelectedPortNumber(firstFreePort(e.target.value));
+                  }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
                   {terminalSplitters.map(sp => (
@@ -228,19 +285,34 @@ export const CustomerWizardModal: React.FC = () => {
                 <div className="grid grid-cols-8 gap-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
                   {activeSplitter.outputPorts.map(port => {
                     const isOccupied = port.status === 'Occupied';
+                    const isFaulty = port.status === 'Faulty';
+                    const isReserved = port.status === 'Reserved';
+                    const isBlocked = isOccupied || isFaulty;
                     const isSelected = selectedPortNumber === port.portNumber;
                     return (
                       <button
                         key={port.portNumber}
                         type="button"
-                        disabled={isOccupied}
+                        disabled={isBlocked}
                         onClick={() => setSelectedPortNumber(port.portNumber)}
-                        title={isOccupied ? `Occupied by ${port.connectedCustomerName}` : `Port ${port.portNumber}: Free`}
+                        title={
+                          isOccupied
+                            ? `Occupied by ${port.connectedCustomerName || port.connectedCustomerId}`
+                            : isFaulty
+                            ? `Port ${port.portNumber}: Faulty`
+                            : isReserved
+                            ? `Port ${port.portNumber}: Reserved`
+                            : `Port ${port.portNumber}: Free`
+                        }
                         className={`p-2 rounded-lg text-center font-bold text-xs transition-all ${
                           isSelected
                             ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-400'
+                            : isFaulty
+                            ? 'bg-red-100 text-red-400 cursor-not-allowed line-through'
                             : isOccupied
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed line-through'
+                            : isReserved
+                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                             : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                         }`}
                       >
@@ -251,16 +323,93 @@ export const CustomerWizardModal: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1 px-1">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Free Port</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Occupied (Blocked)</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span> Reserved</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Occupied</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300"></span> Faulty</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600"></span> Selected</span>
+                </div>
+              </div>
+            )}
+            {estimate && (
+              <div className={`rounded-xl border px-3 py-2 text-[11px] ${
+                rxStatus === 'Fail' ? 'border-red-200 bg-red-50 text-red-700'
+                  : rxStatus === 'Warning' ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : rxStatus === 'Pass' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
+              }`}>
+                <div className="font-bold">Upstream path</div>
+                <div>
+                  {estimate.olt ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ''}` : 'No OLT reachable'}
+                  {estimate.hops.length > 0 && ` ? ${estimate.hops.map(h => h.cable.id).join(' ? ')}`}
+                  {` ? ${selectedTerminalId} / ${activeSplitter?.id}`}
+                </div>
+                <div>
+                  Estimated Rx: <span className="font-mono font-bold">{estimate.rxDbm !== undefined ? `${estimate.rxDbm} dBm` : 'n/a'}</span> ({rxStatus})
                 </div>
               </div>
             )}
           </div>
 
+          {/* Installation Location */}
+          <div className="space-y-3 pt-2">
+            <div className="font-bold text-xs text-slate-800 border-b pb-1">3. Premises Location</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Latitude</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={lat}
+                  onChange={e => setLat(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Longitude</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={lng}
+                  onChange={e => setLng(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Area</label>
+                <input
+                  type="text"
+                  value={area}
+                  onChange={e => setArea(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Building</label>
+                <input
+                  type="text"
+                  value={building}
+                  onChange={e => setBuilding(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Flat / Unit</label>
+                <input
+                  type="text"
+                  value={flatNumber}
+                  onChange={e => setFlatNumber(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500">Defaults next to the selected terminal; a drop cable is drawn from the terminal to this point.</p>
+          </div>
+
           {/* CPE Hardware */}
           <div className="space-y-3 pt-2">
-            <div className="font-bold text-xs text-slate-800 border-b pb-1">3. Customer Premise Equipment (CPE)</div>
+            <div className="font-bold text-xs text-slate-800 border-b pb-1">4. Customer Premise Equipment (CPE)</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">ONT Serial Number</label>
@@ -286,11 +435,14 @@ export const CustomerWizardModal: React.FC = () => {
           {/* Submit Button */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <div className="text-[11px] text-slate-500">
-              Assigned to Port <span className="font-bold text-slate-800">{selectedPortNumber}</span> on {selectedTerminalId}
+              {selectedPortNumber !== null
+                ? <>Assigned to Port <span className="font-bold text-slate-800">{selectedPortNumber}</span> on {selectedTerminalId}</>
+                : <span className="text-red-600 font-semibold">No free port on the selected splitter</span>}
             </div>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 transition-all"
+              disabled={selectedPortNumber === null}
+              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 transition-all"
             >
               <Check className="w-4 h-4" /> Activate Subscriber
             </button>

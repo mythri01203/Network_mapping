@@ -19,7 +19,7 @@ import {
   NetworkDocument,
   CatalogComponent,
   EquipmentPort,
-  LogicalPortStatus,
+  FiberCore,
   SpliceRecord
 } from '../types/network';
 import {
@@ -34,8 +34,140 @@ import {
   SAMPLE_ZONES,
   SAMPLE_DOCUMENTS
 } from '../data/sampleNetwork';
-import { generateLogicalPorts, summarizePorts } from '../lib/ports';
+import { generateLogicalPorts, summarizePorts, setPortUsage } from '../lib/ports';
+import {
+  nextSequentialId,
+  uniqueId,
+  equipmentIdPrefix,
+  cableIdPrefix,
+  escapeXml,
+  polylineLengthMeters
+} from '../lib/ids';
+import {
+  TraceData,
+  TraceResult,
+  TraceSummary,
+  traceCustomer,
+  traceEquipment,
+  traceCable,
+  collectDownstream,
+  estimateRxForSplitter
+} from '../lib/trace';
+import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
 import confetti from 'canvas-confetti';
+
+/**
+ * Bump whenever the bundled sample network changes shape so stale browser data
+ * (which would otherwise shadow the fixed seed forever) is discarded once.
+ */
+const DATA_VERSION = '3';
+const STORAGE_PREFIX = 'fiber_gis_';
+const DATA_VERSION_KEY = `${STORAGE_PREFIX}data_version`;
+const PERSISTED_KEYS = [
+  'equipment',
+  'cables',
+  'splitters',
+  'closures',
+  'customers',
+  'faults',
+  'work_orders',
+  'audit_logs',
+  'zones',
+  'documents',
+  'custom_components',
+  'project_start'
+];
+const MAX_AUDIT_LOGS = 500;
+const MAX_HISTORY = 50;
+
+const ensureStorageVersion = () => {
+  try {
+    if (localStorage.getItem(DATA_VERSION_KEY) === DATA_VERSION) return;
+    PERSISTED_KEYS.forEach(key => localStorage.removeItem(`${STORAGE_PREFIX}${key}`));
+    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+  } catch {
+    // Storage may be unavailable (private mode / quota); fall back to in-memory sample data.
+  }
+};
+
+const loadState = <T,>(key: string, fallback: T, isValid: (value: unknown) => boolean = Array.isArray): T => {
+  try {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}${key}`);
+    if (saved === null) return fallback;
+    const parsed = JSON.parse(saved);
+    return isValid(parsed) ? (parsed as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const saveState = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(value));
+  } catch {
+    // Ignore quota errors so the UI keeps working with in-memory state.
+  }
+};
+
+const isLatLngPair = (value: unknown): value is [number, number] =>
+  Array.isArray(value) && value.length === 2 && value.every(v => typeof v === 'number' && Number.isFinite(v));
+
+const isRecordArray = (value: unknown): boolean =>
+  Array.isArray(value) && value.every(item => item !== null && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string');
+
+const today = () => new Date().toISOString().split('T')[0];
+
+const defaultPortCount = (type: EquipmentType): number => {
+  if (type === 'FAT' || type.includes('Terminal Box')) return 8;
+  if (type === 'FDT') return 48;
+  if (type === 'FDMS' || type === 'Fiber Distribution Cabinet') return 96;
+  if (type === 'ODF' || type === 'Fiber Patch Panel') return 48;
+  if (type === 'OLT') return 16;
+  if (type === 'ONT' || type === 'ONU' || type === 'Optical Modem' || type === 'Customer Terminal') return 1;
+  if (
+    type.includes('Pole') ||
+    type === 'Manhole' ||
+    type === 'Handhole' ||
+    type === 'Underground Chamber' ||
+    type === 'Duct' ||
+    type === 'Microduct' ||
+    type === 'Cable Tray' ||
+    type === 'Junction Point' ||
+    type === 'Building Entry Point'
+  ) return 0;
+  return 24;
+};
+
+const defaultFiberCount = (type: CableType): number => {
+  if (type === 'Main Feeder Fiber') return 48;
+  if (type === 'Distribution Fiber') return 24;
+  if (type === 'Drop Fiber') return 2;
+  if (type === 'Coaxial Cable') return 1;
+  return 12;
+};
+
+const buildCores = (count: number): FiberCore[] =>
+  Array.from({ length: count }, (_, i) => {
+    const color = getFiberColor(i + 1);
+    return {
+      coreNumber: i + 1,
+      tubeNumber: getTubeNumber(i + 1),
+      colorName: color.name,
+      colorHex: color.hex,
+      status: 'Available' as const,
+      remarks: 'Freshly installed unallocated core'
+    };
+  });
+
+type SelectedObjectType = 'equipment' | 'cable' | 'customer' | 'closure' | 'fault';
+
+interface HistorySnapshot {
+  equipments: Equipment[];
+  cables: Cable[];
+  splitters: Splitter[];
+  customers: Customer[];
+  closures: JointClosure[];
+}
 
 export interface BikerWaypoint {
   id: string;
@@ -79,8 +211,8 @@ interface NetworkContextType {
   documents: NetworkDocument[];
 
   // Selection & Tools
-  selectedObject: { type: 'equipment' | 'cable' | 'customer' | 'closure' | 'fault'; data: any } | null;
-  setSelectedObject: (obj: { type: 'equipment' | 'cable' | 'customer' | 'closure' | 'fault'; data: any } | null) => void;
+  selectedObject: { type: SelectedObjectType; data: any } | null;
+  setSelectedObject: (obj: { type: SelectedObjectType; data: any } | null) => void;
   activeTool: 'select' | 'draw_cable' | 'add_equipment' | 'measure' | 'trace';
   setActiveTool: (tool: 'select' | 'draw_cable' | 'add_equipment' | 'measure' | 'trace') => void;
   selectedEquipmentTypeToAdd: EquipmentType | null;
@@ -96,7 +228,8 @@ interface NetworkContextType {
   activeTracePath: TracePathNode[] | null;
   activeTraceCableIds: string[];
   activeTraceEquipmentIds: string[];
-  traceNetworkPath: (targetId: string) => void;
+  activeTraceSummary: TraceSummary | null;
+  traceNetworkPath: (targetId: string) => boolean;
   clearTrace: () => void;
 
   // Layers & Map Settings
@@ -183,19 +316,21 @@ interface NetworkContextType {
 
   // CRUD & Operations
   addEquipment: (item: Partial<Equipment> & { name: string; type: EquipmentType; lat: number; lng: number }) => Equipment | null;
-  updateEquipment: (item: Equipment) => void;
+  updateEquipment: (item: Equipment, options?: { silent?: boolean }) => void;
   deleteEquipment: (id: string) => boolean;
   addCable: (item: Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] }) => Cable | null;
-  updateCable: (item: Cable) => void;
+  updateCable: (item: Cable, options?: { silent?: boolean }) => void;
   deleteCable: (id: string) => boolean;
   allocateFiberCore: (cableId: string, coreNumber: number, customerId?: string, equipmentId?: string, portName?: string) => boolean;
   connectCustomerToPort: (customerData: Partial<Customer>) => Customer | null;
   uploadEquipmentPhoto: (equipmentId: string, photo: Partial<EquipmentImage>) => void;
   saveImageAnnotation: (equipmentId: string, imageId: string, annotation: ImageAnnotation) => void;
   deleteImageAnnotation: (equipmentId: string, imageId: string, annotationId: string) => void;
-  recordNewFault: (faultData: Partial<Fault>) => void;
+  recordNewFault: (faultData: Partial<Fault>) => Fault;
   resolveExistingFault: (faultId: string) => void;
+  addWorkOrder: (order: Partial<WorkOrder> & { title: string }) => WorkOrder;
   updateWorkOrderStatus: (workOrderId: string, status: WorkOrder['status']) => void;
+  logAudit: (action: string, details: string, assetId: string, assetType: AuditLog['assetType']) => void;
 
   // Zone Management
   addZone: (zone: Partial<NetworkZone> & { name: string; areaCode: string }) => NetworkZone;
@@ -209,6 +344,7 @@ interface NetworkContextType {
   // Backup, Restore & GIS Export
   backupSystem: () => void;
   restoreSystem: (jsonString: string) => boolean;
+  resetToSampleData: () => void;
   exportKML: () => void;
 
   // Global search & map navigation
@@ -230,68 +366,33 @@ interface NetworkContextType {
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
 export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Runs before any state initializer reads storage (first initializer in the component).
+  useState(() => {
+    ensureStorageVersion();
+    return true;
+  });
+
   // Primary datasets initialized with rich demonstration data
-  const [equipments, setEquipments] = useState<Equipment[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_equipment');
-    return saved ? JSON.parse(saved) : SAMPLE_EQUIPMENT;
-  });
-
-  const [cables, setCables] = useState<Cable[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_cables');
-    return saved ? JSON.parse(saved) : SAMPLE_CABLES;
-  });
-
-  const [splitters, setSplitters] = useState<Splitter[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_splitters');
-    return saved ? JSON.parse(saved) : SAMPLE_SPLITTERS;
-  });
-
-  const [closures, setClosures] = useState<JointClosure[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_closures');
-    return saved ? JSON.parse(saved) : SAMPLE_JOINT_CLOSURES;
-  });
-
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_customers');
-    return saved ? JSON.parse(saved) : SAMPLE_CUSTOMERS;
-  });
-
-  const [faults, setFaults] = useState<Fault[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_faults');
-    return saved ? JSON.parse(saved) : SAMPLE_FAULTS;
-  });
-
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_work_orders');
-    return saved ? JSON.parse(saved) : SAMPLE_WORK_ORDERS;
-  });
-
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_audit_logs');
-    return saved ? JSON.parse(saved) : SAMPLE_AUDIT_LOGS;
-  });
+  const [equipments, setEquipments] = useState<Equipment[]>(() => loadState('equipment', SAMPLE_EQUIPMENT, isRecordArray));
+  const [cables, setCables] = useState<Cable[]>(() => loadState('cables', SAMPLE_CABLES, isRecordArray));
+  const [splitters, setSplitters] = useState<Splitter[]>(() => loadState('splitters', SAMPLE_SPLITTERS, isRecordArray));
+  const [closures, setClosures] = useState<JointClosure[]>(() => loadState('closures', SAMPLE_JOINT_CLOSURES, isRecordArray));
+  const [customers, setCustomers] = useState<Customer[]>(() => loadState('customers', SAMPLE_CUSTOMERS, isRecordArray));
+  const [faults, setFaults] = useState<Fault[]>(() => loadState('faults', SAMPLE_FAULTS, isRecordArray));
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => loadState('work_orders', SAMPLE_WORK_ORDERS, isRecordArray));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadState('audit_logs', SAMPLE_AUDIT_LOGS, isRecordArray));
 
   // Main Active View State
   const [activeMainView, setActiveMainView] = useState<MainView>('map');
 
   // Zones & Documents
-  const [zones, setZones] = useState<NetworkZone[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_zones');
-    return saved ? JSON.parse(saved) : SAMPLE_ZONES;
-  });
-
-  const [documents, setDocuments] = useState<NetworkDocument[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_documents');
-    return saved ? JSON.parse(saved) : SAMPLE_DOCUMENTS;
-  });
+  const [zones, setZones] = useState<NetworkZone[]>(() => loadState('zones', SAMPLE_ZONES, isRecordArray));
+  const [documents, setDocuments] = useState<NetworkDocument[]>(() => loadState('documents', SAMPLE_DOCUMENTS, isRecordArray));
 
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [isComponentCatalogOpen, setIsComponentCatalogOpen] = useState(false);
   const [isPortManagerOpen, setIsPortManagerOpen] = useState(false);
-  const [customComponents, setCustomComponents] = useState<CatalogComponent[]>(() => {
-    const saved = localStorage.getItem('fiber_gis_custom_components');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [customComponents, setCustomComponents] = useState<CatalogComponent[]>(() => loadState<CatalogComponent[]>('custom_components', [], isRecordArray));
   const [publishState, setPublishState] = useState<'draft' | 'published'>('draft');
   const [isBikerMode, setIsBikerMode] = useState(false);
   const [bikerWaypoints, setBikerWaypoints] = useState<BikerWaypoint[]>([]);
@@ -321,39 +422,20 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   // Persist to local storage
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_equipment', JSON.stringify(equipments));
-  }, [equipments]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_cables', JSON.stringify(cables));
-  }, [cables]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_splitters', JSON.stringify(splitters));
-  }, [splitters]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_customers', JSON.stringify(customers));
-  }, [customers]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_faults', JSON.stringify(faults));
-  }, [faults]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_work_orders', JSON.stringify(workOrders));
-  }, [workOrders]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_zones', JSON.stringify(zones));
-  }, [zones]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_documents', JSON.stringify(documents));
-  }, [documents]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_closures', JSON.stringify(closures));
-  }, [closures]);
-  useEffect(() => {
-    localStorage.setItem('fiber_gis_custom_components', JSON.stringify(customComponents));
-  }, [customComponents]);
+  useEffect(() => saveState('equipment', equipments), [equipments]);
+  useEffect(() => saveState('cables', cables), [cables]);
+  useEffect(() => saveState('splitters', splitters), [splitters]);
+  useEffect(() => saveState('customers', customers), [customers]);
+  useEffect(() => saveState('faults', faults), [faults]);
+  useEffect(() => saveState('work_orders', workOrders), [workOrders]);
+  useEffect(() => saveState('audit_logs', auditLogs), [auditLogs]);
+  useEffect(() => saveState('zones', zones), [zones]);
+  useEffect(() => saveState('documents', documents), [documents]);
+  useEffect(() => saveState('closures', closures), [closures]);
+  useEffect(() => saveState('custom_components', customComponents), [customComponents]);
 
   // Selections & Active Tool
-  const [selectedObject, setSelectedObject] = useState<{ type: 'equipment' | 'cable' | 'customer' | 'closure' | 'fault'; data: any } | null>(null);
+  const [selectedObject, setSelectedObject] = useState<{ type: SelectedObjectType; data: any } | null>(null);
   const [activeTool, setActiveTool] = useState<'select' | 'draw_cable' | 'add_equipment' | 'measure' | 'trace'>('select');
   const [selectedEquipmentTypeToAdd, setSelectedEquipmentTypeToAdd] = useState<EquipmentType | null>(null);
   const [selectedCableTypeToDraw, setSelectedCableTypeToDraw] = useState<CableType>('Main Feeder Fiber');
@@ -364,6 +446,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [activeTracePath, setActiveTracePath] = useState<TracePathNode[] | null>(null);
   const [activeTraceCableIds, setActiveTraceCableIds] = useState<string[]>([]);
   const [activeTraceEquipmentIds, setActiveTraceEquipmentIds] = useState<string[]>([]);
+  const [activeTraceSummary, setActiveTraceSummary] = useState<TraceSummary | null>(null);
 
   // Layers
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({
@@ -418,15 +501,18 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
   const [selectedKnowledgeId, setSelectedKnowledgeId] = useState<string | null>(null);
-  const [projectStartPoint, setProjectStartPointState] = useState<[number, number] | null>(() => {
-    const saved = localStorage.getItem('fiber_gis_project_start');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [projectStartPoint, setProjectStartPointState] = useState<[number, number] | null>(() =>
+    loadState<[number, number] | null>('project_start', null, isLatLngPair)
+  );
 
   const setProjectStartPoint = (pt: [number, number] | null) => {
     setProjectStartPointState(pt);
-    if (pt) localStorage.setItem('fiber_gis_project_start', JSON.stringify(pt));
-    else localStorage.removeItem('fiber_gis_project_start');
+    try {
+      if (pt) localStorage.setItem(`${STORAGE_PREFIX}project_start`, JSON.stringify(pt));
+      else localStorage.removeItem(`${STORAGE_PREFIX}project_start`);
+    } catch {
+      // Ignore storage failures; the in-memory value still applies.
+    }
   };
 
   const openKnowledgeForEquipment = (equipmentTypeOrId: string) => {
@@ -454,62 +540,142 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // Toast notifications
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
   const showToast = (type: ToastItem['type'], title: string, message: string) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const id = uniqueId('TOAST');
     setToasts(prev => [...prev, { id, type, title, message }]);
     setTimeout(() => {
       removeToast(id);
     }, 5500);
   };
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+
+  const logAudit = (action: string, details: string, assetId: string, assetType: AuditLog['assetType']) => {
+    const entry: AuditLog = {
+      id: uniqueId('LOG'),
+      timestamp: new Date().toLocaleString(),
+      user: `${userRole} (local session)`,
+      role: userRole,
+      action,
+      details,
+      assetId,
+      assetType
+    };
+    setAuditLogs(prev => [entry, ...prev].slice(0, MAX_AUDIT_LOGS));
   };
 
-  // Undo/Redo stacks
-  const [history, setHistory] = useState<Array<{ equipments: Equipment[]; cables: Cable[] }>>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const getTraceData = (): TraceData => ({ equipments, cables, splitters, closures, customers, faults });
 
-  const pushHistory = (newEquipments: Equipment[], newCables: Cable[]) => {
-    const updated = history.slice(0, historyIndex + 1);
-    updated.push({ equipments: newEquipments, cables: newCables });
-    setHistory(updated);
-    setHistoryIndex(updated.length - 1);
+  /** Returns a [lat, lng] for any selectable object (cables use their first vertex). */
+  const getObjectLocation = (obj: { type: SelectedObjectType; data: any } | null): BikerWaypoint | null => {
+    if (!obj?.data) return null;
+    const { data } = obj;
+    if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+      return { id: data.id, name: data.name || data.title || data.id, lat: data.lat, lng: data.lng };
+    }
+    if (Array.isArray(data.coordinates) && isLatLngPair(data.coordinates[0])) {
+      const [lat, lng] = data.coordinates[0];
+      return { id: data.id, name: data.name || data.id, lat, lng };
+    }
+    if (data.affectedLocation && typeof data.affectedLocation.lat === 'number') {
+      return { id: data.id, name: data.title || data.id, lat: data.affectedLocation.lat, lng: data.affectedLocation.lng };
+    }
+    return null;
+  };
+
+  const getDefaultOrigin = (): BikerWaypoint | null => {
+    const hub = equipments.find(e => e.type === 'OLT') || equipments[0];
+    if (hub) return { id: hub.id, name: hub.name, lat: hub.lat, lng: hub.lng };
+    if (projectStartPoint) return { id: 'PROJECT-START', name: 'Project start point', lat: projectStartPoint[0], lng: projectStartPoint[1] };
+    return null;
+  };
+
+  // Undo/Redo: snapshots of the physical network, recorded automatically after every change.
+  const [history, setHistory] = useState<{ stack: HistorySnapshot[]; index: number }>(() => ({
+    stack: [{ equipments, cables, splitters, customers, closures }],
+    index: 0
+  }));
+
+  useEffect(() => {
+    setHistory(prev => {
+      const current = prev.stack[prev.index];
+      if (
+        current &&
+        current.equipments === equipments &&
+        current.cables === cables &&
+        current.splitters === splitters &&
+        current.customers === customers &&
+        current.closures === closures
+      ) {
+        return prev;
+      }
+      const stack = [...prev.stack.slice(0, prev.index + 1), { equipments, cables, splitters, customers, closures }].slice(-MAX_HISTORY);
+      return { stack, index: stack.length - 1 };
+    });
+  }, [equipments, cables, splitters, customers, closures]);
+
+  const applySnapshot = (snapshot: HistorySnapshot) => {
+    setEquipments(snapshot.equipments);
+    setCables(snapshot.cables);
+    setSplitters(snapshot.splitters);
+    setCustomers(snapshot.customers);
+    setClosures(snapshot.closures);
+    setSelectedObject(prev => {
+      if (!prev) return prev;
+      const source: Record<string, Array<{ id: string }>> = {
+        equipment: snapshot.equipments,
+        cable: snapshot.cables,
+        customer: snapshot.customers,
+        closure: snapshot.closures
+      };
+      const list = source[prev.type];
+      if (!list) return prev;
+      const match = list.find(item => item.id === prev.data?.id);
+      return match ? { type: prev.type, data: match } : null;
+    });
+    clearTrace();
   };
 
   const undo = () => {
-    if (historyIndex > 0) {
-      const target = history[historyIndex - 1];
-      setEquipments(target.equipments);
-      setCables(target.cables);
-      setHistoryIndex(historyIndex - 1);
-      showToast('info', 'Undo Successful', 'Reverted network action');
-    }
+    if (history.index <= 0) return;
+    const nextIndex = history.index - 1;
+    applySnapshot(history.stack[nextIndex]);
+    setHistory(prev => ({ ...prev, index: nextIndex }));
+    showToast('info', 'Undo Successful', 'Reverted the last network change');
   };
 
   const redo = () => {
-    if (historyIndex < history.length - 1) {
-      const target = history[historyIndex + 1];
-      setEquipments(target.equipments);
-      setCables(target.cables);
-      setHistoryIndex(historyIndex + 1);
-      showToast('info', 'Redo Successful', 'Reapplied network action');
-    }
+    if (history.index >= history.stack.length - 1) return;
+    const nextIndex = history.index + 1;
+    applySnapshot(history.stack[nextIndex]);
+    setHistory(prev => ({ ...prev, index: nextIndex }));
+    showToast('info', 'Redo Successful', 'Reapplied the network change');
   };
 
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
+  const canUndo = history.index > 0;
+  const canRedo = history.index < history.stack.length - 1;
 
   // Add Equipment with duplicate ID & coordinates validation
   const addEquipment = (item: Partial<Equipment> & { name: string; type: EquipmentType; lat: number; lng: number }): Equipment | null => {
-    const newId = item.id || `${item.type.replace(/[^A-Za-z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
-    
+    if (!Number.isFinite(item.lat) || !Number.isFinite(item.lng) || Math.abs(item.lat) > 90 || Math.abs(item.lng) > 180) {
+      showToast('error', 'Invalid Location', 'Equipment needs a valid latitude (-90..90) and longitude (-180..180).');
+      return null;
+    }
+
+    const newId = item.id?.trim() || nextSequentialId(equipmentIdPrefix(item.type), equipments.map(e => e.id));
+
     // Check duplicate ID
     if (equipments.some(e => e.id.toLowerCase() === newId.toLowerCase())) {
       showToast('error', 'Duplicate ID Error', `Equipment with ID "${newId}" already exists.`);
       return null;
     }
 
+    const totalPorts = item.totalPorts ?? defaultPortCount(item.type);
+    const usedPorts = Math.min(item.usedPorts ?? 0, totalPorts);
+
     const newEquipment: Equipment = {
+      ...item,
       id: newId,
       name: item.name,
       type: item.type,
@@ -521,45 +687,35 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       status: item.status || 'Active',
       manufacturer: item.manufacturer || 'FiberOptics Global',
       model: item.model || 'Standard 2026',
-      totalPorts: item.totalPorts || (item.type === 'FAT' ? 8 : item.type === 'FDT' ? 48 : 24),
-      usedPorts: 0,
-      availablePorts: item.totalPorts || (item.type === 'FAT' ? 8 : item.type === 'FDT' ? 48 : 24),
+      totalPorts,
+      usedPorts,
+      availablePorts: item.availablePorts ?? totalPorts - usedPorts,
       images: item.images || [],
       notes: item.notes || 'Created via GIS visual mapping toolbar',
-      installedDate: new Date().toISOString().split('T')[0],
-      logicalPorts: []
+      installedDate: item.installedDate || today(),
+      logicalPorts: item.logicalPorts || []
     };
     newEquipment.logicalPorts = generateLogicalPorts(newEquipment);
 
-    const updated = [...equipments, newEquipment];
-    setEquipments(updated);
-    pushHistory(updated, cables);
+    setEquipments(prev => [...prev, newEquipment]);
     showToast('success', 'Equipment Placed', `Successfully mapped ${newEquipment.name} (${newEquipment.id})`);
-
-    // Log audit
-    const newLog: AuditLog = {
-      id: `LOG-${Date.now()}`,
-      timestamp: new Date().toLocaleString(),
-      user: 'Current User',
-      role: userRole,
-      action: 'EQUIPMENT_CREATED',
-      details: `Added new ${newEquipment.type} ${newEquipment.id} at [${newEquipment.lat.toFixed(4)}, ${newEquipment.lng.toFixed(4)}]`,
-      assetId: newEquipment.id,
-      assetType: 'Equipment'
-    };
-    setAuditLogs(prev => [newLog, ...prev]);
+    logAudit(
+      'EQUIPMENT_CREATED',
+      `Added new ${newEquipment.type} ${newEquipment.id} at [${newEquipment.lat.toFixed(4)}, ${newEquipment.lng.toFixed(4)}]`,
+      newEquipment.id,
+      'Equipment'
+    );
 
     return newEquipment;
   };
 
-  const updateEquipment = (item: Equipment) => {
-    const updated = equipments.map(e => e.id === item.id ? item : e);
-    setEquipments(updated);
-    pushHistory(updated, cables);
-    if (selectedObject?.data.id === item.id) {
-      setSelectedObject({ type: 'equipment', data: item });
+  const updateEquipment = (item: Equipment, options?: { silent?: boolean }) => {
+    setEquipments(prev => prev.map(e => e.id === item.id ? item : e));
+    setSelectedObject(prev => (prev?.type === 'equipment' && prev.data?.id === item.id ? { type: 'equipment', data: item } : prev));
+    if (!options?.silent) {
+      showToast('success', 'Equipment Updated', `Saved modifications for ${item.id}`);
+      logAudit('EQUIPMENT_UPDATED', `Updated ${item.type} ${item.id}`, item.id, 'Equipment');
     }
-    showToast('success', 'Equipment Updated', `Saved modifications for ${item.id}`);
   };
 
   const updateEquipmentPort = (equipmentId: string, portId: string, patch: Partial<EquipmentPort>) => {
@@ -573,7 +729,10 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       usedPorts: summary.used,
       availablePorts: summary.available,
       totalPorts: summary.total
-    });
+    }, { silent: true });
+    const port = ports.find(p => p.id === portId);
+    showToast('success', 'Port Updated', `${equipmentId} port ${port?.portNumber ?? portId} is now ${port?.status ?? 'updated'}`);
+    logAudit('PORT_UPDATED', `${equipmentId} port ${port?.portNumber ?? portId} set to ${port?.status ?? 'updated'}`, equipmentId, 'Equipment');
   };
 
   const addCustomComponent = (item: CatalogComponent) => {
@@ -598,7 +757,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
     setClosures(prev => prev.map(c => c.id === closureId ? { ...c, splices: [...c.splices, splice] } : c));
-    showToast('success', 'Splice Recorded', `${splice.inputCableId} core ${splice.inputCore} → ${splice.outputCableId} core ${splice.outputCore}`);
+    showToast('success', 'Splice Recorded', `${splice.inputCableId} core ${splice.inputCore} â†’ ${splice.outputCableId} core ${splice.outputCore}`);
     return true;
   };
 
@@ -666,7 +825,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
         profile: 'driving',
         limitation: 'Road-aligned navigation path (distinct from underground/aerial fiber lines)'
       });
-      showToast('info', 'Biker Road Route Ready', `Navigating to ${dests[dests.length - 1]?.name || dests[dests.length - 1]?.id} · ${(totalMeters / 1000).toFixed(2)} km · ~${Math.ceil(durationSeconds / 60)} min`);
+      showToast('info', 'Biker Road Route Ready', `Navigating to ${dests[dests.length - 1]?.name || dests[dests.length - 1]?.id} Â· ${(totalMeters / 1000).toFixed(2)} km Â· ~${Math.ceil(durationSeconds / 60)} min`);
     };
 
     const points = [origin, ...dests];
@@ -705,21 +864,24 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  /** Route origin: the selected object (when it is not the destination), else the first OLT. */
+  const resolveRouteOrigin = (destinationId: string): BikerWaypoint => {
+    const selected = getObjectLocation(selectedObject);
+    if (selected && selected.id !== destinationId) return selected;
+    const fallback = getDefaultOrigin();
+    if (fallback && fallback.id !== destinationId) return fallback;
+    return selected || fallback || { id: destinationId, name: destinationId, lat: 0, lng: 0 };
+  };
+
   const addBikerWaypoint = (asset: BikerWaypoint) => {
-    setBikerWaypoints(prev => prev.some(p => p.id === asset.id) ? prev : [...prev, asset]);
-    const origin: BikerWaypoint = selectedObject?.data?.lat
-      ? { id: selectedObject.data.id, name: selectedObject.data.name, lat: selectedObject.data.lat, lng: selectedObject.data.lng }
-      : { id: 'OLT-01', name: 'Central Telco Hub OLT-01', lat: 12.9352, lng: 77.6245 };
     const next = bikerWaypoints.some(p => p.id === asset.id) ? bikerWaypoints : [...bikerWaypoints, asset];
-    decodePolyline(origin, next);
+    setBikerWaypoints(next);
+    decodePolyline(resolveRouteOrigin(next[0]?.id ?? asset.id), next);
   };
 
   const navigateToAsset = (asset: BikerWaypoint) => {
     setBikerWaypoints([asset]);
-    const origin: BikerWaypoint = selectedObject?.data?.lat
-      ? { id: selectedObject.data.id, name: selectedObject.data.name, lat: selectedObject.data.lat, lng: selectedObject.data.lng }
-      : { id: 'OLT-01', name: 'Central Telco Hub OLT-01', lat: 12.9352, lng: 77.6245 };
-    decodePolyline(origin, [asset]);
+    decodePolyline(resolveRouteOrigin(asset.id), [asset]);
     flyToLocation(asset.lat, asset.lng, 16);
   };
 
@@ -729,117 +891,148 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const deleteEquipment = (id: string): boolean => {
-    if (!window.confirm(`Delete equipment ${id}? This cannot be undone in the prototype.`)) return false;
-    // Check if cables are connected
-    const connectedCables = cables.filter(c => c.startEquipmentId === id || c.endEquipmentId === id);
-    if (connectedCables.length > 0) {
-      showToast('error', 'Cannot Delete Equipment', `Cannot delete ${id} because it is connected to ${connectedCables.length} active cable(s) (${connectedCables.map(c => c.id).join(', ')}). Disconnect cables first.`);
+    const target = equipments.find(e => e.id === id);
+    if (!target) {
+      showToast('error', 'Equipment Missing', `Equipment ${id} was not found.`);
       return false;
     }
 
-    const updated = equipments.filter(e => e.id !== id);
-    setEquipments(updated);
-    pushHistory(updated, cables);
-    if (selectedObject?.data.id === id) {
-      setSelectedObject(null);
+    // Integrity checks run before asking for confirmation.
+    const connectedCables = cables.filter(c => c.startEquipmentId === id || c.endEquipmentId === id);
+    if (connectedCables.length > 0) {
+      showToast('error', 'Cannot Delete Equipment', `${id} is connected to ${connectedCables.length} cable(s) (${connectedCables.map(c => c.id).join(', ')}). Disconnect or delete those cables first.`);
+      return false;
     }
+    const dependentCustomers = customers.filter(c => c.terminalBoxId === id || c.oltId === id);
+    if (dependentCustomers.length > 0) {
+      showToast('error', 'Cannot Delete Equipment', `${id} serves ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', â€¦' : ''}). Move or disconnect them first.`);
+      return false;
+    }
+
+    const ownedSplitters = splitters.filter(s => s.terminalBoxId === id);
+    const splitterNote = ownedSplitters.length > 0 ? ` Its ${ownedSplitters.length} splitter(s) will also be removed.` : '';
+    if (!window.confirm(`Delete equipment ${id} (${target.name})?${splitterNote} You can undo this with Ctrl+Z.`)) return false;
+
+    setEquipments(prev => prev.filter(e => e.id !== id));
+    if (ownedSplitters.length > 0) {
+      setSplitters(prev => prev.filter(s => s.terminalBoxId !== id));
+    }
+    setSelectedObject(prev => (prev?.type === 'equipment' && prev.data?.id === id ? null : prev));
+    if (activeTraceEquipmentIds.includes(id)) clearTrace();
     showToast('info', 'Equipment Deleted', `Removed ${id} from network infrastructure`);
+    logAudit('EQUIPMENT_DELETED', `Deleted ${target.type} ${id}${ownedSplitters.length ? ` and splitters ${ownedSplitters.map(s => s.id).join(', ')}` : ''}`, id, 'Equipment');
     return true;
   };
 
   // Add Cable with automatic fiber core generation and length calculation
   const addCable = (item: Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] }): Cable | null => {
-    const newId = item.id || `CBL-${Date.now().toString().slice(-5)}`;
+    const newId = item.id?.trim() || nextSequentialId(cableIdPrefix(item.type), cables.map(c => c.id), item.type === 'Drop Fiber' ? 3 : 2);
 
     if (cables.some(c => c.id.toLowerCase() === newId.toLowerCase())) {
       showToast('error', 'Duplicate Cable ID', `Cable with ID "${newId}" already exists.`);
       return null;
     }
 
-    if (!item.coordinates || item.coordinates.length < 2) {
-      showToast('error', 'Invalid Route', 'Cable must have at least 2 geographic route points.');
+    if (!item.coordinates || item.coordinates.length < 2 || !item.coordinates.every(isLatLngPair)) {
+      showToast('error', 'Invalid Route', 'Cable must have at least 2 valid geographic route points.');
       return null;
     }
 
-    // Calculate approximate length in meters from lat/lng
-    let totalLengthMeters = 0;
-    for (let i = 0; i < item.coordinates.length - 1; i++) {
-      const [lat1, lon1] = item.coordinates[i];
-      const [lat2, lon2] = item.coordinates[i + 1];
-      const R = 6371e3; // metres
-      const φ1 = lat1 * Math.PI / 180;
-      const φ2 = lat2 * Math.PI / 180;
-      const Δφ = (lat2 - lat1) * Math.PI / 180;
-      const Δλ = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      totalLengthMeters += R * c;
+    for (const endpoint of [item.startEquipmentId, item.endEquipmentId]) {
+      if (endpoint && !equipments.some(e => e.id === endpoint)) {
+        showToast('error', 'Invalid Endpoint', `Endpoint equipment ${endpoint} does not exist.`);
+        return null;
+      }
     }
 
-    const fiberCount = item.fiberCount || (item.type.includes('Feeder') ? 48 : item.type.includes('Distribution') ? 24 : 12);
-    
-    // Generate cores
-    const cores = item.cores || Array.from({ length: fiberCount }, (_, i) => {
-      const num = i + 1;
-      const color = (num - 1) % 12;
-      const colorNames = ['Blue', 'Orange', 'Green', 'Brown', 'Slate', 'White', 'Red', 'Black', 'Yellow', 'Violet', 'Rose', 'Aqua'];
-      const colorHexes = ['#0284c7', '#ea580c', '#16a34a', '#78350f', '#64748b', '#f8fafc', '#dc2626', '#1e293b', '#eab308', '#8b5cf6', '#f43f5e', '#06b6d4'];
-      return {
-        coreNumber: num,
-        tubeNumber: Math.floor(i / 12) + 1,
-        colorName: colorNames[color],
-        colorHex: colorHexes[color],
-        status: 'Available' as const,
-        remarks: 'Freshly installed unallocated core'
-      };
-    });
+    const isCoax = item.type === 'Coaxial Cable';
+    const fiberCount = item.cores?.length || item.fiberCount || defaultFiberCount(item.type);
+    const cores = item.cores || buildCores(fiberCount);
+    const measuredLength = Math.round(polylineLengthMeters(item.coordinates));
 
     const newCable: Cable = {
+      ...item,
       id: newId,
       name: item.name,
       type: item.type,
       fiberCount,
-      lengthMeters: Math.round(totalLengthMeters),
-      installationType: item.installationType || (item.type.includes('Underground') ? 'Underground' : 'Aerial'),
+      lengthMeters: item.lengthMeters && item.lengthMeters > 0 ? item.lengthMeters : measuredLength,
+      installationType: item.installationType || (item.type === 'Underground Fiber' ? 'Underground' : 'Aerial'),
       owner: item.owner || 'Metropolitan Fiber Corp',
-      installationDate: new Date().toISOString().split('T')[0],
-      status: 'Active',
+      installationDate: item.installationDate || today(),
+      status: item.status || 'Active',
       remarks: item.remarks || 'Drawn via interactive GIS route wizard',
       coordinates: item.coordinates,
       startEquipmentId: item.startEquipmentId,
       endEquipmentId: item.endEquipmentId,
       cores,
-      cableCategory: item.type === 'Coaxial Cable' ? 'Coaxial' : 'Fiber'
+      cableCategory: isCoax ? 'Coaxial' : 'Fiber'
     };
 
-    const updated = [...cables, newCable];
-    setCables(updated);
-    pushHistory(equipments, updated);
-    showToast('success', 'Fiber Cable Created', `Mapped ${newCable.name} (${newCable.lengthMeters}m, ${newCable.fiberCount} cores)`);
+    setCables(prev => [...prev, newCable]);
+    showToast('success', isCoax ? 'Coaxial Cable Created' : 'Fiber Cable Created', `Mapped ${newCable.name} (${newCable.lengthMeters} m, ${newCable.fiberCount} ${isCoax ? 'conductor' : 'cores'})`);
+    logAudit(
+      'CABLE_CREATED',
+      `Added ${newCable.type} ${newCable.id} (${newCable.lengthMeters} m)${newCable.startEquipmentId || newCable.endEquipmentId ? ` ${newCable.startEquipmentId ?? '?'} â†’ ${newCable.endEquipmentId ?? '?'}` : ''}`,
+      newCable.id,
+      'Cable'
+    );
     return newCable;
   };
 
-  const updateCable = (item: Cable) => {
-    const updated = cables.map(c => c.id === item.id ? item : c);
-    setCables(updated);
-    pushHistory(equipments, updated);
-    if (selectedObject?.data.id === item.id) {
-      setSelectedObject({ type: 'cable', data: item });
+  const updateCable = (item: Cable, options?: { silent?: boolean }) => {
+    setCables(prev => prev.map(c => c.id === item.id ? item : c));
+    setSelectedObject(prev => (prev?.type === 'cable' && prev.data?.id === item.id ? { type: 'cable', data: item } : prev));
+    if (!options?.silent) {
+      showToast('success', 'Cable Updated', `Saved cable specifications for ${item.id}`);
+      logAudit('CABLE_UPDATED', `Updated ${item.type} ${item.id}`, item.id, 'Cable');
     }
-    showToast('success', 'Cable Updated', `Saved cable specifications for ${item.id}`);
   };
 
   const deleteCable = (id: string): boolean => {
-    if (!window.confirm(`Delete cable ${id} and its core inventory?`)) return false;
-    const updated = cables.filter(c => c.id !== id);
-    setCables(updated);
-    pushHistory(equipments, updated);
-    if (selectedObject?.data.id === id) {
-      setSelectedObject(null);
+    const target = cables.find(c => c.id === id);
+    if (!target) {
+      showToast('error', 'Cable Missing', `Cable ${id} was not found.`);
+      return false;
     }
+
+    const dependentCustomers = customers.filter(c => c.feederCableId === id || c.distributionCableId === id || c.dropCableId === id);
+    if (dependentCustomers.length > 0) {
+      showToast('error', 'Cannot Delete Cable', `${id} carries service for ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', â€¦' : ''}). Re-route them first.`);
+      return false;
+    }
+    const feedingSplitters = splitters.filter(s => s.inputPort.connectedCableId === id);
+    if (feedingSplitters.length > 0) {
+      showToast('error', 'Cannot Delete Cable', `${id} feeds splitter(s) ${feedingSplitters.map(s => s.id).join(', ')}. Re-patch the splitter input first.`);
+      return false;
+    }
+
+    const coresInUse = target.cores.filter(c => c.status === 'In Use').length;
+    const affectedClosures = closures.filter(c =>
+      c.cableAId === id || c.cableBId === id || c.splices.some(s => s.inputCableId === id || s.outputCableId === id)
+    );
+    const warnings = [
+      coresInUse > 0 ? `${coresInUse} core(s) are marked In Use.` : '',
+      affectedClosures.length > 0 ? `Splices in ${affectedClosures.map(c => c.id).join(', ')} will be removed.` : ''
+    ].filter(Boolean).join(' ');
+    if (!window.confirm(`Delete cable ${id} and its core inventory? ${warnings} You can undo this with Ctrl+Z.`.trim())) return false;
+
+    setCables(prev => prev.filter(c => c.id !== id));
+    if (affectedClosures.length > 0) {
+      setClosures(prev => prev.map(c => {
+        if (!affectedClosures.some(a => a.id === c.id)) return c;
+        return {
+          ...c,
+          cableAId: c.cableAId === id ? undefined : c.cableAId,
+          cableBId: c.cableBId === id ? undefined : c.cableBId,
+          splices: c.splices.filter(s => s.inputCableId !== id && s.outputCableId !== id)
+        };
+      }));
+    }
+    setSelectedObject(prev => (prev?.type === 'cable' && prev.data?.id === id ? null : prev));
+    if (activeTraceCableIds.includes(id)) clearTrace();
     showToast('info', 'Cable Deleted', `Removed cable ${id} from map`);
+    logAudit('CABLE_DELETED', `Deleted ${target.type} ${id}${coresInUse ? ` (${coresInUse} cores were In Use)` : ''}`, id, 'Cable');
     return true;
   };
 
@@ -883,17 +1076,22 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     });
 
     const updatedCable = { ...cable, cores: updatedCores };
-    updateCable(updatedCable);
+    updateCable(updatedCable, { silent: true });
     showToast('success', 'Fiber Core Allocated', `Core ${coreNumber.toString().padStart(2, '0')} (${core.colorName}) allocated to ${customerId || equipmentId}`);
+    logAudit('CORE_ALLOCATED', `${cableId} core ${coreNumber} allocated to ${customerId || equipmentId || 'unspecified target'}${portName ? ` (${portName})` : ''}`, cableId, 'Core');
     return true;
   };
 
   // Connect customer to port with strict single physical connection enforcement
   const connectCustomerToPort = (customerData: Partial<Customer>): Customer | null => {
-    const newId = customerData.id || `CUST-0${(customers.length + 1).toString().padStart(2, '0')}`;
-
     if (!customerData.terminalBoxId || !customerData.splitterId || !customerData.splitterOutputPort) {
       showToast('error', 'Missing Connection Target', 'Please specify Terminal Box, Splitter, and Output Port.');
+      return null;
+    }
+
+    const fat = equipments.find(e => e.id === customerData.terminalBoxId);
+    if (!fat) {
+      showToast('error', 'Terminal Not Found', `Access terminal ${customerData.terminalBoxId} does not exist.`);
       return null;
     }
 
@@ -901,6 +1099,14 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     const splitter = splitters.find(s => s.id === customerData.splitterId);
     if (!splitter) {
       showToast('error', 'Splitter Not Found', `Splitter ${customerData.splitterId} does not exist.`);
+      return null;
+    }
+    if (splitter.terminalBoxId !== fat.id) {
+      showToast('error', 'Splitter Mismatch', `Splitter ${splitter.id} is installed in ${splitter.terminalBoxId}, not ${fat.id}.`);
+      return null;
+    }
+    if (splitter.status === 'Faulty') {
+      showToast('error', 'Splitter Faulty', `Splitter ${splitter.id} is marked Faulty. Repair it before provisioning new subscribers.`);
       return null;
     }
 
@@ -914,56 +1120,122 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       showToast('error', 'Port Already Occupied', `Splitter Output Port ${customerData.splitterOutputPort} is already assigned to ${targetPort.connectedCustomerName || targetPort.connectedCustomerId}. Cannot double-book physical port.`);
       return null;
     }
+    if (targetPort.status === 'Faulty') {
+      showToast('error', 'Port Faulty', `Splitter Output Port ${customerData.splitterOutputPort} is marked Faulty. Choose another port.`);
+      return null;
+    }
 
-    // Allocate port
-    const updatedOutputPorts = splitter.outputPorts.map(p => {
-      if (p.portNumber === customerData.splitterOutputPort) {
-        return {
-          ...p,
-          status: 'Occupied' as const,
-          connectedCustomerId: newId,
-          connectedCustomerName: customerData.name || 'New Customer',
-          connectedDropCableId: customerData.dropCableId || `DROP-${newId.slice(-3)}`
-        };
-      }
-      return p;
-    });
+    const ontSerial = customerData.ontSerialNumber?.trim() || `ONT-${uniqueId('SN').slice(-8).toUpperCase()}`;
+    const duplicateOnt = customers.find(c => c.ontSerialNumber.toLowerCase() === ontSerial.toLowerCase());
+    if (duplicateOnt) {
+      showToast('error', 'Duplicate ONT Serial', `ONT ${ontSerial} is already registered to ${duplicateOnt.name} (${duplicateOnt.id}).`);
+      return null;
+    }
 
-    const updatedSplitter = { ...splitter, outputPorts: updatedOutputPorts };
-    setSplitters(prev => prev.map(s => s.id === splitter.id ? updatedSplitter : s));
+    const newId = customerData.id?.trim() || nextSequentialId('CUST-', customers.map(c => c.id), 3);
+    if (customers.some(c => c.id.toLowerCase() === newId.toLowerCase())) {
+      showToast('error', 'Duplicate Customer ID', `Customer ${newId} already exists.`);
+      return null;
+    }
 
-    // Create customer record
-    const newCustomer: Customer = {
-      id: newId,
-      name: customerData.name || 'New Subscriber',
-      mobile: customerData.mobile || '+91 98000 00000',
-      address: customerData.address || 'Street Address',
-      area: customerData.area || 'Koramangala',
-      building: customerData.building,
-      flatNumber: customerData.flatNumber,
-      lat: customerData.lat || 12.9360,
-      lng: customerData.lng || 77.6295,
-      serviceType: customerData.serviceType || 'Fiber Broadband',
-      plan: customerData.plan || 'FTTH Ultra 300 Mbps',
+    // Subscriber location: as entered, otherwise a short drop away from the FAT.
+    const hasLocation = Number.isFinite(customerData.lat) && Number.isFinite(customerData.lng);
+    const lat = hasLocation ? customerData.lat! : fat.lat + 0.00025 * Math.sin(targetPort.portNumber);
+    const lng = hasLocation ? customerData.lng! : fat.lng + 0.00025 * Math.cos(targetPort.portNumber);
+
+    // Drop cable FAT ? premises with core 1 lit.
+    const dropRoute: [number, number][] = [[fat.lat, fat.lng], [lat, lng]];
+    const dropLength = Math.max(1, Math.round(polylineLengthMeters(dropRoute)));
+    const dropId = nextSequentialId('DROP-', cables.map(c => c.id), 3);
+    const dropCores = buildCores(2).map(core => core.coreNumber === 1
+      ? { ...core, status: 'In Use' as const, customerId: newId, customerName: customerData.name, connectedToEquipmentId: fat.id, connectedPort: `${splitter.id}/OUT-${targetPort.portNumber}`, remarks: `Drop to ${newId}` }
+      : core);
+    const dropCable: Cable = {
+      id: dropId,
+      name: `Drop ${fat.id} ? ${newId}`,
+      type: 'Drop Fiber',
+      fiberCount: 2,
+      lengthMeters: dropLength,
+      installationType: 'Aerial',
+      owner: 'Metropolitan Fiber Corp',
+      installationDate: today(),
       status: 'Active',
-      installationDate: new Date().toISOString().split('T')[0],
-      oltId: customerData.oltId || 'OLT-01',
-      ponPort: customerData.ponPort || 'PON-01',
-      feederCableId: customerData.feederCableId || 'CBL-FEEDER-01',
-      distributionCableId: customerData.distributionCableId || 'CBL-DIST-01',
-      terminalBoxId: customerData.terminalBoxId,
-      splitterId: customerData.splitterId,
-      splitterOutputPort: customerData.splitterOutputPort,
-      dropCableId: customerData.dropCableId || `DROP-${newId.slice(-3)}`,
-      fiberCore: customerData.fiberCore || 1,
-      ontSerialNumber: customerData.ontSerialNumber || `ONT-${Date.now().toString().slice(-6)}`,
-      routerModel: customerData.routerModel || 'Dual-Band Wi-Fi 6 ONT',
-      ipAddress: customerData.ipAddress || `100.64.${Math.floor(Math.random() * 20) + 10}.${Math.floor(Math.random() * 250) + 2}`,
-      rxOpticalPowerDbm: -(18 + +(Math.random() * 3).toFixed(1))
+      remarks: `Auto-created during provisioning of ${newId}`,
+      coordinates: dropRoute,
+      startEquipmentId: fat.id,
+      cores: dropCores,
+      cableCategory: 'Fiber'
     };
 
+    // Resolve the logical path from the physical topology.
+    const data = getTraceData();
+    const estimate = estimateRxForSplitter(fat, splitter, data, dropLength);
+    const feederHop = estimate.hops[0];
+    const distributionHop = estimate.hops.length > 1 ? estimate.hops[estimate.hops.length - 1] : undefined;
+    const usedIps = new Set(customers.map(c => c.ipAddress));
+    let ipAddress = customerData.ipAddress?.trim() || '';
+    if (!ipAddress || usedIps.has(ipAddress)) {
+      for (let n = customers.length + 2; n < 65000; n++) {
+        const candidate = `100.64.${Math.floor(n / 250)}.${(n % 250) + 2}`;
+        if (!usedIps.has(candidate)) {
+          ipAddress = candidate;
+          break;
+        }
+      }
+    }
+
+    const newCustomer: Customer = {
+      id: newId,
+      name: customerData.name?.trim() || 'New Subscriber',
+      mobile: customerData.mobile || '',
+      address: customerData.address || fat.street || '',
+      area: customerData.area || fat.area,
+      building: customerData.building,
+      flatNumber: customerData.flatNumber,
+      lat,
+      lng,
+      serviceType: customerData.serviceType || 'Fiber Broadband',
+      plan: customerData.plan || 'FTTH Ultra 300 Mbps',
+      status: customerData.status || 'Active',
+      installationDate: today(),
+      oltId: customerData.oltId || estimate.olt?.id || '',
+      ponPort: customerData.ponPort || estimate.pon?.id || '',
+      feederCableId: customerData.feederCableId || feederHop?.cable.id || '',
+      distributionCableId: customerData.distributionCableId || distributionHop?.cable.id || feederHop?.cable.id || '',
+      terminalBoxId: fat.id,
+      splitterId: splitter.id,
+      splitterOutputPort: targetPort.portNumber,
+      dropCableId: dropId,
+      fiberCore: customerData.fiberCore || splitter.inputPort.connectedCore || 1,
+      ontSerialNumber: ontSerial,
+      routerModel: customerData.routerModel || 'Dual-Band Wi-Fi 6 ONT',
+      ipAddress,
+      rxOpticalPowerDbm: customerData.rxOpticalPowerDbm ?? estimate.rxDbm ?? 0
+    };
+
+    setCables(prev => [...prev, dropCable]);
+    setSplitters(prev => prev.map(s => s.id !== splitter.id ? s : {
+      ...s,
+      outputPorts: s.outputPorts.map(p => p.portNumber !== targetPort.portNumber ? p : {
+        ...p,
+        status: 'Occupied' as const,
+        connectedCustomerId: newId,
+        connectedCustomerName: newCustomer.name,
+        connectedDropCableId: dropId
+      })
+    }));
+    setEquipments(prev => prev.map(e => {
+      if (e.id === fat.id) return setPortUsage(e, targetPort.portNumber, true, newId);
+      if (estimate.olt && e.id === estimate.olt.id && estimate.pon) {
+        return {
+          ...e,
+          ponPorts: e.ponPorts?.map(p => p.id === estimate.pon!.id ? { ...p, status: 'Active' as const, connectedCustomersCount: p.connectedCustomersCount + 1 } : p)
+        };
+      }
+      return e;
+    }));
     setCustomers(prev => [...prev, newCustomer]);
-    
+
     // Confetti celebration!
     confetti({
       particleCount: 80,
@@ -971,34 +1243,45 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       origin: { y: 0.6 }
     });
 
-    showToast('success', 'Customer Connected Successfully!', `Activated ${newCustomer.name} on ${newCustomer.terminalBoxId} (Port ${newCustomer.splitterOutputPort})`);
+    const warnings: string[] = [];
+    if (!estimate.olt) warnings.push('no upstream OLT could be traced');
+    if (estimate.rxDbm !== undefined && estimate.rxDbm < -25) warnings.push(`estimated Rx ${estimate.rxDbm} dBm is weak`);
+    showToast(
+      warnings.length ? 'warning' : 'success',
+      'Customer Connected',
+      `Activated ${newCustomer.name} on ${fat.id} port ${targetPort.portNumber} via ${dropId}${estimate.rxDbm !== undefined ? ` (est. Rx ${estimate.rxDbm} dBm)` : ''}${warnings.length ? ` - check: ${warnings.join('; ')}` : ''}`
+    );
+    logAudit('CUSTOMER_CONNECTED', `Provisioned ${newId} on ${splitter.id} port ${targetPort.portNumber} (${fat.id}) with drop ${dropId}`, newId, 'Customer');
     return newCustomer;
   };
 
   // Upload Photo to Equipment
   const uploadEquipmentPhoto = (equipmentId: string, photo: Partial<EquipmentImage>) => {
     const eq = equipments.find(e => e.id === equipmentId);
-    if (!eq) return;
+    if (!eq) {
+      showToast('error', 'Upload Failed', `Equipment ${equipmentId} was not found.`);
+      return;
+    }
+    if (!photo.url) {
+      showToast('error', 'Upload Failed', 'No image data was provided.');
+      return;
+    }
 
     const newPhoto: EquipmentImage = {
-      id: photo.id || `IMG-${Date.now()}`,
+      id: photo.id || uniqueId('IMG'),
       equipmentId,
-      url: photo.url || SAMPLE_EQUIPMENT[0].images[0]?.url,
-      name: photo.name || 'Terminal Box Field Photo',
+      url: photo.url,
+      name: photo.name || 'Field Photo',
       category: photo.category || 'Internal Trays',
-      uploadDate: new Date().toISOString().split('T')[0],
+      uploadDate: today(),
       uploadedBy: photo.uploadedBy || `${userRole} User`,
       description: photo.description || 'Uploaded field verification photograph',
       annotations: photo.annotations || []
     };
 
-    const updatedEq = {
-      ...eq,
-      images: [...eq.images, newPhoto]
-    };
-
-    updateEquipment(updatedEq);
+    updateEquipment({ ...eq, images: [...eq.images, newPhoto] }, { silent: true });
     showToast('success', 'Photograph Uploaded', `Added ${newPhoto.name} to ${equipmentId}`);
+    logAudit('PHOTO_UPLOADED', `Added photo "${newPhoto.name}" (${newPhoto.category}) to ${equipmentId}`, equipmentId, 'Equipment');
   };
 
   // Image Annotation Saving (Preserves original photo!)
@@ -1017,7 +1300,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       return img;
     });
 
-    updateEquipment({ ...eq, images: updatedImages });
+    updateEquipment({ ...eq, images: updatedImages }, { silent: true });
     showToast('success', 'Annotation Saved', `Marked ${annotation.label} on image`);
   };
 
@@ -1035,163 +1318,306 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       return img;
     });
 
-    updateEquipment({ ...eq, images: updatedImages });
+    updateEquipment({ ...eq, images: updatedImages }, { silent: true });
     showToast('info', 'Annotation Removed', 'Deleted port mark from photograph');
   };
 
-  // Trace Fiber Route
-  const traceNetworkPath = (targetId: string) => {
-    // Check if target is a Customer
-    const customer = customers.find(c => c.id === targetId);
-    if (customer) {
-      const nodes: TracePathNode[] = [
-        { type: 'OLT', id: customer.oltId, name: `Central OLT (${customer.oltId})`, details: `PON Port: ${customer.ponPort}`, status: 'Normal' },
-        { type: 'PON', id: customer.ponPort, name: `PON Port ${customer.ponPort}`, details: `Tx Power: +3.2 dBm | Max Splits: 64`, status: 'Normal' },
-        { type: 'ODF', id: 'ODF-01', name: 'Optical Frame ODF-01', details: 'Tray 02 / Port 04', status: 'Normal' },
-        { type: 'Feeder', id: customer.feederCableId, name: `Feeder Cable (${customer.feederCableId})`, details: '96F Underground Trunk | 620m', status: 'Normal' },
-        { type: 'FDMS', id: 'FDMS-01', name: 'Primary Cabinet FDMS-01', details: 'Cross-connect Port 12', status: 'Normal' },
-        { type: 'Distribution', id: customer.distributionCableId, name: `Dist Cable (${customer.distributionCableId})`, details: '24F ADSS Aerial | 380m', status: 'Normal' },
-        { type: 'FDT', id: 'FDT-01', name: 'Commercial FDT-01', details: 'Branch Termination Box', status: 'Normal' },
-        { type: 'Splitter', id: customer.splitterId, name: `Splitter (${customer.splitterId})`, details: `Ratio: 1:8 | Port ${customer.splitterOutputPort} | Loss: 10.3 dB`, status: 'Normal' },
-        { type: 'FAT', id: customer.terminalBoxId, name: `Access Terminal (${customer.terminalBoxId})`, details: 'Pole Mounted Enclosure', status: 'Normal' },
-        { type: 'Drop', id: customer.dropCableId, name: `Drop Cable (${customer.dropCableId})`, details: '2F Outdoor Drop Flat Cable | 45m', status: 'Normal' },
-        { type: 'ONT', id: customer.ontSerialNumber, name: `Customer ONT (${customer.ontSerialNumber})`, details: `Model: ${customer.routerModel} | Rx: ${customer.rxOpticalPowerDbm} dBm`, status: 'Normal' },
-        { type: 'Customer', id: customer.id, name: customer.name, details: `${customer.serviceType} | ${customer.plan} | IP: ${customer.ipAddress}`, status: 'Normal' }
-      ];
+  // Trace Fiber Route (computed from the physical topology)
+  const resolveTrace = (targetId: string): TraceResult | null => {
+    const data = getTraceData();
+    const id = targetId.trim();
+    if (!id) return null;
 
-      // Check if any cable on path has active fault
-      const fault = faults.find(f => f.affectedCableId === customer.distributionCableId || f.affectedEquipmentId === customer.terminalBoxId);
-      if (fault) {
-        nodes.forEach(n => {
-          if (n.id === fault.affectedCableId || n.id === fault.affectedEquipmentId) {
-            n.status = 'Faulty';
-            n.details += ` [CRITICAL FAULT: ${fault.type}]`;
-          }
-        });
-      }
+    const customer = customers.find(c => c.id === id || c.ontSerialNumber === id);
+    if (customer) return traceCustomer(customer, data);
 
-      setActiveTracePath(nodes);
-      setActiveTraceCableIds([customer.feederCableId, customer.distributionCableId, 'CBL-BRANCH-01', customer.dropCableId]);
-      setActiveTraceEquipmentIds([customer.oltId, 'ODF-01', 'FDMS-01', 'FDT-01', customer.terminalBoxId]);
-      setIsRouteTraceModalOpen(true);
-      showToast('info', 'Fiber Trace Active', `Tracing complete path from ${customer.oltId} to ${customer.name}`);
-      return;
+    const eq = equipments.find(e => e.id === id);
+    if (eq) return traceEquipment(eq, data);
+
+    const cable = cables.find(c => c.id === id);
+    if (cable) return traceCable(cable, data);
+
+    // "OLT-01/PON-03" or a bare PON port id ? trace the feeder of that PON.
+    const [oltPart, ponPart] = id.includes('/') ? id.split('/') : [undefined, id];
+    const olt = equipments.find(e => e.type === 'OLT' && (oltPart ? e.id === oltPart : e.ponPorts?.some(p => p.id === ponPart)));
+    const pon = olt?.ponPorts?.find(p => p.id === ponPart);
+    if (olt && pon) {
+      const feeder = cables.find(c => c.id === pon.connectedFeederCableId);
+      return feeder ? traceCable(feeder, data) : traceEquipment(olt, data);
     }
 
-    // Check if target is an Equipment
-    const eq = equipments.find(e => e.id === targetId);
-    if (eq) {
-      const connectedCables = cables.filter(c => c.startEquipmentId === eq.id || c.endEquipmentId === eq.id);
-      setActiveTraceEquipmentIds([eq.id]);
-      setActiveTraceCableIds(connectedCables.map(c => c.id));
-      showToast('info', 'Equipment Trace', `Tracing connections for ${eq.name}`);
+    const fault = faults.find(f => f.id === id);
+    if (fault) {
+      const faultCable = fault.affectedCableId ? cables.find(c => c.id === fault.affectedCableId) : undefined;
+      if (faultCable) return traceCable(faultCable, data);
+      const faultEq = fault.affectedEquipmentId ? equipments.find(e => e.id === fault.affectedEquipmentId) : undefined;
+      if (faultEq) return traceEquipment(faultEq, data);
+      const faultCustomer = customers.find(c => fault.affectedCustomerIds.includes(c.id));
+      if (faultCustomer) return traceCustomer(faultCustomer, data);
+      return null;
     }
+
+    const closure = closures.find(c => c.id === id);
+    if (closure) {
+      const closureCable = cables.find(c => c.id === closure.cableAId) || cables.find(c => c.id === closure.cableBId);
+      return closureCable ? traceCable(closureCable, data) : null;
+    }
+
+    const splitter = splitters.find(s => s.id === id);
+    if (splitter) {
+      const host = equipments.find(e => e.id === splitter.terminalBoxId);
+      return host ? traceEquipment(host, data) : null;
+    }
+    return null;
+  };
+
+  const traceNetworkPath = (targetId: string): boolean => {
+    const result = resolveTrace(targetId);
+    if (!result || result.nodes.length === 0) {
+      showToast('warning', 'Trace Not Available', `No traceable network path was found for "${targetId}".`);
+      return false;
+    }
+
+    setActiveTracePath(result.nodes);
+    setActiveTraceCableIds(result.cableIds);
+    setActiveTraceEquipmentIds(result.equipmentIds);
+    setActiveTraceSummary(result.summary);
+    setIsRouteTraceModalOpen(true);
+
+    const { summary } = result;
+    const budget = summary.estimatedRxDbm !== undefined ? ` ? est. Rx ${summary.estimatedRxDbm} dBm (${summary.budgetStatus})` : '';
+    showToast(
+      summary.budgetStatus === 'Fail' || summary.warnings.length > 0 ? 'warning' : 'info',
+      'Fiber Trace Active',
+      `${summary.targetLabel}: ${result.nodes.length} hops ? ${(summary.totalLengthMeters / 1000).toFixed(2)} km${budget}`
+    );
+    return true;
   };
 
   const clearTrace = () => {
     setActiveTracePath(null);
     setActiveTraceCableIds([]);
     setActiveTraceEquipmentIds([]);
+    setActiveTraceSummary(null);
   };
 
   // Fault Management
-  const recordNewFault = (faultData: Partial<Fault>) => {
-    const newId = `FLT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+  const recordNewFault = (faultData: Partial<Fault>): Fault => {
+    const year = new Date().getFullYear();
+    const newId = faultData.id || nextSequentialId(`FLT-${year}-`, faults.map(f => f.id), 3);
+    const eq = faultData.affectedEquipmentId ? equipments.find(e => e.id === faultData.affectedEquipmentId) : undefined;
+    const cable = faultData.affectedCableId ? cables.find(c => c.id === faultData.affectedCableId) : undefined;
+
+    let location = faultData.affectedLocation;
+    if (!location && eq) location = { lat: eq.lat, lng: eq.lng };
+    if (!location && cable && cable.coordinates.length > 0) {
+      const mid = cable.coordinates[Math.floor(cable.coordinates.length / 2)];
+      location = { lat: mid[0], lng: mid[1] };
+    }
+    if (!location) {
+      const fallback = getDefaultOrigin();
+      location = fallback ? { lat: fallback.lat, lng: fallback.lng } : { lat: 0, lng: 0 };
+    }
+
+    let affectedCustomerIds = faultData.affectedCustomerIds;
+    if (!affectedCustomerIds || affectedCustomerIds.length === 0) {
+      const data = getTraceData();
+      if (eq) {
+        affectedCustomerIds = collectDownstream(eq.id, data).customers.map(c => c.id);
+      } else if (cable) {
+        const viaCable = customers.filter(c => c.feederCableId === cable.id || c.distributionCableId === cable.id || c.dropCableId === cable.id);
+        const downstream = cable.endEquipmentId ? collectDownstream(cable.endEquipmentId, data).customers : [];
+        affectedCustomerIds = Array.from(new Set([...viaCable, ...downstream].map(c => c.id)));
+      } else {
+        affectedCustomerIds = [];
+      }
+    }
+
     const newFault: Fault = {
       id: newId,
-      title: faultData.title || 'Fiber Network Outage Detected',
+      title: faultData.title || `${faultData.type || 'Fiber Cut'} at ${eq?.id || cable?.id || 'field location'}`,
       type: faultData.type || 'Fiber Cut',
       severity: faultData.severity || 'Critical',
-      status: 'Reported',
-      affectedLocation: faultData.affectedLocation || { lat: 12.9365, lng: 77.6290 },
+      status: faultData.status || 'Reported',
+      affectedLocation: location,
       affectedCableId: faultData.affectedCableId,
       affectedEquipmentId: faultData.affectedEquipmentId,
-      affectedCustomerIds: faultData.affectedCustomerIds || [],
+      affectedCustomerIds,
       affectedCores: faultData.affectedCores || [],
       affectedSplitterPorts: faultData.affectedSplitterPorts || [],
       description: faultData.description || 'Reported via field inspection',
       reportedAt: new Date().toLocaleString(),
-      assignedTechnician: 'Arun Varma (Lead Splicer)',
+      assignedTechnician: faultData.assignedTechnician || 'Unassigned',
+      workOrderId: faultData.workOrderId,
       images: faultData.images || []
     };
 
     setFaults(prev => [newFault, ...prev]);
-    showToast('error', 'Network Fault Logged', `Registered ${newFault.type} (${newFault.id}) with severity: ${newFault.severity}`);
+    showToast('error', 'Network Fault Logged', `Registered ${newFault.type} (${newFault.id}) ? ${newFault.severity} ? ${affectedCustomerIds.length} customer(s) affected`);
+    logAudit('FAULT_REPORTED', `${newFault.type} ${newFault.id} on ${eq?.id || cable?.id || 'unspecified asset'} (${affectedCustomerIds.length} customers)`, newFault.id, 'Fault');
+    return newFault;
   };
 
   const resolveExistingFault = (faultId: string) => {
+    const fault = faults.find(f => f.id === faultId);
+    if (!fault) {
+      showToast('error', 'Fault Missing', `Fault ${faultId} was not found.`);
+      return;
+    }
+    if (fault.status === 'Resolved') {
+      showToast('info', 'Already Resolved', `${faultId} is already resolved.`);
+      return;
+    }
     setFaults(prev => prev.map(f => f.id === faultId ? { ...f, status: 'Resolved', resolvedAt: new Date().toLocaleString() } : f));
-    showToast('success', 'Fault Resolved', `Outage ${faultId} marked resolved.`);
+    const linkedOrders = workOrders.filter(w => (w.faultId === faultId || w.id === fault.workOrderId) && w.status !== 'Completed' && w.status !== 'Cancelled');
+    if (linkedOrders.length > 0) {
+      setWorkOrders(prev => prev.map(w => linkedOrders.some(o => o.id === w.id) ? { ...w, status: 'Completed', completedDate: today() } : w));
+    }
+    showToast('success', 'Fault Resolved', `Outage ${faultId} marked resolved${linkedOrders.length ? ` and ${linkedOrders.map(o => o.id).join(', ')} completed` : ''}.`);
+    logAudit('FAULT_RESOLVED', `Resolved ${faultId}${linkedOrders.length ? `; completed ${linkedOrders.map(o => o.id).join(', ')}` : ''}`, faultId, 'Fault');
+  };
+
+  const addWorkOrder = (order: Partial<WorkOrder> & { title: string }): WorkOrder => {
+    const year = new Date().getFullYear();
+    const newOrder: WorkOrder = {
+      id: order.id || nextSequentialId(`WO-${year}-`, workOrders.map(w => w.id), 3),
+      title: order.title,
+      type: order.type || 'Repair',
+      priority: order.priority || 'Medium',
+      status: order.status || (order.technicianName ? 'Assigned' : 'Pending'),
+      technicianName: order.technicianName || 'Unassigned',
+      technicianPhone: order.technicianPhone || '',
+      equipmentId: order.equipmentId,
+      cableId: order.cableId,
+      customerId: order.customerId,
+      faultId: order.faultId,
+      scheduledDate: order.scheduledDate || today(),
+      completedDate: order.completedDate,
+      notes: order.notes || '',
+      photos: order.photos || []
+    };
+    setWorkOrders(prev => [newOrder, ...prev]);
+    if (newOrder.faultId) {
+      setFaults(prev => prev.map(f => f.id === newOrder.faultId
+        ? {
+            ...f,
+            workOrderId: newOrder.id,
+            status: f.status === 'Resolved' ? f.status : 'Dispatched',
+            assignedTechnician: newOrder.technicianName !== 'Unassigned' ? newOrder.technicianName : f.assignedTechnician
+          }
+        : f));
+    }
+    showToast('success', 'Work Order Created', `${newOrder.id}: ${newOrder.title}`);
+    logAudit('WORK_ORDER_CREATED', `${newOrder.type} ${newOrder.id}${newOrder.faultId ? ` for ${newOrder.faultId}` : ''} (${newOrder.priority})`, newOrder.id, 'WorkOrder');
+    return newOrder;
   };
 
   const updateWorkOrderStatus = (workOrderId: string, status: WorkOrder['status']) => {
-    setWorkOrders(prev => prev.map(w => w.id === workOrderId ? { ...w, status, completedDate: status === 'Completed' ? new Date().toISOString().split('T')[0] : w.completedDate } : w));
+    const order = workOrders.find(w => w.id === workOrderId);
+    if (!order) {
+      showToast('error', 'Work Order Missing', `Work order ${workOrderId} was not found.`);
+      return;
+    }
+    if (order.status === status) return;
+    setWorkOrders(prev => prev.map(w => w.id === workOrderId ? { ...w, status, completedDate: status === 'Completed' ? today() : w.completedDate } : w));
+    if (order.faultId && (status === 'In Progress' || status === 'Assigned')) {
+      setFaults(prev => prev.map(f => f.id === order.faultId && f.status !== 'Resolved'
+        ? { ...f, status: status === 'In Progress' ? 'In Progress' : 'Dispatched' }
+        : f));
+    }
     showToast('success', 'Work Order Updated', `Work Order ${workOrderId} status changed to ${status}`);
+    logAudit('WORK_ORDER_STATUS', `${workOrderId}: ${order.status} ? ${status}`, workOrderId, 'WorkOrder');
   };
 
   // Zone Management Methods
   const addZone = (zone: Partial<NetworkZone> & { name: string; areaCode: string }): NetworkZone => {
+    const anchor = equipments.find(e => e.type === 'OLT') || equipments[0];
+    const [cLat, cLng]: [number, number] = anchor ? [anchor.lat, anchor.lng] : projectStartPoint ?? [0, 0];
+    const d = 0.0035;
     const newZone: NetworkZone = {
-      id: zone.id || `ZONE-${Date.now().toString().slice(-4)}`,
+      id: zone.id || nextSequentialId('ZONE-', zones.map(z => z.id)),
       name: zone.name,
       areaCode: zone.areaCode,
-      coverageSqKm: zone.coverageSqKm || 2.5,
-      homePassed: zone.homePassed || 1200,
-      connectedCustomers: zone.connectedCustomers || 0,
-      feederCableCount: zone.feederCableCount || 1,
-      fatCount: zone.fatCount || 4,
-      penetrationRatePct: zone.penetrationRatePct || 0,
+      coverageSqKm: zone.coverageSqKm ?? 2.5,
+      homePassed: zone.homePassed ?? 0,
+      connectedCustomers: zone.connectedCustomers ?? 0,
+      feederCableCount: zone.feederCableCount ?? 0,
+      fatCount: zone.fatCount ?? 0,
+      penetrationRatePct: zone.penetrationRatePct ?? 0,
       status: zone.status || 'Expansion',
-      boundaryCoords: zone.boundaryCoords || [
-        [12.935, 77.625],
-        [12.942, 77.625],
-        [12.942, 77.632],
-        [12.935, 77.632]
+      boundaryCoords: zone.boundaryCoords && zone.boundaryCoords.length >= 3 ? zone.boundaryCoords : [
+        [cLat - d, cLng - d],
+        [cLat + d, cLng - d],
+        [cLat + d, cLng + d],
+        [cLat - d, cLng + d]
       ]
     };
     setZones(prev => [...prev, newZone]);
     showToast('success', 'Network Zone Added', `Created zone ${newZone.name} (${newZone.areaCode})`);
+    logAudit('ZONE_CREATED', `Created zone ${newZone.name} (${newZone.areaCode})`, newZone.id, 'Zone');
     return newZone;
   };
 
   const updateZone = (zone: NetworkZone) => {
     setZones(prev => prev.map(z => z.id === zone.id ? zone : z));
     showToast('success', 'Zone Updated', `Saved changes for zone ${zone.name}`);
+    logAudit('ZONE_UPDATED', `Updated zone ${zone.name}`, zone.id, 'Zone');
   };
 
   const deleteZone = (id: string) => {
+    const zone = zones.find(z => z.id === id);
+    if (!zone) return;
     setZones(prev => prev.filter(z => z.id !== id));
-    showToast('info', 'Zone Removed', `Deleted zone ${id}`);
+    showToast('info', 'Zone Removed', `Deleted zone ${zone.name}`);
+    logAudit('ZONE_DELETED', `Deleted zone ${zone.name}`, id, 'Zone');
   };
 
   // Document Management Methods
   const addDocument = (doc: Partial<NetworkDocument> & { title: string; category: NetworkDocument['category'] }): NetworkDocument => {
     const newDoc: NetworkDocument = {
-      id: doc.id || `DOC-${Date.now().toString().slice(-4)}`,
+      id: doc.id || nextSequentialId('DOC-', documents.map(d => d.id), 3),
       title: doc.title,
       category: doc.category,
       equipmentId: doc.equipmentId,
       cableId: doc.cableId,
       uploadedBy: doc.uploadedBy || `${userRole} User`,
-      uploadDate: new Date().toISOString().split('T')[0],
-      fileSizeKb: doc.fileSizeKb || Math.floor(Math.random() * 2000) + 300,
+      uploadDate: today(),
+      fileSizeKb: doc.fileSizeKb ?? 0,
       url: doc.url || '#'
     };
     setDocuments(prev => [newDoc, ...prev]);
     showToast('success', 'Document Uploaded', `Added ${newDoc.title} to repository`);
+    logAudit('DOCUMENT_ADDED', `Added ${newDoc.category} "${newDoc.title}"`, newDoc.id, 'Document');
     return newDoc;
   };
 
   const deleteDocument = (id: string) => {
+    const doc = documents.find(d => d.id === id);
+    if (!doc) return;
     setDocuments(prev => prev.filter(d => d.id !== id));
-    showToast('info', 'Document Deleted', 'Removed document from repository');
+    showToast('info', 'Document Deleted', `Removed "${doc.title}" from repository`);
+    logAudit('DOCUMENT_DELETED', `Deleted "${doc.title}"`, id, 'Document');
+  };
+
+  const downloadBlob = (content: string, mime: string, filename: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Backup & Restore
   const backupSystem = () => {
     const backupData = {
-      version: '2.0.0',
+      version: '3.0.0',
+      dataVersion: DATA_VERSION,
       timestamp: new Date().toISOString(),
+      projectStartPoint,
       equipments,
       cables,
       splitters,
@@ -1200,40 +1626,85 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       faults,
       workOrders,
       zones,
-      documents
+      documents,
+      auditLogs,
+      customComponents
     };
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `fiber_gis_backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(JSON.stringify(backupData, null, 2), 'application/json', `fiber_gis_backup_${today()}.json`);
     showToast('success', 'Backup Exported', 'Full network database downloaded as JSON.');
+    logAudit('BACKUP_EXPORTED', `Exported backup (${equipments.length} equipment, ${cables.length} cables, ${customers.length} customers)`, 'SYSTEM', 'System');
+  };
+
+  const resetTransientState = () => {
+    setSelectedObject(null);
+    clearTrace();
+    setActiveDrawingPoints([]);
+    setMeasuringPoints([]);
+    setHistory({ stack: [], index: -1 });
   };
 
   const restoreSystem = (jsonString: string): boolean => {
+    let data: Record<string, unknown>;
     try {
-      const data = JSON.parse(jsonString);
-      if (data.equipments) setEquipments(data.equipments);
-      if (data.cables) setCables(data.cables);
-      if (data.splitters) setSplitters(data.splitters);
-      if (data.closures) setClosures(data.closures);
-      if (data.customers) setCustomers(data.customers);
-      if (data.faults) setFaults(data.faults);
-      if (data.workOrders) setWorkOrders(data.workOrders);
-      if (data.zones) setZones(data.zones);
-      if (data.documents) setDocuments(data.documents);
-      showToast('success', 'System Restored', 'Network database restored successfully!');
-      return true;
-    } catch (e) {
-      showToast('error', 'Restore Failed', 'Invalid backup file format.');
+      const parsed: unknown = JSON.parse(jsonString);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+      data = parsed as Record<string, unknown>;
+    } catch {
+      showToast('error', 'Restore Failed', 'The selected file is not valid JSON.');
       return false;
     }
+
+    const restored: string[] = [];
+    const apply = <T,>(key: string, setter: (value: T[]) => void) => {
+      const value = data[key];
+      if (isRecordArray(value)) {
+        setter(value as T[]);
+        restored.push(key);
+      }
+    };
+    apply<Equipment>('equipments', setEquipments);
+    apply<Cable>('cables', setCables);
+    apply<Splitter>('splitters', setSplitters);
+    apply<JointClosure>('closures', setClosures);
+    apply<Customer>('customers', setCustomers);
+    apply<Fault>('faults', setFaults);
+    apply<WorkOrder>('workOrders', setWorkOrders);
+    apply<NetworkZone>('zones', setZones);
+    apply<NetworkDocument>('documents', setDocuments);
+    apply<AuditLog>('auditLogs', setAuditLogs);
+    apply<CatalogComponent>('customComponents', setCustomComponents);
+    if (isLatLngPair(data.projectStartPoint)) setProjectStartPoint(data.projectStartPoint);
+
+    if (restored.length === 0) {
+      showToast('error', 'Restore Failed', 'The file does not contain any FiberGIS network data.');
+      return false;
+    }
+
+    resetTransientState();
+    showToast('success', 'System Restored', `Restored ${restored.length} dataset(s): ${restored.join(', ')}`);
+    logAudit('BACKUP_RESTORED', `Restored datasets: ${restored.join(', ')}`, 'SYSTEM', 'System');
+    return true;
+  };
+
+  const resetToSampleData = () => {
+    if (!window.confirm('Reset the entire network to the bundled sample dataset? All local changes will be lost.')) return;
+    setEquipments(SAMPLE_EQUIPMENT);
+    setCables(SAMPLE_CABLES);
+    setSplitters(SAMPLE_SPLITTERS);
+    setClosures(SAMPLE_JOINT_CLOSURES);
+    setCustomers(SAMPLE_CUSTOMERS);
+    setFaults(SAMPLE_FAULTS);
+    setWorkOrders(SAMPLE_WORK_ORDERS);
+    setZones(SAMPLE_ZONES);
+    setDocuments(SAMPLE_DOCUMENTS);
+    setAuditLogs(SAMPLE_AUDIT_LOGS);
+    resetTransientState();
+    showToast('info', 'Sample Data Restored', 'The network has been reset to the bundled sample dataset.');
   };
 
   // Google Earth KML Export
   const exportKML = () => {
+    const x = escapeXml;
     let kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -1245,8 +1716,8 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     equipments.forEach(eq => {
       kml += `
       <Placemark>
-        <name>${eq.name} (${eq.id})</name>
-        <description>Type: ${eq.type} | Area: ${eq.area} | Status: ${eq.status}</description>
+        <name>${x(eq.name)} (${x(eq.id)})</name>
+        <description>Type: ${x(eq.type)} | Area: ${x(eq.area)} | Status: ${x(eq.status)}</description>
         <Point>
           <coordinates>${eq.lng},${eq.lat},0</coordinates>
         </Point>
@@ -1259,13 +1730,13 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       <name>Cables</name>`;
 
     cables.forEach(cb => {
+      if (cb.coordinates.length < 2) return;
       const coordsStr = cb.coordinates.map(pt => `${pt[1]},${pt[0]},0`).join(' ');
       kml += `
       <Placemark>
-        <name>${cb.name} (${cb.id})</name>
-        <description>Type: ${cb.type} | Length: ${cb.lengthMeters}m | Cores: ${cb.fiberCount}</description>
+        <name>${x(cb.name)} (${x(cb.id)})</name>
+        <description>Type: ${x(cb.type)} | Length: ${cb.lengthMeters}m | Cores: ${cb.fiberCount} | Status: ${x(cb.status)}</description>
         <LineString>
-          <extrude>1</extrude>
           <tessellate>1</tessellate>
           <coordinates>${coordsStr}</coordinates>
         </LineString>
@@ -1274,17 +1745,27 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     kml += `
     </Folder>
+    <Folder>
+      <name>Customers</name>`;
+
+    customers.forEach(c => {
+      kml += `
+      <Placemark>
+        <name>${x(c.name)} (${x(c.id)})</name>
+        <description>Plan: ${x(c.plan)} | Status: ${x(c.status)} | FAT: ${x(c.terminalBoxId)} port ${c.splitterOutputPort}</description>
+        <Point>
+          <coordinates>${c.lng},${c.lat},0</coordinates>
+        </Point>
+      </Placemark>`;
+    });
+
+    kml += `
+    </Folder>
   </Document>
 </kml>`;
 
-    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `fiber_gis_network_${new Date().toISOString().split('T')[0]}.kml`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('success', 'KML Export Complete', 'Downloaded Google Earth KML file.');
+    downloadBlob(kml, 'application/vnd.google-earth.kml+xml', `fiber_gis_network_${today()}.kml`);
+    showToast('success', 'KML Export Complete', `Exported ${equipments.length} equipment, ${cables.length} cables and ${customers.length} customers.`);
   };
 
   return (
@@ -1317,6 +1798,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
         activeTracePath,
         activeTraceCableIds,
         activeTraceEquipmentIds,
+        activeTraceSummary,
         traceNetworkPath,
         clearTrace,
         activeLayers,
@@ -1406,7 +1888,10 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
         deleteImageAnnotation,
         recordNewFault,
         resolveExistingFault,
+        addWorkOrder,
         updateWorkOrderStatus,
+        logAudit,
+        resetToSampleData,
         addZone,
         updateZone,
         deleteZone,
