@@ -1,90 +1,265 @@
 @import "tailwindcss";
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+/* ------------------------------------------------------------------ */
+/* Design tokens                                                       */
+/* ------------------------------------------------------------------ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --shadow-overlay: 0 10px 38px -10px rgb(15 23 42 / 0.25), 0 10px 20px -15px rgb(15 23 42 / 0.2);
+  --shadow-panel: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.08);
 }
 
-/* Map styles */
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+@layer base {
+  html,
+  body {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--color-slate-800);
+    background: var(--color-slate-100);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-blue-500);
+    outline-offset: 1px;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+
+  ::selection {
+    background: var(--color-blue-100);
+    color: var(--color-slate-900);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Reusable component classes                                          */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .ui-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12.5px;
+  }
+  .ui-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-slate-50);
+    color: var(--color-slate-500);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-slate-200);
+    white-space: nowrap;
+  }
+  .ui-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-slate-100);
+    color: var(--color-slate-700);
+    vertical-align: middle;
+  }
+  .ui-table tbody tr:hover td {
+    background: var(--color-slate-50);
+  }
+  .ui-table tbody tr[data-selected="true"] td {
+    background: var(--color-blue-50);
+  }
+  .ui-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Scrollbars                                                          */
+/* ------------------------------------------------------------------ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-slate-300);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-slate-400);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------------ */
+/* Animations                                                          */
+/* ------------------------------------------------------------------ */
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ui-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ui-slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-fade-in { animation: ui-fade-in 120ms ease-out; }
+.animate-pop-in { animation: ui-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-in-right { animation: ui-slide-in-right 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Leaflet                                                             */
+/* ------------------------------------------------------------------ */
 .leaflet-container {
-  font-family: inherit;
+  font-family: var(--font-sans);
   width: 100%;
   height: 100%;
-  background: #e2e8f0;
+  background: var(--color-slate-200);
   z-index: 1;
 }
 
-/* Pulsing trace animations */
-@keyframes dash-pulse {
-  to {
-    stroke-dashoffset: -40;
-  }
+.leaflet-bar,
+.leaflet-control-layers {
+  border: 1px solid var(--color-slate-200) !important;
+  border-radius: 6px !important;
+  box-shadow: var(--shadow-panel) !important;
+  overflow: hidden;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  color: var(--color-slate-600) !important;
+  border-bottom-color: var(--color-slate-200) !important;
+}
+.leaflet-bar a:hover {
+  background: var(--color-slate-50) !important;
+  color: var(--color-slate-900) !important;
+}
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: rgb(255 255 255 / 0.8) !important;
+  color: var(--color-slate-500) !important;
+}
+.leaflet-control-scale-line {
+  border-color: var(--color-slate-500) !important;
+  color: var(--color-slate-600) !important;
+  background: rgb(255 255 255 / 0.8) !important;
+  font-size: 10px !important;
 }
 
-.fiber-trace-active {
-  stroke-dasharray: 8, 8;
-  animation: dash-pulse 1s linear infinite;
+.leaflet-popup-content-wrapper {
+  border-radius: 8px !important;
+  border: 1px solid var(--color-slate-200);
+  box-shadow: var(--shadow-overlay) !important;
+}
+.leaflet-popup-content {
+  margin: 12px 14px !important;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-slate-700);
+}
+.leaflet-popup-tip {
+  box-shadow: none !important;
+  border: 1px solid var(--color-slate-200);
 }
 
-.fiber-fault-pulse {
-  stroke-dasharray: 6, 6;
-  animation: dash-pulse 0.6s linear infinite;
-}
-
-/* Custom Marker Styling */
-.gis-equipment-marker {
-  transition: transform 0.15s ease-out;
-  cursor: pointer;
-}
-
-.gis-equipment-marker:hover {
-  transform: scale(1.18);
-  z-index: 1000 !important;
-}
-
-.gis-equipment-marker.selected {
-  transform: scale(1.25);
-  filter: drop-shadow(0 0 10px rgba(12, 135, 235, 0.8));
-  z-index: 1001 !important;
-}
-
-.gis-equipment-marker.faulty {
-  filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.9));
-  animation: marker-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes marker-pulse {
-  0%, 100% {
-    transform: scale(1.1);
-  }
-  50% {
-    transform: scale(1.28);
-  }
-}
-
-/* Tooltip custom styling */
 .leaflet-tooltip.gis-tooltip {
-  background-color: rgba(15, 23, 42, 0.92);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  padding: 4px 8px;
+  background: var(--color-slate-900);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 7px;
   font-size: 11px;
   font-weight: 500;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 0.25);
+}
+.leaflet-tooltip-top.gis-tooltip::before {
+  border-top-color: var(--color-slate-900);
+}
+.leaflet-tooltip-bottom.gis-tooltip::before {
+  border-bottom-color: var(--color-slate-900);
+}
+.leaflet-tooltip-left.gis-tooltip::before {
+  border-left-color: var(--color-slate-900);
+}
+.leaflet-tooltip-right.gis-tooltip::before {
+  border-right-color: var(--color-slate-900);
 }
 
-.leaflet-tooltip-top:before {
-  border-top-color: rgba(15, 23, 42, 0.92);
+/* Trace + fault line styling */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -32; }
+}
+.fiber-trace-active {
+  stroke-dasharray: 10, 6;
+  animation: dash-flow 1.6s linear infinite;
+}
+.fiber-fault-pulse {
+  stroke-dasharray: 4, 6;
+}
+
+/* Equipment markers */
+.gis-equipment-marker {
+  transition: transform 120ms ease-out, filter 120ms ease-out;
+  cursor: pointer;
+}
+.gis-equipment-marker:hover {
+  transform: scale(1.1);
+  z-index: 1000 !important;
+}
+.gis-equipment-marker.selected {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 0 2px var(--color-blue-500)) drop-shadow(0 2px 6px rgb(37 99 235 / 0.45));
+  z-index: 1001 !important;
+}
+.gis-equipment-marker.faulty {
+  filter: drop-shadow(0 0 4px rgb(220 38 38 / 0.75));
 }

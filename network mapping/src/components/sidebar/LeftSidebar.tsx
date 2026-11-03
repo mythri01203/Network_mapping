@@ -1,46 +1,59 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
 import {
-  LayoutDashboard,
-  Map,
-  Cpu,
-  GitBranch,
-  Wifi,
-  Tv,
-  Wrench,
-  ShieldCheck,
-  ChevronRight,
-  ChevronDown,
-  Layers,
-  PlusCircle,
-  Users,
-  Cable as CableIcon,
-  AlertCircle,
-  FileSpreadsheet,
-  CheckCircle2,
-  FolderTree,
-  Crosshair,
-  GitFork,
-  Server,
+  Route,
+  Combine,
+  Split,
   Box,
-  FolderArchive,
-  Database
+  Unplug,
+  ChartColumn,
+  FileText,
+  FolderOpen,
+  BookOpenText,
+  LibraryBig,
+  Smartphone,
+  Bike,
+  Plus,
+  UserPlus,
+  Cable,
+  MapPinPlus,
+  TriangleAlert,
+  PanelLeftClose,
+  PanelLeftOpen,
+  type LucideIcon,
 } from 'lucide-react';
+import { useNetwork } from '../../context/NetworkContext';
+import type { MainView } from '../../types/network';
+import { Popover, MenuItem, MenuLabel, MenuSeparator, cn } from '../ui';
+import { VIEW_META } from './navigation';
 
-interface SidebarSection {
-  id: string;
-  title: string;
-  icon: React.ElementType;
-  items: Array<{
-    id: string;
-    label: string;
-    count?: number;
-    action: () => void;
-  }>;
+interface NavEntry {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  onClick: () => void;
+  active?: boolean;
+  count?: number;
+  alert?: boolean;
+  simple?: boolean;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavEntry[];
+}
+
+interface TooltipState {
+  label: string;
+  top: number;
 }
 
 export const LeftSidebar: React.FC = () => {
   const {
+    activeMainView,
+    setActiveMainView,
+    isSidebarCollapsed,
+    setIsSidebarCollapsed,
+    uiMode,
     equipments,
     cables,
     customers,
@@ -48,306 +61,261 @@ export const LeftSidebar: React.FC = () => {
     workOrders,
     zones,
     documents,
-    activeMainView,
-    setActiveMainView,
-    isSidebarCollapsed,
-    setIsSidebarCollapsed,
-    setIsCapacityDashboardOpen,
+    closures,
+    splitters,
     setIsCableWizardOpen,
     setIsCustomerWizardOpen,
-    setIsEquipmentModalOpen,
+    setIsLeftPanelOpen,
     setIsTerminalBoxModalOpen,
     setIsSplitterModalOpen,
     setIsSplicingModalOpen,
     setIsRouteTraceModalOpen,
     setIsFaultModalOpen,
-    setIsReportsModalOpen,
     setIsTechnicianMobileOpen,
+    setIsCapacityDashboardOpen,
+    setIsReportsModalOpen,
     setIsDocumentModalOpen,
-    flyToLocation,
-    setSelectedObject,
-    toggleLayer,
-    uiMode,
-    setIsBikerMode
+    setIsComponentCatalogOpen,
+    setIsPortManagerOpen,
+    setIsKnowledgeModalOpen,
+    setIsBikerMode,
   } = useNetwork();
 
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    mapping: true,
-    fiber: true,
-    cables: false,
-    internet: false,
-    operations: true,
-    admin: false
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const collapsed = isSidebarCollapsed;
+  const simple = uiMode === 'simple';
+
+  const openFaults = faults.filter((f) => f.status !== 'Resolved').length;
+  const openWorkOrders = workOrders.filter((w: any) => w.status !== 'Completed' && w.status !== 'Cancelled').length;
+  const fatCount = equipments.filter((e) => /FAT|Terminal Box/i.test(String(e.type))).length;
+  const catvCount = equipments.filter((e) => e.category === 'Cable TV Infrastructure').length;
+
+  const view = (id: MainView, extra?: Partial<NavEntry>): NavEntry => ({
+    key: id,
+    label: VIEW_META[id].label,
+    icon: VIEW_META[id].icon,
+    onClick: () => setActiveMainView(id),
+    active: activeMainView === id,
+    ...extra,
   });
 
-  const toggleSection = (id: string) => {
-    setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  const tool = (key: string, label: string, icon: LucideIcon, onClick: () => void, extra?: Partial<NavEntry>): NavEntry => ({
+    key,
+    label,
+    icon,
+    onClick,
+    ...extra,
+  });
+
+  const groups: NavGroup[] = [
+    {
+      label: 'Workspace',
+      items: [
+        view('map', { simple: true }),
+        view('topology'),
+        view('olt_rack'),
+        view('inventory', { count: equipments.length, simple: true }),
+        view('cables', { count: cables.length, simple: true }),
+        view('customers', { count: customers.length, simple: true }),
+        view('cable_tv', { count: catvCount || undefined }),
+        view('zones', { count: zones.length || undefined }),
+      ],
+    },
+    {
+      label: 'Operations',
+      items: [
+        view('operations', { count: openFaults + openWorkOrders || undefined, alert: openFaults > 0, simple: true }),
+        view('field', { simple: true }),
+        tool('tech', 'Technician App', Smartphone, () => setIsTechnicianMobileOpen(true)),
+        tool(
+          'biker',
+          'Ride Navigation',
+          Bike,
+          () => {
+            setActiveMainView('map');
+            setIsBikerMode(true);
+          },
+        ),
+      ],
+    },
+    {
+      label: 'Fiber Tools',
+      items: [
+        tool('trace', 'Route Trace', Route, () => setIsRouteTraceModalOpen(true), { simple: true }),
+        tool('fat', 'Terminal Boxes', Box, () => setIsTerminalBoxModalOpen(true), { count: fatCount || undefined, simple: true }),
+        tool('splitter', 'Splitters', Split, () => setIsSplitterModalOpen(true), { count: splitters.length || undefined }),
+        tool('splice', 'Splicing', Combine, () => setIsSplicingModalOpen(true), { count: closures.length || undefined }),
+        tool('ports', 'Port Manager', Unplug, () => setIsPortManagerOpen(true)),
+      ],
+    },
+    {
+      label: 'Insights',
+      items: [
+        tool('capacity', 'Capacity', ChartColumn, () => setIsCapacityDashboardOpen(true)),
+        tool('reports', 'Reports', FileText, () => setIsReportsModalOpen(true)),
+        tool('docs', 'Documents', FolderOpen, () => setIsDocumentModalOpen(true), { count: documents.length || undefined }),
+        tool('knowledge', 'Equipment Guide', BookOpenText, () => setIsKnowledgeModalOpen(true), { simple: true }),
+        tool('catalog', 'Component Catalog', LibraryBig, () => setIsComponentCatalogOpen(true)),
+      ],
+    },
+  ];
+
+  const visibleGroups = groups
+    .map((g) => ({ ...g, items: simple ? g.items.filter((i) => i.simple) : g.items }))
+    .filter((g) => g.items.length > 0);
+
+  const admin = view('admin');
+
+  const showTip = (label: string) => (e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>) => {
+    if (!collapsed) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({ label, top: rect.top + rect.height / 2 });
+  };
+  const hideTip = () => setTooltip(null);
+
+  const renderItem = (item: NavEntry) => {
+    const Icon = item.icon;
+    return (
+      <li key={item.key}>
+        <button
+          type="button"
+          onClick={item.onClick}
+          onMouseEnter={showTip(item.count ? `${item.label} · ${item.count}` : item.label)}
+          onMouseLeave={hideTip}
+          onFocus={showTip(item.label)}
+          onBlur={hideTip}
+          aria-label={collapsed ? item.label : undefined}
+          aria-current={item.active ? 'page' : undefined}
+          className={cn(
+            'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
+            collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
+            item.active ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+          )}
+        >
+          {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600" />}
+          <Icon
+            size={collapsed ? 18 : 16}
+            strokeWidth={1.8}
+            className={cn('shrink-0', item.active ? 'text-blue-600' : 'text-slate-500 group-hover:text-slate-700')}
+          />
+          {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
+          {!collapsed && item.count !== undefined && (
+            <span
+              className={cn(
+                'tabular shrink-0 rounded px-1.5 text-[11px] leading-[18px]',
+                item.alert ? 'bg-red-50 font-medium text-red-600' : item.active ? 'text-blue-600' : 'text-slate-400',
+              )}
+            >
+              {item.count}
+            </span>
+          )}
+          {collapsed && item.alert && (
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+          )}
+        </button>
+      </li>
+    );
   };
 
-  const simpleSections: SidebarSection[] = [
-    {
-      id: 'dashboard',
-      title: 'Overview & Outages',
-      icon: LayoutDashboard,
-      items: [
-        { id: 'health', label: 'Broken Lines & Outages', count: faults.filter(f => f.status !== 'Resolved').length, action: () => setIsFaultModalOpen(true) },
-        { id: 'overview', label: 'Network Capacity Overview', action: () => setIsCapacityDashboardOpen(true) },
-        { id: 'reports', label: 'Reports & Analytics', action: () => setIsReportsModalOpen(true) }
-      ]
-    },
-    {
-      id: 'mapping',
-      title: 'Map & Wizards',
-      icon: Map,
-      items: [
-        { id: 'gis_center', label: 'GIS Network Map', action: () => { setActiveMainView('map'); flyToLocation(12.9385, 77.6275, 16); } },
-        { id: 'new_cable_wiz', label: 'Draw Fiber Cable Wizard', action: () => setIsCableWizardOpen(true) },
-        { id: 'new_cust_wiz', label: 'Connect Customer Wizard', action: () => setIsCustomerWizardOpen(true) },
-        { id: 'route_trace', label: 'Follow Wire (Hub to Home)', action: () => setIsRouteTraceModalOpen(true) }
-      ]
-    },
-    {
-      id: 'fiber',
-      title: 'Street Boxes & Hubs',
-      icon: Cpu,
-      items: [
-        { id: 'inventory', label: 'All Equipment Inventory', count: equipments.length, action: () => setActiveMainView('inventory') },
-        { id: 'fats', label: 'Street Customer Boxes (FAT)', count: equipments.filter(e => e.type === 'FAT' || e.type.includes('Terminal Box')).length, action: () => setIsTerminalBoxModalOpen(true) },
-        { id: 'olt_rack', label: 'Main Internet Station (OLT)', count: equipments.filter(e => e.type === 'OLT').length, action: () => setActiveMainView('olt_rack') },
-        { id: 'closures', label: 'Cable Joint Boxes (Splices)', count: 6, action: () => setIsSplicingModalOpen(true) },
-        { id: 'poles', label: 'Utility Poles & Manholes', count: equipments.filter(e => e.type.includes('Pole') || e.type.includes('Manhole')).length, action: () => { setActiveMainView('map'); toggleLayer('poles'); } }
-      ]
-    },
-    {
-      id: 'cables',
-      title: 'Fiber Cable Lines',
-      icon: GitBranch,
-      items: [
-        { id: 'feeder_cables', label: 'Main Feeder Cables (96 Wires)', count: cables.filter(c => c.type === 'Main Feeder Fiber').length, action: () => { setActiveMainView('map'); toggleLayer('feederCable'); } },
-        { id: 'dist_cables', label: 'Street Cables (24 Wires)', count: cables.filter(c => c.type === 'Distribution Fiber').length, action: () => { setActiveMainView('map'); toggleLayer('distributionCable'); } },
-        { id: 'drop_cables', label: 'House Connection Wires', count: 25, action: () => { setActiveMainView('map'); toggleLayer('dropCable'); } }
-      ]
-    },
-    {
-      id: 'internet',
-      title: 'Connected Customers',
-      icon: Wifi,
-      items: [
-        { id: 'all_customers', label: 'Customer Directory', count: customers.length, action: () => setActiveMainView('customers') },
-        { id: 'onboard_cust', label: 'Connect New Customer Home', action: () => setIsCustomerWizardOpen(true) }
-      ]
-    },
-    {
-      id: 'operations',
-      title: 'Field Tech & Outages',
-      icon: Wrench,
-      items: [
-        { id: 'biker_gps', label: 'Motorcycle Road GPS Navigation', action: () => { setActiveMainView('map'); setIsBikerMode(true); } },
-        { id: 'active_faults', label: 'Active Outages & Cable Cuts', count: faults.filter(f => f.status !== 'Resolved').length, action: () => setIsFaultModalOpen(true) },
-        { id: 'mobile_technician', label: 'Technician Mobile Portal', action: () => setIsTechnicianMobileOpen(true) }
-      ]
-    }
-  ];
-
-  const sections: SidebarSection[] = [
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      icon: LayoutDashboard,
-      items: [
-        { id: 'overview', label: 'Network Capacity Overview', action: () => setIsCapacityDashboardOpen(true) },
-        { id: 'health', label: 'Network Health & Outages', count: faults.filter(f => f.status !== 'Resolved').length, action: () => setIsFaultModalOpen(true) },
-        { id: 'reports', label: 'Reports & Analytics', action: () => setIsReportsModalOpen(true) }
-      ]
-    },
-    {
-      id: 'mapping',
-      title: 'Network Mapping',
-      icon: Map,
-      items: [
-        { id: 'gis_center', label: 'GIS Network Map', action: () => { setActiveMainView('map'); flyToLocation(12.9385, 77.6275, 16); } },
-        { id: 'topology_view', label: 'Network Topology View', action: () => setActiveMainView('topology') },
-        { id: 'zone_mapping', label: 'Area & Zone Mapping', count: zones.length, action: () => setActiveMainView('zones') },
-        { id: 'new_cable_wiz', label: 'Draw Fiber Cable Wizard', action: () => setIsCableWizardOpen(true) },
-        { id: 'new_cust_wiz', label: 'Connect Customer Wizard', action: () => setIsCustomerWizardOpen(true) },
-        { id: 'route_trace', label: 'Trace Fiber Route (OLT &rarr; ONT)', action: () => setIsRouteTraceModalOpen(true) }
-      ]
-    },
-    {
-      id: 'fiber',
-      title: 'Fiber Infrastructure',
-      icon: Cpu,
-      items: [
-        { id: 'olt_rack', label: 'OLT Central Office Chassis', count: equipments.filter(e => e.type === 'OLT').length, action: () => setActiveMainView('olt_rack') },
-        { id: 'inventory', label: 'All Equipment Inventory', count: equipments.length, action: () => setActiveMainView('inventory') },
-        { id: 'fats', label: 'FAT Terminal Boxes', count: equipments.filter(e => e.type === 'FAT' || e.type.includes('Terminal Box')).length, action: () => setIsTerminalBoxModalOpen(true) },
-        { id: 'splitters', label: 'Fiber Splitters (PLC 1:2-1:64)', count: 10, action: () => setIsSplitterModalOpen(true) },
-        { id: 'closures', label: 'Joint Closures & Splices', count: 6, action: () => setIsSplicingModalOpen(true) },
-        { id: 'poles', label: 'Poles (Telecom & Electric)', count: equipments.filter(e => e.type.includes('Pole')).length, action: () => { setActiveMainView('map'); toggleLayer('poles'); } },
-        { id: 'manholes', label: 'Manholes & Chambers', count: equipments.filter(e => e.type.includes('Manhole')).length, action: () => { setActiveMainView('map'); toggleLayer('manholes'); } }
-      ]
-    },
-    {
-      id: 'cables',
-      title: 'Fiber Cable Management',
-      icon: GitBranch,
-      items: [
-        { id: 'feeder_cables', label: 'Feeder Cables (96F/48F)', count: cables.filter(c => c.type === 'Main Feeder Fiber').length, action: () => { setActiveMainView('map'); toggleLayer('feederCable'); } },
-        { id: 'dist_cables', label: 'Distribution Cables (24F)', count: cables.filter(c => c.type === 'Distribution Fiber').length, action: () => { setActiveMainView('map'); toggleLayer('distributionCable'); } },
-        { id: 'drop_cables', label: 'Drop FTTH Cables (1F/2F)', count: 25, action: () => { setActiveMainView('map'); toggleLayer('dropCable'); } },
-        { id: 'splice_matrix', label: 'Fusion Splicing Matrix', action: () => setIsSplicingModalOpen(true) }
-      ]
-    },
-    {
-      id: 'internet',
-      title: 'Internet Management',
-      icon: Wifi,
-      items: [
-        { id: 'all_customers', label: 'Customer Directory', count: customers.length, action: () => setActiveMainView('customers') },
-        { id: 'active_onts', label: 'Active Subscriber ONTs', count: customers.filter(c => c.status === 'Active').length, action: () => setActiveMainView('customers') },
-        { id: 'onboard_cust', label: 'New Customer Connection', action: () => setIsCustomerWizardOpen(true) }
-      ]
-    },
-    {
-      id: 'cabletv',
-      title: 'Cable TV Management',
-      icon: Tv,
-      items: [
-        { id: 'catv_system', label: 'HFC System Overview', action: () => setActiveMainView('cable_tv') },
-        { id: 'catv_nodes', label: 'CATV Optical Nodes (1550nm)', count: 3, action: () => setActiveMainView('cable_tv') },
-        { id: 'rf_amps', label: 'RF Amplifiers & Tap-Offs', count: 5, action: () => setActiveMainView('cable_tv') }
-      ]
-    },
-    {
-      id: 'operations',
-      title: 'Operations & Faults',
-      icon: Wrench,
-      items: [
-        { id: 'ops_hub', label: 'Operations Hub (Kanban)', count: workOrders.length, action: () => setActiveMainView('operations') },
-        { id: 'active_faults', label: 'Network Outages & Fiber Cuts', count: faults.filter(f => f.status !== 'Resolved').length, action: () => setIsFaultModalOpen(true) },
-        { id: 'mobile_technician', label: 'Field Technician Mobile Portal', action: () => setIsTechnicianMobileOpen(true) }
-      ]
-    },
-    {
-      id: 'admin',
-      title: 'Administration',
-      icon: ShieldCheck,
-      items: [
-        { id: 'admin_config', label: 'System Configuration & RBAC', action: () => setActiveMainView('admin') },
-        { id: 'documents_repo', label: 'Technical Docs & Datasheets', count: documents.length, action: () => setIsDocumentModalOpen(true) },
-        { id: 'audit_logs', label: 'System Audit Logs', action: () => setActiveMainView('admin') }
-      ]
-    }
-  ];
-
-  const currentSections = uiMode === 'simple' ? simpleSections : sections;
-
-  if (isSidebarCollapsed) {
-    return (
-      <aside className="w-14 bg-white border-r border-slate-200/80 flex flex-col items-center py-3 gap-3 z-20 shrink-0 shadow-xs">
-        <button
-          onClick={() => setIsSidebarCollapsed(false)}
-          title="Expand Sidebar"
-          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-
-        {currentSections.map(sec => {
-          const Icon = sec.icon;
-          return (
-            <button
-              key={sec.id}
-              onClick={() => { setIsSidebarCollapsed(false); setExpandedSections(prev => ({ ...prev, [sec.id]: true })); }}
-              title={sec.title}
-              className="p-2.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-            >
-              <Icon className="w-5 h-5" />
-            </button>
-          );
-        })}
-      </aside>
-    );
-  }
-
   return (
-    <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col z-20 shrink-0 select-none shadow-xs transition-all duration-200">
-      {/* Sidebar Header */}
-      <div className="h-10 px-4 border-b border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-        <span>{uiMode === 'simple' ? 'Quick Modules' : 'Navigation Modules'}</span>
-        <button
-          onClick={() => setIsSidebarCollapsed(true)}
-          title="Collapse Sidebar"
-          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-        >
-          <ChevronDown className="w-4 h-4 rotate-90" />
-        </button>
-      </div>
-
-      {/* Accordion Sections */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {currentSections.map(sec => {
-          const Icon = sec.icon;
-          const isExpanded = expandedSections[sec.id];
-
-          return (
-            <div key={sec.id} className="rounded-xl overflow-hidden border border-transparent hover:border-slate-100 transition-colors">
-              <button
-                onClick={() => toggleSection(sec.id)}
-                className={`w-full px-3 py-2 flex items-center justify-between rounded-lg text-xs font-semibold transition-all ${
-                  isExpanded ? 'bg-slate-100/80 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 ${isExpanded ? 'text-blue-600' : 'text-slate-500'}`} />
-                  <span>{sec.title}</span>
-                </div>
-                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isExpanded && (
-                <div className="py-1 pl-8 pr-2 space-y-0.5 animate-in fade-in slide-in-from-top-1">
-                  {sec.items.map(item => (
-                    <button
-                      key={item.id}
-                      onClick={item.action}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-slate-600 hover:text-blue-700 hover:bg-blue-50/70 flex items-center justify-between transition-colors"
-                    >
-                      <span className="truncate">{item.label}</span>
-                      {item.count !== undefined && (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                          sec.id === 'operations' && item.count > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {item.count}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+    <nav
+      aria-label="Primary"
+      className={cn(
+        'relative z-[900] flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-150',
+        collapsed ? 'w-14' : 'w-56',
+      )}
+    >
+      {/* Create */}
+      <div className={cn('shrink-0 border-b border-slate-100', collapsed ? 'px-2 py-2.5' : 'px-3 py-3')}>
+        <Popover
+          align="start"
+          side={collapsed ? 'right' : 'bottom'}
+          panelClassName="w-56"
+          trigger={({ open, toggle }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              onMouseEnter={showTip('Create')}
+              onMouseLeave={hideTip}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              aria-label="Create"
+              className={cn(
+                'flex w-full items-center justify-center rounded-md bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-700',
+                collapsed ? 'h-9' : 'h-8 gap-2 text-[13px] font-medium',
+                open && 'bg-blue-700',
               )}
-            </div>
-          );
-        })}
+            >
+              <Plus size={collapsed ? 18 : 16} strokeWidth={2.2} />
+              {!collapsed && 'Create'}
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              <MenuLabel>Add to network</MenuLabel>
+              <MenuItem icon={UserPlus} label="New customer connection" onClick={() => { setIsCustomerWizardOpen(true); close(); }} />
+              <MenuItem icon={Cable} label="New cable route" onClick={() => { setIsCableWizardOpen(true); close(); }} />
+              <MenuItem
+                icon={MapPinPlus}
+                label="Place equipment"
+                hint="from library"
+                onClick={() => {
+                  setActiveMainView('map');
+                  setIsLeftPanelOpen(true);
+                  close();
+                }}
+              />
+              <MenuSeparator />
+              <MenuItem icon={TriangleAlert} label="Report a fault" onClick={() => { setIsFaultModalOpen(true); close(); }} />
+            </>
+          )}
+        </Popover>
       </div>
 
-      {/* Quick Launch Action Cards at Sidebar Bottom */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/60 flex flex-col gap-2">
-        <button
-          onClick={() => setIsCableWizardOpen(true)}
-          className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>Draw New Cable</span>
-        </button>
+      {/* Navigation groups */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2" onScroll={hideTip}>
+        {visibleGroups.map((group, gi) => (
+          <div key={group.label} className={cn(gi > 0 && (collapsed ? 'mt-2 border-t border-slate-100 pt-2' : 'mt-3'))}>
+            {!collapsed && (
+              <div className="px-5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{group.label}</div>
+            )}
+            <ul className={cn('space-y-px', collapsed ? 'px-2' : 'px-2.5')}>{group.items.map(renderItem)}</ul>
+          </div>
+        ))}
+      </div>
 
+      {/* Footer */}
+      <div className={cn('shrink-0 border-t border-slate-100 py-2', collapsed ? 'px-2' : 'px-2.5')}>
+        <ul className="space-y-px">{renderItem(admin)}</ul>
         <button
-          onClick={() => setIsCustomerWizardOpen(true)}
-          className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+          type="button"
+          onClick={() => {
+            setIsSidebarCollapsed((c) => !c);
+            setTooltip(null);
+          }}
+          onMouseEnter={showTip('Expand sidebar')}
+          onMouseLeave={hideTip}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={cn(
+            'mt-1 flex w-full items-center rounded-md text-[13px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800',
+            collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
+          )}
         >
-          <Users className="w-3.5 h-3.5 text-blue-600" />
-          <span>Connect Customer</span>
+          {collapsed ? <PanelLeftOpen size={18} strokeWidth={1.8} /> : <PanelLeftClose size={16} strokeWidth={1.8} />}
+          {!collapsed && <span>Collapse</span>}
         </button>
       </div>
-    </aside>
+
+      {collapsed && tooltip && (
+        <div
+          role="tooltip"
+          className="animate-fade-in pointer-events-none fixed left-[60px] z-[1600] -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white shadow-lg"
+          style={{ top: tooltip.top }}
+        >
+          {tooltip.label}
+        </div>
+      )}
+    </nav>
   );
 };

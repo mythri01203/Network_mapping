@@ -1,267 +1,400 @@
-import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
-import { CORE_STATUS_COLORS } from '../../constants/colorStandards';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  X,
   ChevronDown,
   ChevronUp,
-  Layers,
-  Activity,
+  ChevronRight,
+  Route,
   History,
-  Grid,
-  Filter,
-  CheckCircle,
-  AlertCircle,
-  Check,
-  Plus
+  TableProperties,
+  Cable as CableIconLucide,
+  TriangleAlert,
+  X,
 } from 'lucide-react';
+import { useNetwork } from '../../context/NetworkContext';
+import type { CoreStatus } from '../../types/network';
+import { Tabs, Select, IconButton, Button, Badge, StatusBadge, EmptyState, ProgressBar, cn, cableColor } from '../ui';
+
+type Tab = 'cores' | 'trace' | 'audit';
+
+const CORE_FILTERS: Array<'All' | CoreStatus> = ['All', 'Available', 'In Use', 'Reserved', 'Damaged', 'Under Maintenance', 'Unverified'];
+
+const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 
 export const BottomInfoPanel: React.FC = () => {
   const {
     cables,
+    equipments,
+    customers,
     selectedObject,
     isBottomPanelOpen,
     setIsBottomPanelOpen,
     activeTracePath,
+    activeTraceSummary,
     clearTrace,
     auditLogs,
     allocateFiberCore,
-    showToast
+    flyToLocation,
   } = useNetwork();
 
-  const [activeTab, setActiveTab] = useState<'cores' | 'trace' | 'audit'>('cores');
-  const [coreStatusFilter, setCoreStatusFilter] = useState<string>('All');
+  const [activeTab, setActiveTab] = useState<Tab>('cores');
+  const [coreFilter, setCoreFilter] = useState<'All' | CoreStatus>('All');
+
+  const selectedCableId = selectedObject?.type === 'cable' ? selectedObject.data?.id : null;
+  const cable = useMemo(() => (selectedCableId ? cables.find((c) => c.id === selectedCableId) ?? null : null), [cables, selectedCableId]);
+
+  useEffect(() => {
+    if (selectedCableId) setActiveTab('cores');
+  }, [selectedCableId]);
+
+  const traceKey = activeTraceSummary?.targetId ?? (activeTracePath ? activeTracePath.length : null);
+  useEffect(() => {
+    if (traceKey !== null) setActiveTab('trace');
+  }, [traceKey]);
+
+  const equipmentName = (id?: string) => (id ? equipments.find((e) => e.id === id)?.name ?? id : undefined);
+  const customerName = (id?: string) => (id ? customers.find((c) => c.id === id)?.name ?? id : undefined);
+
+  const allocationTargetId = cable ? cable.endEquipmentId || cable.startEquipmentId : undefined;
+  const allocationTargetName = equipmentName(allocationTargetId);
+
+  const coreStats = useMemo(() => {
+    const cores = cable?.cores ?? [];
+    return {
+      total: cores.length,
+      inUse: cores.filter((c) => c.status === 'In Use').length,
+      available: cores.filter((c) => c.status === 'Available').length,
+      damaged: cores.filter((c) => c.status === 'Damaged').length,
+    };
+  }, [cable]);
+
+  const filteredCores = (cable?.cores ?? []).filter((core) => coreFilter === 'All' || core.status === coreFilter);
 
   if (!isBottomPanelOpen) {
     return (
-      <button
-        onClick={() => setIsBottomPanelOpen(true)}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-white/95 backdrop-blur-md border border-slate-200 rounded-full px-4 py-1.5 shadow-lg hover:bg-slate-50 transition-all text-xs font-semibold text-slate-700 flex items-center gap-2"
-        title="Open Bottom Information Panel"
-      >
-        <Layers className="w-3.5 h-3.5 text-blue-600" />
-        <span>Fiber Cores & Connection Table</span>
-        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-      </button>
+      <div className="flex h-8 shrink-0 items-center gap-3 border-t border-slate-200 bg-white px-3 text-xs">
+        <button
+          type="button"
+          onClick={() => setIsBottomPanelOpen(true)}
+          className="flex items-center gap-2 font-medium text-slate-600 hover:text-slate-900"
+        >
+          <ChevronUp size={14} className="text-slate-400" />
+          <TableProperties size={14} className="text-slate-400" />
+          Attribute table
+        </button>
+        <span className="h-3.5 w-px bg-slate-200" />
+        <span className="truncate text-slate-500">
+          {cable ? (
+            <>
+              <span className="font-medium text-slate-700">{cable.name}</span> · {cable.fiberCount}F · {coreStats.available} available
+            </>
+          ) : activeTraceSummary ? (
+            <>
+              Trace to <span className="font-medium text-slate-700">{activeTraceSummary.targetLabel}</span> ·{' '}
+              {formatLength(activeTraceSummary.totalLengthMeters)} · {activeTraceSummary.totalLossDb.toFixed(2)} dB
+            </>
+          ) : (
+            'Select a cable on the map to inspect its fiber cores'
+          )}
+        </span>
+      </div>
     );
   }
 
-  // Selected cable or fallback to first cable
-  const currentCable = (selectedObject?.type === 'cable' ? selectedObject.data : null) || cables[0];
-
-  const filteredCores = (currentCable?.cores || []).filter((core: any) => {
-    if (coreStatusFilter === 'All') return true;
-    return core.status === coreStatusFilter;
-  });
-
   return (
-    <div className="h-64 bg-white/95 backdrop-blur-md border-t border-slate-200/80 flex flex-col z-20 shrink-0 select-none shadow-xl transition-all duration-200">
-      {/* Top Header Bar */}
-      <div className="h-10 px-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
-            <Layers className="w-4 h-4 text-blue-600" />
-            <span>Cable Details: {currentCable?.name} ({currentCable?.id})</span>
-          </div>
+    <section className="flex h-72 shrink-0 flex-col border-t border-slate-200 bg-white" aria-label="Attribute table">
+      {/* Header */}
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-slate-200 pl-2 pr-2">
+        <Tabs<Tab>
+          size="sm"
+          className="h-10 self-stretch border-b-0"
+          value={activeTab}
+          onChange={setActiveTab}
+          items={[
+            { id: 'cores', label: 'Fiber cores', icon: TableProperties, count: cable ? cable.cores.length : undefined },
+            { id: 'trace', label: 'Trace', icon: Route, count: activeTracePath ? activeTracePath.length : undefined },
+            { id: 'audit', label: 'Activity', icon: History },
+          ]}
+        />
 
-          {/* Tab Switcher */}
-          <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg text-xs">
-            <button
-              onClick={() => setActiveTab('cores')}
-              className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
-                activeTab === 'cores' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Fiber Cores ({currentCable?.fiberCount}F)
-            </button>
-            <button
-              onClick={() => setActiveTab('trace')}
-              className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
-                activeTab === 'trace' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Route Trace {activeTracePath ? `(${activeTracePath.length} hops)` : ''}
-            </button>
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`px-2.5 py-0.5 rounded-md font-medium transition-all ${
-                activeTab === 'audit' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Activity Logs
-            </button>
-          </div>
-        </div>
+        <div className="min-w-0 flex-1" />
 
-        {/* Right tools & Close */}
-        <div className="flex items-center gap-2">
-          {activeTab === 'cores' && (
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-[11px] text-slate-400 font-medium mr-1">Filter:</span>
-              {['All', 'Available', 'In Use', 'Reserved', 'Damaged'].map(st => (
-                <button
-                  key={st}
-                  onClick={() => setCoreStatusFilter(st)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                    coreStatusFilter === st ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+        {activeTab === 'cores' && cable && (
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 text-xs text-slate-500 lg:flex">
+              <span className="tabular">
+                <span className="font-medium text-slate-800">{coreStats.inUse}</span>/{coreStats.total} in use
+              </span>
+              <ProgressBar value={coreStats.inUse} max={coreStats.total || 1} tone="auto" size="sm" className="w-20" />
             </div>
-          )}
-
-          <button
-            onClick={() => setIsBottomPanelOpen(false)}
-            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-            title="Minimize Panel"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Tab Body */}
-      <div className="flex-1 overflow-y-auto">
-        {/* TAB 1: FIBER CORES TABLE */}
-        {activeTab === 'cores' && (
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-100/80 sticky top-0 border-b border-slate-200 text-slate-600 text-[11px] uppercase tracking-wider font-semibold z-10">
-              <tr>
-                <th className="py-2 px-3">Core #</th>
-                <th className="py-2 px-3">Color Code</th>
-                <th className="py-2 px-3">Tube #</th>
-                <th className="py-2 px-3">Operational Status</th>
-                <th className="py-2 px-3">Connected Asset / Customer</th>
-                <th className="py-2 px-3">Attenuation (dB)</th>
-                <th className="py-2 px-3">Remarks / Route Notes</th>
-                <th className="py-2 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {filteredCores.map((core: any) => {
-                const statusDef = (CORE_STATUS_COLORS as any)[core.status] || CORE_STATUS_COLORS.Available;
-                return (
-                  <tr key={core.coreNumber} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                      {core.coreNumber.toString().padStart(2, '0')}
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-3.5 h-3.5 rounded-full border border-black/20 shadow-xs"
-                          style={{ backgroundColor: core.colorHex }}
-                        />
-                        <span className="font-semibold text-slate-800">{core.colorName}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 px-3 text-slate-500 font-mono text-[11px]">
-                      Tube {core.tubeNumber}
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusDef.bg}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusDef.dot}`}></span>
-                        {core.status}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 font-medium">
-                      {core.connectedToEquipmentName || core.connectedToEquipmentId || core.customerId || (
-                        <span className="text-slate-400 italic">— Free Lead —</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 font-mono text-slate-600">
-                      {core.attenuationDb !== undefined ? `${core.attenuationDb} dB` : '—'}
-                    </td>
-                    <td className="py-2 px-3 text-slate-500 text-[11px] truncate max-w-xs">
-                      {core.remarks}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {core.status === 'Available' ? (
-                        <button
-                          onClick={() => allocateFiberCore(currentCable.id, core.coreNumber, undefined, 'FAT-01', 'PORT-AUTO')}
-                          className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold border border-blue-200 transition-colors"
-                        >
-                          Allocate
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 font-medium">In Service</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            <Select
+              controlSize="sm"
+              value={coreFilter}
+              onChange={(e) => setCoreFilter(e.target.value as 'All' | CoreStatus)}
+              aria-label="Filter cores by status"
+              wrapperClassName="w-40"
+            >
+              {CORE_FILTERS.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'All' ? 'All statuses' : s}
+                </option>
+              ))}
+            </Select>
+          </div>
         )}
 
-        {/* TAB 2: ACTIVE FIBER ROUTE TRACE */}
-        {activeTab === 'trace' && (
-          <div className="p-4">
-            {activeTracePath ? (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-bold text-xs text-slate-800">
-                    Active End-to-End Trace Sequence ({activeTracePath.length} Nodes)
-                  </span>
-                  <button
-                    onClick={clearTrace}
-                    className="px-2 py-1 text-slate-500 hover:text-slate-800 text-xs font-semibold rounded hover:bg-slate-100"
-                  >
-                    Clear Active Trace
-                  </button>
-                </div>
+        {activeTab === 'trace' && activeTracePath && (
+          <Button size="sm" variant="ghost" icon={X} onClick={clearTrace}>
+            Clear trace
+          </Button>
+        )}
 
-                {/* Horizontal flow breadcrumbs */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                  {activeTracePath.map((hop, idx) => (
-                    <React.Fragment key={`${hop.id}-${idx}`}>
-                      <div className={`p-2.5 rounded-xl border shrink-0 text-center min-w-[130px] ${
-                        hop.status === 'Faulty'
-                          ? 'bg-rose-50 border-rose-300 text-rose-900 animate-pulse'
-                          : 'bg-slate-50 border-slate-200 text-slate-800'
-                      }`}>
-                        <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{hop.type}</div>
-                        <div className="font-bold text-xs leading-tight my-0.5">{hop.name}</div>
-                        <div className="text-[10px] text-slate-500">{hop.details}</div>
-                      </div>
-                      {idx < activeTracePath.length - 1 && (
-                        <div className="text-slate-400 font-bold shrink-0">&rarr;</div>
-                      )}
-                    </React.Fragment>
+        <IconButton icon={ChevronDown} label="Minimize panel" size="sm" onClick={() => setIsBottomPanelOpen(false)} />
+      </div>
+
+      {/* Body */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {activeTab === 'cores' &&
+          (!cable ? (
+            <EmptyState
+              compact
+              icon={CableIconLucide}
+              title="No cable selected"
+              description="Click a cable on the map, or open one from the Cables view, to see its core assignments."
+            />
+          ) : (
+            <>
+              <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-4 py-1.5 text-xs text-slate-500">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: cableColor(cable.type) }} />
+                <span className="font-medium text-slate-800">{cable.name}</span>
+                <span className="font-mono text-[11px] text-slate-400">{cable.id}</span>
+                <span>·</span>
+                <span>{cable.type}</span>
+                <span>·</span>
+                <span className="tabular">{formatLength(cable.lengthMeters)}</span>
+                {(cable.startEquipmentId || cable.endEquipmentId) && (
+                  <>
+                    <span>·</span>
+                    <span className="truncate">
+                      {equipmentName(cable.startEquipmentId) ?? 'Open end'}
+                      <ChevronRight size={12} className="mx-0.5 inline align-[-2px] text-slate-400" />
+                      {equipmentName(cable.endEquipmentId) ?? 'Open end'}
+                    </span>
+                  </>
+                )}
+              </div>
+              {filteredCores.length === 0 ? (
+                <EmptyState compact title="No cores match this filter" description={`No ${coreFilter.toLowerCase()} cores on this cable.`} />
+              ) : (
+                <table className="ui-table">
+                  <thead>
+                    <tr>
+                      <th className="w-16">Core</th>
+                      <th>Colour</th>
+                      <th className="w-16">Tube</th>
+                      <th>Status</th>
+                      <th>Connected to</th>
+                      <th>Port</th>
+                      <th className="text-right">Loss</th>
+                      <th>Remarks</th>
+                      <th className="w-28 text-right" aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCores.map((core) => {
+                      const connected =
+                        core.connectedToEquipmentName ||
+                        equipmentName(core.connectedToEquipmentId) ||
+                        core.customerName ||
+                        customerName(core.customerId);
+                      return (
+                        <tr key={core.coreNumber}>
+                          <td className="tabular font-mono font-medium text-slate-900">{String(core.coreNumber).padStart(2, '0')}</td>
+                          <td>
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 rounded-full ring-1 ring-inset ring-black/15"
+                                style={{ backgroundColor: core.colorHex }}
+                              />
+                              {core.colorName}
+                            </span>
+                          </td>
+                          <td className="tabular text-slate-500">T{core.tubeNumber}</td>
+                          <td>
+                            <StatusBadge status={core.status} />
+                          </td>
+                          <td className="max-w-[220px] truncate">{connected ?? <span className="text-slate-400">—</span>}</td>
+                          <td className="font-mono text-[11px] text-slate-500">{core.connectedPort || '—'}</td>
+                          <td className="tabular text-right text-slate-600">
+                            {core.attenuationDb !== undefined ? `${core.attenuationDb.toFixed(2)} dB` : '—'}
+                          </td>
+                          <td className="max-w-[260px] truncate text-slate-500" title={core.remarks}>
+                            {core.remarks || '—'}
+                          </td>
+                          <td className="text-right">
+                            {core.status === 'Available' ? (
+                              <Button
+                                size="xs"
+                                variant="secondary"
+                                disabled={!allocationTargetId}
+                                title={
+                                  allocationTargetId
+                                    ? `Allocate core ${core.coreNumber} to ${allocationTargetName}`
+                                    : 'This cable is not terminated on any equipment'
+                                }
+                                onClick={() =>
+                                  allocationTargetId && allocateFiberCore(cable.id, core.coreNumber, undefined, allocationTargetId)
+                                }
+                              >
+                                Allocate
+                              </Button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ))}
+
+        {activeTab === 'trace' &&
+          (!activeTracePath || activeTracePath.length === 0 ? (
+            <EmptyState
+              compact
+              icon={Route}
+              title="No active trace"
+              description="Select a customer, equipment or cable and choose Trace path to follow the optical route back to the OLT."
+            />
+          ) : (
+            <div className="space-y-3 p-4">
+              {activeTraceSummary && (
+                <div className="flex flex-wrap items-stretch gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200">
+                  {[
+                    { label: 'Target', value: activeTraceSummary.targetLabel },
+                    { label: 'Total length', value: formatLength(activeTraceSummary.totalLengthMeters) },
+                    { label: 'Path loss', value: `${activeTraceSummary.totalLossDb.toFixed(2)} dB` },
+                    {
+                      label: 'Est. Rx power',
+                      value:
+                        activeTraceSummary.estimatedRxDbm !== undefined ? `${activeTraceSummary.estimatedRxDbm.toFixed(2)} dBm` : '—',
+                    },
+                    {
+                      label: 'Measured Rx',
+                      value:
+                        activeTraceSummary.measuredRxDbm !== undefined ? `${activeTraceSummary.measuredRxDbm.toFixed(2)} dBm` : '—',
+                    },
+                    { label: 'Downstream customers', value: activeTraceSummary.downstreamCustomerCount.toLocaleString() },
+                  ].map((kpi) => (
+                    <div key={kpi.label} className="min-w-[120px] flex-1 bg-white px-3 py-2">
+                      <div className="text-[11px] text-slate-500">{kpi.label}</div>
+                      <div className="tabular truncate text-[13px] font-semibold text-slate-900">{kpi.value}</div>
+                    </div>
                   ))}
+                  <div className="flex min-w-[120px] flex-1 flex-col justify-center bg-white px-3 py-2">
+                    <div className="text-[11px] text-slate-500">Power budget</div>
+                    <div>
+                      <StatusBadge
+                        status={activeTraceSummary.budgetStatus}
+                        tone={
+                          activeTraceSummary.budgetStatus === 'Pass'
+                            ? 'green'
+                            : activeTraceSummary.budgetStatus === 'Warning'
+                              ? 'amber'
+                              : activeTraceSummary.budgetStatus === 'Fail'
+                                ? 'red'
+                                : 'neutral'
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                <Activity className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                <div className="text-xs font-medium">No Active Route Trace</div>
-                <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
-                  Select any customer or equipment and click "Trace End-to-End OLT Path" to visualize the complete optical route with distance and telemetry.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+              )}
 
-        {/* TAB 3: AUDIT & ACTIVITY LOGS */}
-        {activeTab === 'audit' && (
-          <div className="p-3 divide-y divide-slate-100">
-            {auditLogs.map(log => (
-              <div key={log.id} className="py-2 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-[10px] text-slate-400">{log.timestamp}</span>
-                  <span className="font-semibold text-blue-700">{log.user} ({log.role})</span>
-                  <span className="text-slate-800">{log.details}</span>
-                </div>
-                <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                  {log.action}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+              {activeTraceSummary && activeTraceSummary.warnings.length > 0 && (
+                <ul className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {activeTraceSummary.warnings.map((w, i) => (
+                    <li key={i} className="flex gap-2">
+                      <TriangleAlert size={13} className="mt-px shrink-0 text-amber-600" />
+                      {w}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <ol className="flex items-stretch overflow-x-auto pb-1">
+                {activeTracePath.map((hop, idx) => {
+                  const locatable = typeof hop.lat === 'number' && typeof hop.lng === 'number';
+                  return (
+                    <li key={`${hop.id}-${idx}`} className="flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        disabled={!locatable}
+                        onClick={() => locatable && flyToLocation(hop.lat as number, hop.lng as number, 18)}
+                        className={cn(
+                          'w-44 rounded-md border px-2.5 py-2 text-left transition-colors',
+                          hop.status === 'Faulty'
+                            ? 'border-red-300 bg-red-50'
+                            : hop.status === 'Warning'
+                              ? 'border-amber-300 bg-amber-50'
+                              : 'border-slate-200 bg-white',
+                          locatable && 'hover:border-blue-400',
+                        )}
+                        title={locatable ? 'Zoom to this hop' : undefined}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge tone={hop.status === 'Faulty' ? 'red' : hop.status === 'Warning' ? 'amber' : 'neutral'}>{hop.type}</Badge>
+                          {hop.cumulativeLossDb !== undefined && (
+                            <span className="tabular text-[11px] text-slate-500">{hop.cumulativeLossDb.toFixed(2)} dB</span>
+                          )}
+                        </div>
+                        <div className="mt-1 truncate text-[13px] font-medium text-slate-900" title={hop.name}>
+                          {hop.name}
+                        </div>
+                        <div className="truncate text-[11px] text-slate-500" title={hop.details}>
+                          {hop.lengthMeters ? `${formatLength(hop.lengthMeters)} · ` : ''}
+                          {hop.details}
+                        </div>
+                      </button>
+                      {idx < activeTracePath.length - 1 && <ChevronRight size={16} className="mx-1 shrink-0 text-slate-300" />}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ))}
+
+        {activeTab === 'audit' &&
+          (auditLogs.length === 0 ? (
+            <EmptyState compact icon={History} title="No activity yet" description="Edits, allocations and connections will be logged here." />
+          ) : (
+            <table className="ui-table">
+              <thead>
+                <tr>
+                  <th className="w-44">Time</th>
+                  <th className="w-48">User</th>
+                  <th className="w-48">Action</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.slice(0, 200).map((log) => (
+                  <tr key={log.id}>
+                    <td className="tabular whitespace-nowrap text-slate-500">{log.timestamp}</td>
+                    <td className="whitespace-nowrap">
+                      <span className="font-medium text-slate-800">{log.user}</span>
+                      <span className="text-slate-400"> · {log.role}</span>
+                    </td>
+                    <td>
+                      <span className="font-mono text-[11px] text-slate-600">{log.action}</span>
+                    </td>
+                    <td className="text-slate-700">{log.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
       </div>
-    </div>
+    </section>
   );
 };

@@ -1,12 +1,14 @@
 import React from 'react';
+import { CircleCheck, CircleX, TriangleAlert, Info, X, type LucideIcon } from 'lucide-react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle,
-  Info,
-  X
-} from 'lucide-react';
+import { cn } from '../ui';
+
+const TONES: Record<string, { icon: LucideIcon; iconClass: string; bar: string }> = {
+  success: { icon: CircleCheck, iconClass: 'text-emerald-600', bar: 'bg-emerald-500' },
+  error: { icon: CircleX, iconClass: 'text-red-600', bar: 'bg-red-500' },
+  warning: { icon: TriangleAlert, iconClass: 'text-amber-600', bar: 'bg-amber-500' },
+  info: { icon: Info, iconClass: 'text-blue-600', bar: 'bg-blue-500' },
+};
 
 export const ToastNotifications: React.FC = () => {
   const { toasts, removeToast } = useNetwork();
@@ -14,42 +16,33 @@ export const ToastNotifications: React.FC = () => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[2000] flex flex-col gap-2 max-w-sm pointer-events-none select-none">
-      {toasts.map(toast => {
-        const isSuccess = toast.type === 'success';
-        const isError = toast.type === 'error';
-        const isWarning = toast.type === 'warning';
-
+    <div
+      aria-live="polite"
+      aria-relevant="additions"
+      className="pointer-events-none fixed bottom-4 right-4 z-[2100] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2"
+    >
+      {toasts.map((toast) => {
+        const tone = TONES[toast.type] || TONES.info;
+        const Icon = tone.icon;
         return (
           <div
             key={toast.id}
-            className={`pointer-events-auto p-3.5 rounded-2xl shadow-2xl border backdrop-blur-md flex items-start gap-3 animate-in fade-in slide-in-from-bottom-3 transition-all ${
-              isSuccess
-                ? 'bg-slate-900/95 text-white border-emerald-500/50'
-                : isError
-                ? 'bg-rose-950/95 text-white border-rose-500/50'
-                : isWarning
-                ? 'bg-amber-950/95 text-white border-amber-500/50'
-                : 'bg-slate-900/95 text-white border-slate-700/80'
-            }`}
+            role={toast.type === 'error' ? 'alert' : 'status'}
+            className="animate-slide-in-right pointer-events-auto relative flex gap-3 overflow-hidden rounded-lg border border-slate-200 bg-white py-3 pl-4 pr-3 shadow-[var(--shadow-overlay)]"
           >
-            <div className="shrink-0 mt-0.5">
-              {isSuccess && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              {isError && <AlertCircle className="w-4 h-4 text-rose-400" />}
-              {isWarning && <AlertTriangle className="w-4 h-4 text-amber-400" />}
-              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400" />}
+            <span className={cn('absolute inset-y-0 left-0 w-[3px]', tone.bar)} />
+            <Icon size={18} strokeWidth={2} className={cn('mt-px shrink-0', tone.iconClass)} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold leading-5 text-slate-900">{toast.title}</p>
+              {toast.message && <p className="mt-0.5 text-[12.5px] leading-[18px] text-slate-600">{toast.message}</p>}
             </div>
-
-            <div className="flex-1">
-              <div className="font-bold text-xs leading-tight mb-0.5">{toast.title}</div>
-              <div className="text-[11px] text-slate-300 leading-normal">{toast.message}</div>
-            </div>
-
             <button
+              type="button"
               onClick={() => removeToast(toast.id)}
-              className="text-slate-400 hover:text-white shrink-0 p-0.5"
+              className="-mr-1 -mt-1 h-6 w-6 shrink-0 rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Dismiss notification"
             >
-              <X className="w-3.5 h-3.5" />
+              <X size={14} className="mx-auto" />
             </button>
           </div>
         );

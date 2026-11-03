@@ -54,7 +54,6 @@ import {
   estimateRxForSplitter
 } from '../lib/trace';
 import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
-import confetti from 'canvas-confetti';
 
 /**
  * Bump whenever the bundled sample network changes shape so stale browser data
@@ -1235,13 +1234,6 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       return e;
     }));
     setCustomers(prev => [...prev, newCustomer]);
-
-    // Confetti celebration!
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
 
     const warnings: string[] = [];
     if (!estimate.olt) warnings.push('no upstream OLT could be traced');
