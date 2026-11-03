@@ -6,10 +6,35 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 const DATA_FILE = path.join(__dirname, 'server_data.json');
+const DIST_DIR = path.resolve(__dirname, 'dist');
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
-// Initialize data store
+// Comma-separated list of origins allowed to call the API cross-origin.
+// Defaults to the local Vite dev server; same-origin requests never need CORS.
+const ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean)
+);
+
+// REST collection name -> db key, id prefix and server-stamped date field.
+const COLLECTIONS = {
+  equipment: { key: 'equipment', prefix: 'EQ', dateField: 'installedDate' },
+  cables: { key: 'cables', prefix: 'CBL', dateField: 'installationDate' },
+  splitters: { key: 'splitters', prefix: 'SP' },
+  closures: { key: 'closures', prefix: 'JC' },
+  customers: { key: 'customers', prefix: 'CUST', dateField: 'installationDate' },
+  faults: { key: 'faults', prefix: 'FLT', dateField: 'reportedAt', timestamp: true },
+  'work-orders': { key: 'workOrders', prefix: 'WO', dateField: 'createdAt', timestamp: true },
+  zones: { key: 'zones', prefix: 'ZONE' },
+  documents: { key: 'documents', prefix: 'DOC', dateField: 'uploadDate' }
+};
+const COLLECTION_KEYS = Object.values(COLLECTIONS).map(c => c.key);
+
 let db = {
   equipment: [],
   cables: [],
@@ -22,270 +47,292 @@ let db = {
   documents: [],
   systemInfo: {
     name: 'FIBER-GIS Network Management Platform API',
-    version: '2.0.0',
+    version: '2.1.0',
     mode: 'Combined FTTH & Cable TV HFC',
     status: 'Operational',
     startedAt: new Date().toISOString()
   }
 };
 
-// Load existing data if available
 if (fs.existsSync(DATA_FILE)) {
   try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    db = { ...db, ...JSON.parse(raw) };
+    const stored = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    for (const key of COLLECTION_KEYS) {
+      if (Array.isArray(stored[key])) db[key] = stored[key];
+    }
     console.log('[API] Loaded persistent database from server_data.json');
-  } catch (err) {
+  } catch {
     console.warn('[API] Could not parse server_data.json, starting with fresh store');
   }
 }
 
 function saveDb() {
+  const tmp = `${DATA_FILE}.tmp`;
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf-8');
+    fs.renameSync(tmp, DATA_FILE);
   } catch (err) {
     console.error('[API] Failed to persist data:', err.message);
   }
 }
 
-// Request router
+const today = () => new Date().toISOString().split('T')[0];
+
+function nextId(list, prefix) {
+  const taken = new Set(list.map(item => item.id));
+  let n = list.length + 1;
+  let id;
+  do {
+    id = `${prefix}-${String(n).padStart(3, '0')}`;
+    n += 1;
+  } while (taken.has(id));
+  return id;
+}
+
+const isPlainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2'
+};
+
+// Resolves a URL path inside dist/, returning null for anything that escapes it.
+function resolveStaticPath(pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (decoded.includes('\0')) return null;
+  const relative = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
+  const resolved = path.resolve(DIST_DIR, relative);
+  if (resolved !== DIST_DIR && !resolved.startsWith(DIST_DIR + path.sep)) return null;
+  return resolved;
+}
+
+function serveFile(req, res, filePath) {
+  const contentType = MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff' });
+  if (req.method === 'HEAD') {
+    res.end();
+    return;
+  }
+  fs.createReadStream(filePath).pipe(res);
+}
+
 const server = http.createServer((req, res) => {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  res.setHeader('Vary', 'Origin');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(204);
+    res.writeHead(origin && !ALLOWED_ORIGINS.has(origin) ? 403 : 204);
     res.end();
     return;
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
+  let pathname;
+  try {
+    pathname = new URL(req.url, 'http://localhost').pathname;
+  } catch {
+    res.writeHead(400);
+    res.end();
+    return;
+  }
 
-  // Helper to send JSON
   const sendJson = (statusCode, data) => {
-    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    if (res.headersSent) return;
+    res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(data));
   };
 
-  // Helper to read JSON body
-  const readBody = (callback) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        const data = body ? JSON.parse(body) : {};
-        callback(data);
-      } catch (e) {
-        sendJson(400, { error: 'Invalid JSON payload' });
+  const readBody = callback => {
+    const chunks = [];
+    let size = 0;
+    let aborted = false;
+    req.on('data', chunk => {
+      if (aborted) return;
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        aborted = true;
+        sendJson(413, { error: 'Payload too large' });
+        req.destroy();
+        return;
       }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (aborted) return;
+      let data;
+      try {
+        const body = Buffer.concat(chunks).toString('utf-8');
+        data = body ? JSON.parse(body) : {};
+      } catch {
+        sendJson(400, { error: 'Invalid JSON payload' });
+        return;
+      }
+      callback(data);
     });
   };
 
-  // 1. Health check
-  if (pathname === '/api/health') {
-    return sendJson(200, {
-      status: 'UP',
-      uptimeSeconds: Math.floor(process.uptime()),
-      timestamp: new Date().toISOString(),
-      service: db.systemInfo.name,
-      version: db.systemInfo.version,
-      stats: {
-        equipmentCount: db.equipment.length,
-        cableCount: db.cables.length,
-        customerCount: db.customers.length,
-        faultCount: db.faults.length,
-        workOrderCount: db.workOrders.length,
-        zoneCount: db.zones.length
+  if (pathname.startsWith('/api/')) {
+    if (pathname === '/api/health' && req.method === 'GET') {
+      return sendJson(200, {
+        status: 'UP',
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        service: db.systemInfo.name,
+        version: db.systemInfo.version,
+        stats: {
+          equipmentCount: db.equipment.length,
+          cableCount: db.cables.length,
+          customerCount: db.customers.length,
+          faultCount: db.faults.length,
+          workOrderCount: db.workOrders.length,
+          zoneCount: db.zones.length
+        }
+      });
+    }
+
+    if (pathname === '/api/network/summary' && req.method === 'GET') {
+      return sendJson(200, {
+        systemInfo: db.systemInfo,
+        kpis: {
+          totalEquipment: db.equipment.length,
+          totalCables: db.cables.length,
+          totalCustomers: db.customers.length,
+          activeFaults: db.faults.filter(f => f.status !== 'Resolved').length,
+          activeWorkOrders: db.workOrders.filter(w => w.status !== 'Completed' && w.status !== 'Cancelled').length,
+          totalZones: db.zones.length
+        }
+      });
+    }
+
+    if (pathname === '/api/backup' && req.method === 'GET') {
+      return sendJson(200, { exportTimestamp: new Date().toISOString(), ...db });
+    }
+
+    if (pathname === '/api/restore' && req.method === 'POST') {
+      return readBody(imported => {
+        if (!isPlainObject(imported)) {
+          return sendJson(400, { error: 'Backup payload must be a JSON object' });
+        }
+        const invalid = COLLECTION_KEYS.filter(key => key in imported && !Array.isArray(imported[key]));
+        if (invalid.length > 0) {
+          return sendJson(400, { error: `Expected arrays for: ${invalid.join(', ')}` });
+        }
+        const restored = COLLECTION_KEYS.filter(key => Array.isArray(imported[key]));
+        if (restored.length === 0) {
+          return sendJson(400, { error: 'Backup payload contains no recognised collections' });
+        }
+        for (const key of restored) db[key] = imported[key];
+        saveDb();
+        return sendJson(200, { success: true, restored, message: 'Database state restored successfully' });
+      });
+    }
+
+    // Generic collection routes: /api/<collection> and /api/<collection>/<id>
+    const match = pathname.match(/^\/api\/([a-z-]+)(?:\/([^/]+))?\/?$/);
+    const collection = match && COLLECTIONS[match[1]];
+    if (collection) {
+      const list = db[collection.key];
+      let itemId = null;
+      if (match[2]) {
+        try {
+          itemId = decodeURIComponent(match[2]);
+        } catch {
+          return sendJson(400, { error: 'Malformed id' });
+        }
       }
-    });
-  }
 
-  // 2. Summary Endpoint
-  if (pathname === '/api/network/summary') {
-    return sendJson(200, {
-      systemInfo: db.systemInfo,
-      kpis: {
-        totalEquipment: db.equipment.length,
-        totalCables: db.cables.length,
-        totalCustomers: db.customers.length,
-        activeFaults: db.faults.filter(f => f.status !== 'Resolved').length,
-        activeWorkOrders: db.workOrders.filter(w => w.status !== 'Completed').length,
-        totalZones: db.zones.length
+      if (itemId === null) {
+        if (req.method === 'GET') return sendJson(200, list);
+        if (req.method === 'POST') {
+          return readBody(payload => {
+            if (!isPlainObject(payload)) return sendJson(400, { error: 'Payload must be a JSON object' });
+            const id = typeof payload.id === 'string' && payload.id.trim() ? payload.id.trim() : nextId(list, collection.prefix);
+            if (list.some(item => item.id === id)) {
+              return sendJson(409, { error: `A record with id ${id} already exists` });
+            }
+            const record = { ...payload, id };
+            if (collection.dateField && !record[collection.dateField]) {
+              record[collection.dateField] = collection.timestamp ? new Date().toISOString() : today();
+            }
+            list.push(record);
+            saveDb();
+            return sendJson(201, record);
+          });
+        }
+        return sendJson(405, { error: `Method ${req.method} not allowed` });
       }
-    });
-  }
 
-  // 3. Equipment endpoints
-  if (pathname === '/api/equipment') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.equipment);
-    }
-    if (req.method === 'POST') {
-      return readBody(newEq => {
-        const id = newEq.id || `EQ-${Date.now().toString().slice(-4)}`;
-        const record = { ...newEq, id, installedDate: newEq.installedDate || new Date().toISOString().split('T')[0] };
-        db.equipment.push(record);
+      const index = list.findIndex(item => item.id === itemId);
+      if (req.method === 'GET') {
+        return index === -1 ? sendJson(404, { error: `No record with id ${itemId}` }) : sendJson(200, list[index]);
+      }
+      if (req.method === 'PUT') {
+        if (index === -1) return sendJson(404, { error: `No record with id ${itemId}` });
+        return readBody(payload => {
+          if (!isPlainObject(payload)) return sendJson(400, { error: 'Payload must be a JSON object' });
+          const record = { ...list[index], ...payload, id: itemId };
+          list[index] = record;
+          saveDb();
+          return sendJson(200, record);
+        });
+      }
+      if (req.method === 'DELETE') {
+        if (index === -1) return sendJson(404, { error: `No record with id ${itemId}` });
+        const [removed] = list.splice(index, 1);
         saveDb();
-        return sendJson(201, record);
-      });
+        return sendJson(200, removed);
+      }
+      return sendJson(405, { error: `Method ${req.method} not allowed` });
     }
+
+    return sendJson(404, { error: 'Not Found', path: pathname });
   }
 
-  // 4. Cables endpoints
-  if (pathname === '/api/cables') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.cables);
-    }
-    if (req.method === 'POST') {
-      return readBody(newCable => {
-        const id = newCable.id || `CBL-${Date.now().toString().slice(-5)}`;
-        const record = { ...newCable, id, installationDate: new Date().toISOString().split('T')[0] };
-        db.cables.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return sendJson(405, { error: `Method ${req.method} not allowed` });
   }
 
-  // 5. Customers endpoints
-  if (pathname === '/api/customers') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.customers);
-    }
-    if (req.method === 'POST') {
-      return readBody(newCust => {
-        const id = newCust.id || `CUST-0${db.customers.length + 1}`;
-        const record = { ...newCust, id, installationDate: new Date().toISOString().split('T')[0] };
-        db.customers.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
+  const filePath = resolveStaticPath(pathname);
+  if (filePath === null) {
+    return sendJson(400, { error: 'Invalid path' });
   }
-
-  // 6. Faults endpoints
-  if (pathname === '/api/faults') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.faults);
-    }
-    if (req.method === 'POST') {
-      return readBody(newFault => {
-        const id = newFault.id || `FLT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-        const record = { ...newFault, id, reportedAt: new Date().toLocaleString() };
-        db.faults.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
-  }
-
-  // 7. Work orders endpoints
-  if (pathname === '/api/work-orders') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.workOrders);
-    }
-    if (req.method === 'POST') {
-      return readBody(newWo => {
-        const id = newWo.id || `WO-${Date.now().toString().slice(-5)}`;
-        const record = { ...newWo, id, scheduledDate: new Date().toISOString().split('T')[0] };
-        db.workOrders.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
-  }
-
-  // 8. Zones endpoints
-  if (pathname === '/api/zones') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.zones);
-    }
-    if (req.method === 'POST') {
-      return readBody(newZone => {
-        const id = newZone.id || `ZONE-${Date.now().toString().slice(-4)}`;
-        const record = { ...newZone, id };
-        db.zones.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
-  }
-
-  // 9. Documents endpoints
-  if (pathname === '/api/documents') {
-    if (req.method === 'GET') {
-      return sendJson(200, db.documents);
-    }
-    if (req.method === 'POST') {
-      return readBody(newDoc => {
-        const id = newDoc.id || `DOC-${Date.now().toString().slice(-4)}`;
-        const record = { ...newDoc, id, uploadDate: new Date().toISOString().split('T')[0] };
-        db.documents.push(record);
-        saveDb();
-        return sendJson(201, record);
-      });
-    }
-  }
-
-  // 10. Database Backup & Restore endpoints
-  if (pathname === '/api/backup' && req.method === 'GET') {
-    return sendJson(200, {
-      exportTimestamp: new Date().toISOString(),
-      ...db
-    });
-  }
-
-  if (pathname === '/api/restore' && req.method === 'POST') {
-    return readBody(importedData => {
-      if (importedData.equipment) db.equipment = importedData.equipment;
-      if (importedData.cables) db.cables = importedData.cables;
-      if (importedData.customers) db.customers = importedData.customers;
-      if (importedData.faults) db.faults = importedData.faults;
-      if (importedData.workOrders) db.workOrders = importedData.workOrders;
-      if (importedData.zones) db.zones = importedData.zones;
-      if (importedData.documents) db.documents = importedData.documents;
-      saveDb();
-      return sendJson(200, { success: true, message: 'Database state restored successfully' });
-    });
-  }
-
-  // 11. Static File Serving from dist/ for direct access
-  const distPath = path.join(__dirname, 'dist');
-  let filePath = path.join(distPath, pathname === '/' ? 'index.html' : pathname);
-
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes = {
-      '.html': 'text/html',
-      '.js': 'text/javascript',
-      '.css': 'text/css',
-      '.json': 'application/json',
-      '.png': 'image/png',
-      '.jpg': 'image/jpg',
-      '.svg': 'image/svg+xml'
-    };
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
-    fs.createReadStream(filePath).pipe(res);
-    return;
+    return serveFile(req, res, filePath);
   }
 
-  // Fallback to index.html for SPA client-side routing
-  const indexPath = path.join(distPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    fs.createReadStream(indexPath).pipe(res);
-    return;
+  // SPA fallback for client-side routes (only for extension-less paths).
+  const indexPath = path.join(DIST_DIR, 'index.html');
+  if (!path.extname(pathname) && fs.existsSync(indexPath)) {
+    return serveFile(req, res, indexPath);
   }
 
-  // Not found
   sendJson(404, { error: 'Not Found', path: pathname });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, HOST, () => {
   console.log(`[Backend Server] FIBER-GIS REST API running on http://localhost:${PORT}`);
   console.log(`[Backend Server] Health endpoint: http://localhost:${PORT}/api/health`);
 });

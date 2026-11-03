@@ -12,6 +12,10 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
+# API server runtime data
+server_data.json
+server_data.json.tmp
+
 # Environment files
 .env
 .env.local

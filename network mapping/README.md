@@ -164,7 +164,19 @@ The Vite development server runs at `http://localhost:3000`.
 ```bash
 npm run server
 ```
-The backend API server runs on port 5000 with persistent data storage.
+The backend API server runs on port 5000 with persistent data storage (`server_data.json`).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `5000` | Listen port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `CORS_ORIGINS` | Local Vite dev origins (ports 3000 / 5173) | Comma-separated origins allowed to call the API cross-origin |
+
+Collections (`equipment`, `cables`, `splitters`, `closures`, `customers`, `faults`, `work-orders`, `zones`, `documents`) support:
+- `GET /api/<collection>` and `POST /api/<collection>`
+- `GET`, `PUT` and `DELETE /api/<collection>/<id>`
+
+Other endpoints are `GET /api/health`, `GET /api/network/summary`, `GET /api/backup` and `POST /api/restore`. Static files are served from `dist/` with an SPA fallback.
 
 ### Production Build:
 ```bash
