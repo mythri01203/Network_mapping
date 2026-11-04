@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { Fault, WorkOrder } from '../../types/network';
-import { X, AlertTriangle, Wrench, Users, MapPin, CheckCircle2, Clock, Send, Plus, ShieldAlert } from 'lucide-react';
+import { type Fault } from '../../types/network';
+import { X, AlertTriangle, Users, MapPin, CheckCircle2, Send, Plus } from 'lucide-react';
 
 export const FaultManagementModal: React.FC = () => {
   const {
@@ -11,12 +11,10 @@ export const FaultManagementModal: React.FC = () => {
     workOrders,
     customers,
     cables,
-    equipments,
     recordNewFault,
     resolveExistingFault,
     updateWorkOrderStatus,
     flyToLocation,
-    showToast,
   } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'active_faults' | 'new_fault' | 'work_orders'>('active_faults');

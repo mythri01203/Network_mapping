@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { Splitter } from '../../types/network';
-import { X, Split, Layers, ArrowRight, CheckCircle2, AlertTriangle, User, ShieldCheck, Plus } from 'lucide-react';
+import { X, Split } from 'lucide-react';
 
 export const SplitterPortModal: React.FC = () => {
-  const { isSplitterModalOpen, setIsSplitterModalOpen, splitters, customers, showToast } = useNetwork();
+  const { isSplitterModalOpen, setIsSplitterModalOpen, splitters } = useNetwork();
 
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>(splitters[0]?.id || 'SP-01');
   const [selectedPortDetail, setSelectedPortDetail] = useState<any | null>(null);

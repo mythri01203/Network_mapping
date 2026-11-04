@@ -1,25 +1,9 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  Tv,
-  Radio,
-  Activity,
-  Layers,
-  MapPin,
-  GitBranch,
-  ShieldCheck,
-  AlertTriangle,
-  Zap,
-  Sliders,
-  CheckCircle2,
-  ExternalLink,
-  Search,
-  Hash,
-} from 'lucide-react';
+import { Tv, Radio, Activity, MapPin, Zap } from 'lucide-react';
 
 export const CableTVView: React.FC = () => {
-  const { equipments, cables, customers, faults, setActiveMainView, flyToLocation, setSelectedObject, toggleLayer } =
-    useNetwork();
+  const { customers, setActiveMainView, flyToLocation } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'schematic' | 'spectrum' | 'subscribers'>('schematic');
   const [selectedNode, setSelectedNode] = useState<{
@@ -33,15 +17,7 @@ export const CableTVView: React.FC = () => {
   } | null>(null);
 
   // CATV infrastructure from equipments
-  const catvEquipment = equipments.filter(
-    (e) =>
-      e.category === 'Cable TV Infrastructure' ||
-      e.type.includes('CATV') ||
-      e.type.includes('Headend') ||
-      e.type.includes('Optical Transmitter'),
-  );
 
-  const catvCables = cables.filter((c) => c.cableCategory === 'Coaxial' || c.type === 'Coaxial Cable');
   const catvCustomers = customers.filter((c) => c.serviceType === 'Cable TV' || c.serviceType === 'Triple Play');
 
   const handleLocateOnMap = (lat?: number, lng?: number) => {

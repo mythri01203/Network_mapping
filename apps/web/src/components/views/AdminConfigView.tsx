@@ -1,26 +1,11 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { UserRole } from '../../types/network';
-import { STANDARD_12_COLORS, FiberColorDef } from '../../constants/colorStandards';
-import {
-  ShieldCheck,
-  Palette,
-  FileText,
-  Database,
-  Download,
-  Upload,
-  RefreshCw,
-  Search,
-  Check,
-  X,
-  Users,
-  Lock,
-  Layers,
-  Sliders,
-} from 'lucide-react';
+import { type UserRole } from '../../types/network';
+import { STANDARD_12_COLORS, type FiberColorDef } from '../../constants/colorStandards';
+import { Download, Upload, Search, Check, X, Layers } from 'lucide-react';
 
 export const AdminConfigView: React.FC = () => {
-  const { userRole, setUserRole, auditLogs, backupSystem, restoreSystem, exportKML, showToast } = useNetwork();
+  const { userRole, auditLogs, backupSystem, restoreSystem, exportKML } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');

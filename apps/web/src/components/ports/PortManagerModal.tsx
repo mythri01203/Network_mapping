@@ -2,21 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { generateLogicalPorts, summarizePorts } from '../../lib/ports';
 import { PORT_STATUS_STYLE } from '../../data/componentCatalog';
-import { LogicalPortStatus, PonTechnology } from '../../types/network';
-import {
-  X,
-  Cpu,
-  Layers,
-  Radio,
-  Split,
-  Cable,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  TrendingUp,
-  Table,
-  Grid,
-} from 'lucide-react';
+import { type LogicalPortStatus, type PonTechnology } from '../../types/network';
+import { X, Cpu, Radio, HelpCircle, Table, Grid } from 'lucide-react';
 
 export const PortManagerModal: React.FC = () => {
   const {
@@ -41,7 +28,6 @@ export const PortManagerModal: React.FC = () => {
   // Enhance ports with slotCardPort (0/1/1 format), technology, feeder, splitter, ONTs, optical telemetry
   const enrichedPorts = useMemo(() => {
     if (!equipment) return [];
-    const isOlt = equipment.type === 'OLT';
     const baseTech: PonTechnology = equipment.technology || 'GPON';
 
     return rawPorts.map((port, idx) => {

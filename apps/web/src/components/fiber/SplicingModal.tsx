@@ -1,22 +1,8 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { JointClosure, SpliceRecord } from '../../types/network';
+import { type SpliceRecord } from '../../types/network';
 import { getFiberColor } from '../../constants/colorStandards';
-import {
-  X,
-  GitBranch,
-  Layers,
-  CheckCircle2,
-  AlertTriangle,
-  Plus,
-  Trash2,
-  Check,
-  Zap,
-  Tag,
-  Clock,
-  ShieldCheck,
-  FileText,
-} from 'lucide-react';
+import { X, GitBranch, Trash2, Zap } from 'lucide-react';
 
 export const SplicingModal: React.FC = () => {
   const { isSplicingModalOpen, setIsSplicingModalOpen, closures, cables, addSplice, removeSplice, showToast } =
@@ -33,7 +19,6 @@ export const SplicingModal: React.FC = () => {
   const [newStatus, setNewStatus] = useState<SpliceRecord['status']>('Spliced');
   const [newTray, setNewTray] = useState<string>('Tray 1 (Primary Feeder)');
   const [newTechnician, setNewTechnician] = useState<string>('Arun Varma (Lead Splicer)');
-  const [newRemarks, setNewRemarks] = useState<string>('Fusion splice performed with Fujikura 90S');
 
   if (!isSplicingModalOpen) return null;
 

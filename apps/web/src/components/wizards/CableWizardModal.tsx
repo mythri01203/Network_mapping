@@ -1,19 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { CableType, Cable, RouteStatus } from '../../types/network';
-import {
-  X,
-  ChevronRight,
-  ChevronLeft,
-  Check,
-  Cable as CableIcon,
-  Layers,
-  MapPin,
-  Settings,
-  ShieldCheck,
-  CheckCircle2,
-  AlertCircle,
-} from 'lucide-react';
+import { type CableType, type RouteStatus } from '../../types/network';
+import { X, ChevronRight, ChevronLeft, Check, Cable as CableIcon, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const CableWizardModal: React.FC = () => {
   const {
@@ -33,7 +21,7 @@ export const CableWizardModal: React.FC = () => {
   const [cableId, setCableId] = useState(`CBL-${Date.now().toString().slice(-5)}`);
   const [cableName, setCableName] = useState('New Fiber Route');
   const [manufacturer, setManufacturer] = useState('Corning Optical');
-  const [model, setModel] = useState('SMF-28 Ultra 2026');
+  const model = 'SMF-28 Ultra 2026';
   const [fiberCount, setFiberCount] = useState<number>(48);
   const [installationType, setInstallationType] = useState<
     'Aerial' | 'Underground' | 'Duct' | 'Direct Buried' | 'Facade'
@@ -46,7 +34,7 @@ export const CableWizardModal: React.FC = () => {
   const [endEquipmentId, setEndEquipmentId] = useState<string>(equipments[1]?.id || '');
 
   // Capacity breakdown
-  const [usedCores, setUsedCores] = useState<number>(0);
+  const usedCores = 0;
   const [reservedCores, setReservedCores] = useState<number>(4);
   const [damagedCores, setDamagedCores] = useState<number>(0);
 

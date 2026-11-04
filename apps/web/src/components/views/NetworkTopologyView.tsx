@@ -5,38 +5,25 @@ import {
   Search,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   MapPin,
   AlertTriangle,
-  CheckCircle2,
   Layers,
-  ArrowRight,
-  Eye,
   Camera,
-  Scissors,
-  Share2,
   RefreshCw,
   Server,
   Box,
   Home,
-  Tv,
   Cpu,
 } from 'lucide-react';
 
 export const NetworkTopologyView: React.FC = () => {
   const {
     equipments,
-    cables,
     customers,
-    splitters,
-    closures,
     faults,
     setActiveMainView,
     flyToLocation,
-    setSelectedObject,
     setIsTerminalBoxModalOpen,
-    setIsSplitterModalOpen,
-    setIsSplicingModalOpen,
     traceNetworkPath,
   } = useNetwork();
 
@@ -59,7 +46,6 @@ export const NetworkTopologyView: React.FC = () => {
 
   // Group equipment into hierarchical tiers
   const oltNodes = equipments.filter((e) => e.type === 'OLT');
-  const odfNodes = equipments.filter((e) => e.type === 'ODF');
   const fdmsNodes = equipments.filter((e) => e.type === 'FDMS');
   const fdtNodes = equipments.filter((e) => e.type === 'FDT');
   const fatNodes = equipments.filter((e) => e.type === 'FAT' || e.type.includes('Terminal Box'));

@@ -1,24 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { EquipmentCategory, EquipmentStatus, Equipment } from '../../types/network';
-import {
-  Search,
-  Filter,
-  Download,
-  PlusCircle,
-  MapPin,
-  Trash2,
-  Camera,
-  Layers,
-  Cpu,
-  Server,
-  Box,
-  Radio,
-  Tv,
-  CheckCircle2,
-  AlertTriangle,
-  ChevronRight,
-} from 'lucide-react';
+import { type Equipment } from '../../types/network';
+import { Search, Download, PlusCircle, MapPin, Trash2, Camera } from 'lucide-react';
 
 export const EquipmentInventoryView: React.FC = () => {
   const {
@@ -28,7 +11,6 @@ export const EquipmentInventoryView: React.FC = () => {
     flyToLocation,
     setSelectedObject,
     setIsTerminalBoxModalOpen,
-    setIsEquipmentModalOpen,
     setSelectedEquipmentTypeToAdd,
     setActiveTool,
     showToast,

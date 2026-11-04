@@ -1,23 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  Server,
-  Zap,
-  Activity,
-  Fan,
-  Radio,
-  ArrowRight,
-  ShieldCheck,
-  AlertTriangle,
-  MapPin,
-  GitFork,
-  Search,
-  CheckCircle2,
-  Cpu,
-  Layers,
-  Thermometer,
-  HardDrive,
-} from 'lucide-react';
+import { Server, Zap, Activity, Fan, Radio, MapPin, GitFork, Thermometer } from 'lucide-react';
 
 export const OLTRackView: React.FC = () => {
   const {

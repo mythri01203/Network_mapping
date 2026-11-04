@@ -1,4 +1,4 @@
-import { Equipment, OpticalPowerInfo } from '../types/network';
+import { type Equipment, type OpticalPowerInfo } from '../types/network';
 
 function classifyRx(rx: number, warn: number, critical: number): OpticalPowerInfo['signalLevel'] {
   if (rx <= critical) return 'Critical';

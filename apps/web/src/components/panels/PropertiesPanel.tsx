@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { CORE_STATUS_COLORS } from '../../constants/colorStandards';
 import { simulatedOpticalPower } from '../../lib/opticalPower';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';
@@ -15,20 +14,12 @@ import {
   Camera,
   Layers,
   Activity,
-  CheckCircle2,
   Trash2,
-  Share2,
-  ExternalLink,
-  ShieldAlert,
   ArrowRight,
   Bike,
   Zap,
   Sliders,
   Grid,
-  Edit3,
-  Clock,
-  Compass,
-  Check,
   TrendingUp,
   Radio,
   BookOpen,
@@ -53,7 +44,6 @@ export const PropertiesPanel: React.FC = () => {
     traceNetworkPath,
     deleteEquipment,
     deleteCable,
-    flyToLocation,
     showToast,
     setSelectedCableTypeToDraw,
     setActiveDrawingPoints,
@@ -64,10 +54,6 @@ export const PropertiesPanel: React.FC = () => {
 
   const [selectedPonIndex, setSelectedPonIndex] = useState(0);
   const [showAdvancedSpecs, setShowAdvancedSpecs] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editIp, setEditIp] = useState('');
-  const [editNotes, setEditNotes] = useState('');
 
   if (!isRightPanelOpen) {
     return (

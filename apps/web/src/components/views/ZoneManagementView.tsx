@@ -1,21 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { NetworkZone } from '../../types/network';
-import {
-  MapPin,
-  PlusCircle,
-  TrendingUp,
-  Home,
-  Users,
-  GitBranch,
-  Box,
-  Layers,
-  CheckCircle2,
-  AlertCircle,
-  ExternalLink,
-  Trash2,
-  Edit2,
-} from 'lucide-react';
+import { type NetworkZone } from '../../types/network';
+import { MapPin, PlusCircle, Trash2 } from 'lucide-react';
 
 export const ZoneManagementView: React.FC = () => {
   const { zones, addZone, deleteZone, setActiveMainView, flyToLocation, showToast } = useNetwork();

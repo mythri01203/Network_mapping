@@ -1,4 +1,4 @@
-import { Equipment, EquipmentPort, LogicalPortStatus } from '../types/network';
+import { type Equipment, type EquipmentPort, type LogicalPortStatus } from '../types/network';
 
 export function portTypeForEquipment(type: string): string {
   if (type === 'OLT') return 'PON';

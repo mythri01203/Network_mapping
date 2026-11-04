@@ -1,31 +1,11 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { NetworkDocument } from '../../types/network';
-import {
-  FileText,
-  Search,
-  Upload,
-  Download,
-  Trash2,
-  Filter,
-  PlusCircle,
-  FileCheck,
-  ExternalLink,
-  Layers,
-  X,
-} from 'lucide-react';
+import { type NetworkDocument } from '../../types/network';
+import { FileText, Search, Download, Trash2, PlusCircle, FileCheck, X } from 'lucide-react';
 
 export const DocumentManagerModal: React.FC = () => {
-  const {
-    documents,
-    addDocument,
-    deleteDocument,
-    isDocumentModalOpen,
-    setIsDocumentModalOpen,
-    equipments,
-    cables,
-    showToast,
-  } = useNetwork();
+  const { documents, addDocument, deleteDocument, isDocumentModalOpen, setIsDocumentModalOpen, showToast } =
+    useNetwork();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');

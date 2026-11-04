@@ -1,10 +1,9 @@
 import React from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { X, BarChart3, Layers, Activity, Users, Cable, Server, Split, ShieldCheck, Percent } from 'lucide-react';
+import { X, BarChart3, Users, Cable, Split, Percent } from 'lucide-react';
 
 export const CapacityDashboardModal: React.FC = () => {
-  const { isCapacityDashboardOpen, setIsCapacityDashboardOpen, equipments, cables, customers, splitters, faults } =
-    useNetwork();
+  const { isCapacityDashboardOpen, setIsCapacityDashboardOpen, cables, customers, splitters, faults } = useNetwork();
 
   if (!isCapacityDashboardOpen) return null;
 

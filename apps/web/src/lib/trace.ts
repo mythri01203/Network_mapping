@@ -1,4 +1,12 @@
-import { Cable, Customer, Equipment, Fault, JointClosure, Splitter, TracePathNode } from '../types/network';
+import {
+  type Cable,
+  type Customer,
+  type Equipment,
+  type Fault,
+  type JointClosure,
+  type Splitter,
+  type TracePathNode,
+} from '../types/network';
 import { polylineLengthMeters } from './ids';
 
 // Planning values for a GPON downstream (1490 nm) optical link budget.

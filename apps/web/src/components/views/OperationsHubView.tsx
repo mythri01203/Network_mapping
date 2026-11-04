@@ -1,26 +1,10 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { WorkOrder } from '../../types/network';
-import {
-  Wrench,
-  Kanban,
-  List,
-  PlusCircle,
-  Clock,
-  UserCheck,
-  AlertTriangle,
-  CheckCircle2,
-  Calendar,
-  Phone,
-  Search,
-  Filter,
-  ArrowRight,
-  ShieldAlert,
-  HardHat,
-} from 'lucide-react';
+import { type WorkOrder } from '../../types/network';
+import { Kanban, List, PlusCircle, Search, HardHat } from 'lucide-react';
 
 export const OperationsHubView: React.FC = () => {
-  const { workOrders, updateWorkOrderStatus, addWorkOrder, faults, equipments, cables, showToast } = useNetwork();
+  const { workOrders, updateWorkOrderStatus, addWorkOrder, showToast } = useNetwork();
 
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,7 +16,7 @@ export const OperationsHubView: React.FC = () => {
   const [newType, setNewType] = useState<WorkOrder['type']>('Repair');
   const [newPriority, setNewPriority] = useState<WorkOrder['priority']>('High');
   const [newTechName, setNewTechName] = useState('Arun Varma (Lead Splicer)');
-  const [newTechPhone, setNewTechPhone] = useState('+91 98450 11223');
+  const newTechPhone = '+91 98450 11223';
   const [newNotes, setNewNotes] = useState('');
 
   // Filtered orders

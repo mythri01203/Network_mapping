@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { Bike, X, Navigation, MapPin, Plus, Compass, ChevronRight, AlertTriangle, Layers } from 'lucide-react';
+import { Bike, X, Navigation, Plus, Compass, ChevronRight } from 'lucide-react';
 
 export const BikerModePanel: React.FC = () => {
   const {
@@ -15,7 +15,6 @@ export const BikerModePanel: React.FC = () => {
     clearBikerRoute,
     navigateToAsset,
     selectedObject,
-    showToast,
   } = useNetwork();
 
   const [query, setQuery] = useState('');

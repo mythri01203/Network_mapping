@@ -1,24 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { Equipment, EquipmentImage, ImageAnnotation } from '../../types/network';
-import {
-  X,
-  Camera,
-  Layers,
-  Upload,
-  Plus,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  Eye,
-  Sliders,
-  Tag,
-  Crosshair,
-  User,
-  Wrench,
-  Activity,
-} from 'lucide-react';
+import { type EquipmentImage, type ImageAnnotation } from '../../types/network';
+import { X, Camera, Upload, Trash2, Crosshair } from 'lucide-react';
 
 export const TerminalBoxModal: React.FC = () => {
   const {
@@ -30,7 +13,6 @@ export const TerminalBoxModal: React.FC = () => {
     uploadEquipmentPhoto,
     saveImageAnnotation,
     deleteImageAnnotation,
-    showToast,
   } = useNetwork();
 
   // Find target terminal box (from selected object or first FAT)
@@ -45,7 +27,7 @@ export const TerminalBoxModal: React.FC = () => {
 
   // Annotation Tool state
   const [isAnnotating, setIsAnnotating] = useState(false);
-  const [annotationType, setAnnotationType] = useState<'port_circle' | 'port_box' | 'label'>('port_circle');
+  const annotationType = 'port_circle' as const;
   const [newAnnotationLabel, setNewAnnotationLabel] = useState('Port 04 (FREE)');
   const [newAnnotationStatus, setNewAnnotationStatus] = useState<'Available' | 'Occupied' | 'Reserved' | 'Faulty'>(
     'Available',
@@ -56,7 +38,7 @@ export const TerminalBoxModal: React.FC = () => {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoName, setPhotoName] = useState('');
   const [photoCategory, setPhotoCategory] = useState<EquipmentImage['category']>('Internal Trays');
-  const [photoDesc, setPhotoDesc] = useState('');
+  const photoDesc = '';
 
   const imageContainerRef = useRef<HTMLDivElement>(null);
 

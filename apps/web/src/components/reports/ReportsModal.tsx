@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import jsPDF from 'jspdf';
-import { X, FileText, Download, FileSpreadsheet, Layers, CheckCircle2, Share2 } from 'lucide-react';
+import { X, Download, FileSpreadsheet } from 'lucide-react';
 
 export const ReportsModal: React.FC = () => {
-  const { isReportsModalOpen, setIsReportsModalOpen, equipments, cables, customers, splitters, faults, showToast } =
-    useNetwork();
+  const { isReportsModalOpen, setIsReportsModalOpen, equipments, cables, customers, faults, showToast } = useNetwork();
 
   const [selectedReport, setSelectedReport] = useState<'inventory' | 'cores' | 'customers' | 'faults'>('inventory');
 
@@ -14,7 +13,7 @@ export const ReportsModal: React.FC = () => {
   // Export CSV
   const exportCSV = (type: string) => {
     let csvContent = 'data:text/csv;charset=utf-8,';
-    let filename = `fiber_gis_${type}_${Date.now()}.csv`;
+    const filename = `fiber_gis_${type}_${Date.now()}.csv`;
 
     if (type === 'inventory') {
       csvContent += 'Equipment ID,Name,Type,Category,Area,Street,Status,Ports,Installed Date\n';

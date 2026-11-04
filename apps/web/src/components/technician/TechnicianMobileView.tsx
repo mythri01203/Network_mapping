@@ -1,19 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  X,
-  Smartphone,
-  Camera,
-  MapPin,
-  CheckCircle2,
-  Clock,
-  Wrench,
-  Search,
-  Wifi,
-  Upload,
-  Layers,
-  ArrowRight,
-} from 'lucide-react';
+import { X, Camera, CheckCircle2 } from 'lucide-react';
 
 export const TechnicianMobileView: React.FC = () => {
   const {

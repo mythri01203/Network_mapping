@@ -1,21 +1,6 @@
 import React from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  Layers,
-  Eye,
-  EyeOff,
-  Sliders,
-  Check,
-  X,
-  Map,
-  Compass,
-  Radio,
-  Tv,
-  AlertTriangle,
-  Users,
-  Box,
-  Server,
-} from 'lucide-react';
+import { Layers, Eye, EyeOff, X } from 'lucide-react';
 
 export const AdvancedLayersDrawer: React.FC = () => {
   const {

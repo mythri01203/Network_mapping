@@ -1,39 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import { useNetwork } from '../../context/NetworkContext';
-import { Equipment, Cable, Customer, EquipmentType, CableType } from '../../types/network';
+import { type Equipment, type EquipmentType } from '../../types/network';
 import { CABLE_TYPE_COLORS } from '../../constants/colorStandards';
 import { BikerModePanel } from '../biker/BikerModePanel';
-import {
-  Layers,
-  MapPin,
-  Ruler,
-  MousePointer,
-  Maximize2,
-  Minimize2,
-  Plus,
-  Minus,
-  Navigation,
-  Activity,
-  Crosshair,
-  CheckCircle,
-  XCircle,
-  Scissors,
-  Bike,
-  Compass,
-  Zap,
-  X,
-  Grid,
-  Undo2,
-  Redo2,
-  Trash2,
-  Users,
-  Cpu,
-  ChevronDown,
-  BookOpen,
-} from 'lucide-react';
+import { Activity, Zap, X, Grid, Cpu } from 'lucide-react';
 import { getOltChassisSvgString, OltChassisIcon } from '../common/OltChassisIcon';
-import { getUtilityPoleSvgString, UtilityPoleIcon } from '../common/UtilityPoleIcon';
+import { getUtilityPoleSvgString } from '../common/UtilityPoleIcon';
 import { MapToolbar, MapModeBar } from './map/MapToolbar';
 import { MapControls, OltFilterControl } from './map/MapControls';
 import { categoryForType } from './map/markerIcons';
@@ -188,7 +161,6 @@ export const GISMap: React.FC = () => {
     setActiveTool,
     selectedEquipmentTypeToAdd,
     setSelectedEquipmentTypeToAdd,
-    selectedCableTypeToDraw,
     setSelectedCableTypeToDraw,
     activeDrawingPoints,
     setActiveDrawingPoints,
@@ -198,10 +170,8 @@ export const GISMap: React.FC = () => {
     activeTraceEquipmentIds,
     activeLayers,
     mapTileProvider,
-    setMapTileProvider,
     networkMode,
     addEquipment,
-    addCable,
     setIsCableWizardOpen,
     mapFlyToTarget,
     showToast,
@@ -214,20 +184,10 @@ export const GISMap: React.FC = () => {
     setIsBikerMode,
     bikerRoute,
     bikerWaypoints,
-    setIsComponentCatalogOpen,
     setIsPortManagerOpen,
-    setIsCustomerWizardOpen,
     projectStartPoint,
-    setProjectStartPoint,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
     deleteCable,
-    deleteEquipment,
     updateEquipment,
-    setIsKnowledgeModalOpen,
-    uiMode,
   } = useNetwork();
 
   const [snapTarget, setSnapTarget] = useState<{ lat: number; lng: number; id: string; name: string } | null>(null);
@@ -236,7 +196,6 @@ export const GISMap: React.FC = () => {
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [autoAddPolesOnDraw, setAutoAddPolesOnDraw] = useState<boolean>(false);
   const [activeOltModal, setActiveOltModal] = useState<Equipment | null>(null);
-  const [currentGpsCoords, setCurrentGpsCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [oltTechFilter, setOltTechFilter] = useState<'All' | 'GPON' | 'EPON'>('All');
 
   // Synchronize Project Start Point Marker
@@ -724,7 +683,6 @@ export const GISMap: React.FC = () => {
     faults
       .filter((f) => f.status !== 'Resolved')
       .forEach((fault) => {
-        const isSelected = selectedObject?.type === 'fault' && selectedObject.data.id === fault.id;
         const faultIcon = L.divIcon({
           html: `
           <div class="relative flex items-center justify-center w-8 h-8">
@@ -1146,8 +1104,6 @@ export const GISMap: React.FC = () => {
         setTimeout(() => {
           userMarker.openPopup();
         }, 1500);
-
-        setCurrentGpsCoords({ lat: latitude, lng: longitude, accuracy });
 
         if (accuracy > 80) {
           showToast(

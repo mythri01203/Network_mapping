@@ -1,29 +1,11 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { Customer } from '../../types/network';
-import {
-  Users,
-  Search,
-  Filter,
-  Download,
-  PlusCircle,
-  MapPin,
-  GitFork,
-  Radio,
-  Tv,
-  Wifi,
-  Activity,
-  CheckCircle2,
-  AlertTriangle,
-  Smartphone,
-  ExternalLink,
-  ShieldCheck,
-} from 'lucide-react';
+import { type Customer } from '../../types/network';
+import { Search, Download, PlusCircle, MapPin, GitFork } from 'lucide-react';
 
 export const CustomerDirectoryView: React.FC = () => {
   const {
     customers,
-    faults,
     setActiveMainView,
     flyToLocation,
     setSelectedObject,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { STANDARD_12_COLORS } from '../../constants/colorStandards';
-import { X, HelpCircle, BookOpen, Map, Cable, CheckCircle2, ShieldCheck, Split, Camera } from 'lucide-react';
+import { X, BookOpen, Map, ShieldCheck } from 'lucide-react';
 
 export const HelpModal: React.FC = () => {
   const { isHelpModalOpen, setIsHelpModalOpen } = useNetwork();

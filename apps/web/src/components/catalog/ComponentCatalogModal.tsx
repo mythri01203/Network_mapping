@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { BUILT_IN_COMPONENTS } from '../../data/componentCatalog';
-import { EquipmentCategory, EquipmentType } from '../../types/network';
+import { type EquipmentCategory, type EquipmentType } from '../../types/network';
 import { Search, X, Plus, GripVertical } from 'lucide-react';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';

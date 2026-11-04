@@ -1,4 +1,4 @@
-import { CableType } from '../types/network';
+import { type CableType } from '../types/network';
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

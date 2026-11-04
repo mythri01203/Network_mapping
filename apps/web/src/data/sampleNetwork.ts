@@ -1,14 +1,14 @@
 import {
-  Equipment,
-  Cable,
-  Splitter,
-  JointClosure,
-  Customer,
-  Fault,
-  WorkOrder,
-  AuditLog,
-  NetworkZone,
-  NetworkDocument,
+  type Equipment,
+  type Cable,
+  type Splitter,
+  type JointClosure,
+  type Customer,
+  type Fault,
+  type WorkOrder,
+  type AuditLog,
+  type NetworkZone,
+  type NetworkDocument,
 } from '../types/network';
 import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
 

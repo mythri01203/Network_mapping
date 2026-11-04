@@ -1,4 +1,4 @@
-import { CatalogComponent } from '../types/network';
+import { type CatalogComponent } from '../types/network';
 
 export const BUILT_IN_COMPONENTS: CatalogComponent[] = [
   // Central Office Equipment

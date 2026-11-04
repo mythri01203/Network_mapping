@@ -1,31 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import {
-  EQUIPMENT_KNOWLEDGE_BASE,
-  EquipmentKnowledgeItem,
-  searchEquipmentKnowledge,
-} from '../../data/equipmentKnowledgeBase';
+import { EQUIPMENT_KNOWLEDGE_BASE, searchEquipmentKnowledge } from '../../data/equipmentKnowledgeBase';
 import {
   Search,
   X,
   BookOpen,
   ArrowRight,
-  ExternalLink,
   Layers,
   Cpu,
   Sparkles,
-  Info,
   CheckCircle2,
   HelpCircle,
   MapPin,
   ChevronRight,
   ShieldCheck,
   Server,
-  Zap,
   Cable,
-  Box,
-  Split,
-  Tv,
 } from 'lucide-react';
 
 interface EquipmentKnowledgeModalProps {

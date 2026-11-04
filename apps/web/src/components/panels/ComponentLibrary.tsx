@@ -1,21 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { EquipmentType, CableType } from '../../types/network';
-import {
-  Server,
-  Layers,
-  Box,
-  MapPin,
-  Home,
-  Tv,
-  Cable,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  GripVertical,
-  Plus,
-  BookOpen,
-} from 'lucide-react';
+import { type EquipmentType, type CableType } from '../../types/network';
+import { Box, Search, ChevronLeft, ChevronRight, GripVertical, Plus, BookOpen } from 'lucide-react';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';
 
