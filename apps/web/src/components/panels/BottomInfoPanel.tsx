@@ -10,7 +10,12 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { useNetwork } from '../../context/NetworkContext';
+import { allocateFiberCore } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../stores/mapStore';
+import { useTraceStore } from '../../stores/traceStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import type { CoreStatus } from '@fibergis/shared';
 import { Tabs, Select, IconButton, Button, Badge, StatusBadge, EmptyState, ProgressBar, cn, cableColor } from '../ui';
 
@@ -29,20 +34,20 @@ const CORE_FILTERS: Array<'All' | CoreStatus> = [
 const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 
 export const BottomInfoPanel: React.FC = () => {
-  const {
-    cables,
-    equipments,
-    customers,
-    selectedObject,
-    isBottomPanelOpen,
-    setIsBottomPanelOpen,
-    activeTracePath,
-    activeTraceSummary,
-    clearTrace,
-    auditLogs,
-    allocateFiberCore,
-    flyToLocation,
-  } = useNetwork();
+  const { cables, equipments, customers, auditLogs } = useNetworkStore(
+    useShallow((s) => ({ cables: s.cables, equipments: s.equipment, customers: s.customers, auditLogs: s.auditLogs })),
+  );
+  const { selectedObject, isBottomPanelOpen, setPanelOpen } = useUiStore(
+    useShallow((s) => ({
+      selectedObject: s.selectedObject,
+      isBottomPanelOpen: s.panels.bottom,
+      setPanelOpen: s.setPanelOpen,
+    })),
+  );
+  const { activeTracePath, activeTraceSummary, clearTrace } = useTraceStore(
+    useShallow((s) => ({ activeTracePath: s.path, activeTraceSummary: s.summary, clearTrace: s.clear })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
 
   const [activeTab, setActiveTab] = useState<Tab>('cores');
   const [coreFilter, setCoreFilter] = useState<'All' | CoreStatus>('All');
@@ -85,7 +90,7 @@ export const BottomInfoPanel: React.FC = () => {
       <div className="flex h-8 shrink-0 items-center gap-3 border-t border-slate-200 bg-white px-3 text-xs">
         <button
           type="button"
-          onClick={() => setIsBottomPanelOpen(true)}
+          onClick={() => setPanelOpen('bottom', true)}
           className="flex items-center gap-2 font-medium text-slate-600 hover:text-slate-900"
         >
           <ChevronUp size={14} className="text-slate-400" />
@@ -160,7 +165,7 @@ export const BottomInfoPanel: React.FC = () => {
           </Button>
         )}
 
-        <IconButton icon={ChevronDown} label="Minimize panel" size="sm" onClick={() => setIsBottomPanelOpen(false)} />
+        <IconButton icon={ChevronDown} label="Minimize panel" size="sm" onClick={() => setPanelOpen('bottom', false)} />
       </div>
 
       {/* Body */}

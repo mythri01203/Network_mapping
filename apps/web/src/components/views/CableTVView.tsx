@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView } from '../../app/views';
 import { Tv, Radio, Activity, MapPin, Zap } from 'lucide-react';
 
 export const CableTVView: React.FC = () => {
-  const { customers, flyToLocation } = useNetwork();
+  const customers = useNetworkStore((s) => s.customers);
+  const flyToLocation = useMapStore((s) => s.flyTo);
   const openView = useOpenView();
 
   const [activeTab, setActiveTab] = useState<'schematic' | 'spectrum' | 'subscribers'>('schematic');

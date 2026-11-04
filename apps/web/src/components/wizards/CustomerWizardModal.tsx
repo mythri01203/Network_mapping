@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { connectCustomerToPort } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { estimateRxForSplitter, budgetStatusFor } from '@fibergis/shared';
 import { X, Users, Check } from 'lucide-react';
 
@@ -9,20 +14,25 @@ const isCustomerTerminalType = (type: string) =>
 const newOntSerial = () => `HWTC-ONT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
 export const CustomerWizardModal: React.FC = () => {
-  const {
-    isCustomerWizardOpen,
-    setIsCustomerWizardOpen,
-    equipments,
-    splitters,
-    cables,
-    closures,
-    customers,
-    faults,
-    selectedObject,
-    connectCustomerToPort,
-    flyToLocation,
-    showToast,
-  } = useNetwork();
+  const { isCustomerWizardOpen, setModalOpen, selectedObject } = useUiStore(
+    useShallow((s) => ({
+      isCustomerWizardOpen: s.modals.customerWizard,
+      setModalOpen: s.setModalOpen,
+      selectedObject: s.selectedObject,
+    })),
+  );
+  const { equipments, splitters, cables, closures, customers, faults } = useNetworkStore(
+    useShallow((s) => ({
+      equipments: s.equipment,
+      splitters: s.splitters,
+      cables: s.cables,
+      closures: s.closures,
+      customers: s.customers,
+      faults: s.faults,
+    })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const showToast = useToastStore((s) => s.show);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -158,7 +168,7 @@ export const CustomerWizardModal: React.FC = () => {
 
     if (connected) {
       flyToLocation(connected.lat, connected.lng, 18);
-      setIsCustomerWizardOpen(false);
+      setModalOpen('customerWizard', false);
     }
   };
 
@@ -179,7 +189,7 @@ export const CustomerWizardModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsCustomerWizardOpen(false)}
+            onClick={() => setModalOpen('customerWizard', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

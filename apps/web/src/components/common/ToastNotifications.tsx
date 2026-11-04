@@ -1,6 +1,7 @@
 import React from 'react';
 import { CircleCheck, CircleX, TriangleAlert, Info, X, type LucideIcon } from 'lucide-react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
 import { cn } from '../ui';
 
 const TONES: Record<string, { icon: LucideIcon; iconClass: string; bar: string }> = {
@@ -11,7 +12,7 @@ const TONES: Record<string, { icon: LucideIcon; iconClass: string; bar: string }
 };
 
 export const ToastNotifications: React.FC = () => {
-  const { toasts, removeToast } = useNetwork();
+  const { toasts, removeToast } = useToastStore(useShallow((s) => ({ toasts: s.toasts, removeToast: s.dismiss })));
 
   if (toasts.length === 0) return null;
 

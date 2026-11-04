@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { traceNetworkPath } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from '../../stores/uiStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView } from '../../app/views';
 import { Server, Zap, Activity, Fan, Radio, MapPin, GitFork, Thermometer } from 'lucide-react';
 
 export const OLTRackView: React.FC = () => {
-  const { equipments, cables, customers, faults, flyToLocation, traceNetworkPath, setIsCableWizardOpen } = useNetwork();
+  const { equipments, cables, customers, faults } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, cables: s.cables, customers: s.customers, faults: s.faults })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const setModalOpen = useUiStore((s) => s.setModalOpen);
   const openView = useOpenView();
 
   const olts = equipments.filter((e) => e.type === 'OLT');
@@ -325,7 +333,7 @@ export const OLTRackView: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setIsCableWizardOpen(true)}
+              onClick={() => setModalOpen('cableWizard', true)}
               className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
             >
               <Radio className="w-3.5 h-3.5 text-blue-400" />

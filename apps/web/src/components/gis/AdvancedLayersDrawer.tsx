@@ -1,5 +1,6 @@
 import React from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../stores/mapStore';
 import { Layers, Eye, EyeOff, X } from 'lucide-react';
 
 export const AdvancedLayersDrawer: React.FC = () => {
@@ -12,7 +13,18 @@ export const AdvancedLayersDrawer: React.FC = () => {
     setIsLayersDrawerOpen,
     mapTileProvider,
     setMapTileProvider,
-  } = useNetwork();
+  } = useMapStore(
+    useShallow((s) => ({
+      activeLayers: s.layers,
+      toggleLayer: s.toggleLayer,
+      layerOpacity: s.layerOpacity,
+      setLayerOpacity: s.setLayerOpacity,
+      isLayersDrawerOpen: s.isLayersDrawerOpen,
+      setIsLayersDrawerOpen: s.setLayersDrawerOpen,
+      mapTileProvider: s.tileProvider,
+      setMapTileProvider: s.setTileProvider,
+    })),
+  );
 
   if (!isLayersDrawerOpen) return null;
 

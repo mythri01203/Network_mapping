@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addWorkOrder, updateWorkOrderStatus } from '../../stores/networkActions';
+import { useToastStore } from '../../stores/toastStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import type { WorkOrder } from '@fibergis/shared';
 import { Kanban, List, PlusCircle, Search, HardHat } from 'lucide-react';
 
 export const OperationsHubView: React.FC = () => {
-  const { workOrders, updateWorkOrderStatus, addWorkOrder, showToast } = useNetwork();
+  const workOrders = useNetworkStore((s) => s.workOrders);
+  const showToast = useToastStore((s) => s.show);
 
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');

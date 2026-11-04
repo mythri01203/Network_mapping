@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addZone, deleteZone } from '../../stores/networkActions';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView } from '../../app/views';
 import type { NetworkZone } from '@fibergis/shared';
 import { MapPin, PlusCircle, Trash2 } from 'lucide-react';
 
 export const ZoneManagementView: React.FC = () => {
-  const { zones, addZone, deleteZone, flyToLocation, showToast } = useNetwork();
+  const zones = useNetworkStore((s) => s.zones);
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const showToast = useToastStore((s) => s.show);
   const openView = useOpenView();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

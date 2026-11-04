@@ -12,7 +12,8 @@ import {
   Satellite,
   type LucideIcon,
 } from 'lucide-react';
-import { useNetwork } from '../../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../../stores/mapStore';
 import { cn } from '../../ui';
 
 type Basemap = 'google_streets' | 'google_satellite' | 'osm';
@@ -73,7 +74,9 @@ function ControlButton({
 }
 
 function BasemapSwitcher() {
-  const { mapTileProvider, setMapTileProvider } = useNetwork();
+  const { mapTileProvider, setMapTileProvider } = useMapStore(
+    useShallow((s) => ({ mapTileProvider: s.tileProvider, setMapTileProvider: s.setTileProvider })),
+  );
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -169,7 +172,7 @@ export interface MapControlsProps {
 }
 
 export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onResetView }: MapControlsProps) {
-  const { setIsLayersDrawerOpen } = useNetwork();
+  const setIsLayersDrawerOpen = useMapStore((s) => s.setLayersDrawerOpen);
   return (
     <div className="absolute bottom-5 right-4 z-[400] flex flex-col items-end gap-2">
       <div className={cn(panel, 'flex flex-col overflow-hidden')}>

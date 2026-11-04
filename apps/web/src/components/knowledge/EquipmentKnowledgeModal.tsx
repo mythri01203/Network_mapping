@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
 import { useOpenView } from '../../app/views';
 import { EQUIPMENT_KNOWLEDGE_BASE, searchEquipmentKnowledge } from '../../data/equipmentKnowledgeBase';
 import {
@@ -30,7 +33,15 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   onClose,
   initialEquipmentId,
 }) => {
-  const { setSelectedEquipmentTypeToAdd, setActiveTool, showToast, equipments, flyToLocation } = useNetwork();
+  const { setSelectedEquipmentTypeToAdd, setActiveTool, flyToLocation } = useMapStore(
+    useShallow((s) => ({
+      setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+      setActiveTool: s.setActiveTool,
+      flyToLocation: s.flyTo,
+    })),
+  );
+  const showToast = useToastStore((s) => s.show);
+  const equipments = useNetworkStore((s) => s.equipment);
   const openView = useOpenView();
 
   const [searchQuery, setSearchQuery] = useState('');

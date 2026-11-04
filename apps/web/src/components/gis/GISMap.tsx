@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { useNetwork } from '../../context/NetworkContext';
+import { addEquipment, deleteCable, updateEquipment } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useBikerStore } from '../../stores/bikerStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useTraceStore } from '../../stores/traceStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { DEFAULT_VIEWPORT, useMapStore } from '../../stores/mapStore';
 import type { Equipment, EquipmentType } from '@fibergis/shared';
 import { cableStyle } from '../../theme/network';
@@ -151,13 +157,39 @@ export const GISMap: React.FC = () => {
   const projectStartLayerGroupRef = useRef<L.LayerGroup>(L.layerGroup());
   const markerMapRef = useRef<Map<string, L.Marker>>(new Map());
 
+  const { equipments, cables, customers, faults, projectStartPoint } = useNetworkStore(
+    useShallow((s) => ({
+      equipments: s.equipment,
+      cables: s.cables,
+      customers: s.customers,
+      faults: s.faults,
+      projectStartPoint: s.projectStartPoint,
+    })),
+  );
   const {
-    equipments,
-    cables,
-    customers,
-    faults,
     selectedObject,
     setSelectedObject,
+    networkMode,
+    setModalOpen,
+    isLeftPanelOpen,
+    isRightPanelOpen,
+    setPanelOpen,
+    isBottomPanelOpen,
+    isSidebarCollapsed,
+  } = useUiStore(
+    useShallow((s) => ({
+      selectedObject: s.selectedObject,
+      setSelectedObject: s.select,
+      networkMode: s.networkMode,
+      setModalOpen: s.setModalOpen,
+      isLeftPanelOpen: s.panels.left,
+      isRightPanelOpen: s.panels.right,
+      setPanelOpen: s.setPanelOpen,
+      isBottomPanelOpen: s.panels.bottom,
+      isSidebarCollapsed: s.isSidebarCollapsed,
+    })),
+  );
+  const {
     activeTool,
     setActiveTool,
     selectedEquipmentTypeToAdd,
@@ -167,29 +199,37 @@ export const GISMap: React.FC = () => {
     setActiveDrawingPoints,
     measuringPoints,
     setMeasuringPoints,
-    activeTraceCableIds,
-    activeTraceEquipmentIds,
     activeLayers,
     mapTileProvider,
-    networkMode,
-    addEquipment,
-    setIsCableWizardOpen,
     mapFlyToTarget,
-    showToast,
-    isLeftPanelOpen,
-    isRightPanelOpen,
-    setIsRightPanelOpen,
-    isBottomPanelOpen,
-    isSidebarCollapsed,
-    isBikerMode,
-    setIsBikerMode,
-    bikerRoute,
-    bikerWaypoints,
-    setIsPortManagerOpen,
-    projectStartPoint,
-    deleteCable,
-    updateEquipment,
-  } = useNetwork();
+  } = useMapStore(
+    useShallow((s) => ({
+      activeTool: s.activeTool,
+      setActiveTool: s.setActiveTool,
+      selectedEquipmentTypeToAdd: s.equipmentTypeToAdd,
+      setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+      setSelectedCableTypeToDraw: s.setCableTypeToDraw,
+      activeDrawingPoints: s.drawingPoints,
+      setActiveDrawingPoints: s.setDrawingPoints,
+      measuringPoints: s.measuringPoints,
+      setMeasuringPoints: s.setMeasuringPoints,
+      activeLayers: s.layers,
+      mapTileProvider: s.tileProvider,
+      mapFlyToTarget: s.flyToTarget,
+    })),
+  );
+  const { activeTraceCableIds, activeTraceEquipmentIds } = useTraceStore(
+    useShallow((s) => ({ activeTraceCableIds: s.cableIds, activeTraceEquipmentIds: s.equipmentIds })),
+  );
+  const showToast = useToastStore((s) => s.show);
+  const { isBikerMode, setIsBikerMode, bikerRoute, bikerWaypoints } = useBikerStore(
+    useShallow((s) => ({
+      isBikerMode: s.isBikerMode,
+      setIsBikerMode: s.setBikerMode,
+      bikerRoute: s.route,
+      bikerWaypoints: s.waypoints,
+    })),
+  );
 
   const [snapTarget, setSnapTarget] = useState<{ lat: number; lng: number; id: string; name: string } | null>(null);
   const [tempMousePos, setTempMousePos] = useState<[number, number] | null>(null);
@@ -484,8 +524,8 @@ export const GISMap: React.FC = () => {
                 e.stopPropagation();
                 marker.closePopup();
                 setSelectedObject({ type: 'equipment', data: eq });
-                setIsRightPanelOpen(true);
-                setIsPortManagerOpen(true);
+                setPanelOpen('right', true);
+                setModalOpen('portManager', true);
               };
             }
           }, 50);
@@ -494,7 +534,7 @@ export const GISMap: React.FC = () => {
 
       marker.on('click', () => {
         setSelectedObject({ type: 'equipment', data: eq });
-        setIsRightPanelOpen(true);
+        setPanelOpen('right', true);
         if (eq.type === 'OLT') {
           setActiveOltModal(eq);
           marker.openPopup();
@@ -510,12 +550,12 @@ export const GISMap: React.FC = () => {
     networkMode,
     oltTechFilter,
     setSelectedObject,
-    setIsRightPanelOpen,
+    setPanelOpen,
     setSelectedCableTypeToDraw,
     setActiveDrawingPoints,
     setActiveTool,
     setSelectedEquipmentTypeToAdd,
-    setIsPortManagerOpen,
+    setModalOpen,
     showToast,
   ]);
 
@@ -623,7 +663,7 @@ export const GISMap: React.FC = () => {
 
       polyline.on('click', () => {
         setSelectedObject({ type: 'cable', data: cable });
-        setIsRightPanelOpen(true);
+        setPanelOpen('right', true);
       });
 
       polyline.addTo(group);
@@ -637,7 +677,7 @@ export const GISMap: React.FC = () => {
     setSelectedObject,
     deleteCable,
     showToast,
-    setIsRightPanelOpen,
+    setPanelOpen,
   ]);
 
   // Render Customers
@@ -672,7 +712,7 @@ export const GISMap: React.FC = () => {
 
       marker.on('click', () => {
         setSelectedObject({ type: 'customer', data: cust });
-        setIsRightPanelOpen(true);
+        setPanelOpen('right', true);
       });
 
       marker.addTo(group);
@@ -725,7 +765,7 @@ export const GISMap: React.FC = () => {
 
         marker.on('click', () => {
           setSelectedObject({ type: 'fault', data: fault });
-          setIsRightPanelOpen(true);
+          setPanelOpen('right', true);
         });
 
         marker.addTo(group);
@@ -886,7 +926,7 @@ export const GISMap: React.FC = () => {
         setSnapTarget(null);
         if (activeTool === 'select') {
           setSelectedObject(null);
-          setIsRightPanelOpen(false);
+          setPanelOpen('right', false);
         }
       }
 
@@ -1203,7 +1243,7 @@ export const GISMap: React.FC = () => {
       return;
     }
     // Launch wizard with prefilled coordinates
-    setIsCableWizardOpen(true);
+    setModalOpen('cableWizard', true);
   };
 
   const handleCancelDrawing = () => {
@@ -1502,8 +1542,8 @@ export const GISMap: React.FC = () => {
                 const olt = activeOltModal;
                 setActiveOltModal(null);
                 setSelectedObject({ type: 'equipment', data: olt });
-                setIsRightPanelOpen(true);
-                setIsPortManagerOpen(true);
+                setPanelOpen('right', true);
+                setModalOpen('portManager', true);
               }}
               className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold text-xs flex items-center gap-2.5 border border-slate-200 text-left transition-all active:scale-98"
             >

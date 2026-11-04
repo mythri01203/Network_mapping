@@ -3,7 +3,7 @@ import { createBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 import { storageKey } from '../lib/storage';
 import * as actions from './networkActions';
-import { MAX_HISTORY, getNetworkSnapshot, useNetworkStore } from './networkStore';
+import { MAX_HISTORY, getNetworkSnapshot, selectCanRedo, selectCanUndo, useNetworkStore } from './networkStore';
 import { useToastStore } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { useUiStore } from './uiStore';
@@ -123,6 +123,15 @@ describe('undo / redo', () => {
     useNetworkStore.getState().redo();
     expect(useNetworkStore.getState().equipment.some((e) => e.id === created.id)).toBe(true);
     expect(lastToast()?.title).toBe('Redo Successful');
+  });
+
+  it('exposes whether undo and redo are available', () => {
+    const state = () => useNetworkStore.getState();
+    expect([selectCanUndo(state()), selectCanRedo(state())]).toEqual([false, false]);
+    actions.addEquipment(draft);
+    expect([selectCanUndo(state()), selectCanRedo(state())]).toEqual([true, false]);
+    state().undo();
+    expect([selectCanUndo(state()), selectCanRedo(state())]).toEqual([false, true]);
   });
 
   it('is a no-op at either end of the history', () => {

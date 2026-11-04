@@ -1,19 +1,23 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { deleteEquipment } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView, useShowOnMap } from '../../app/views';
 import type { Equipment } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, Trash2, Camera } from 'lucide-react';
 
 export const EquipmentInventoryView: React.FC = () => {
-  const {
-    equipments,
-    deleteEquipment,
-    setSelectedObject,
-    setIsTerminalBoxModalOpen,
-    setSelectedEquipmentTypeToAdd,
-    setActiveTool,
-    showToast,
-  } = useNetwork();
+  const equipments = useNetworkStore((s) => s.equipment);
+  const { setSelectedObject, setModalOpen } = useUiStore(
+    useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
+  );
+  const { setSelectedEquipmentTypeToAdd, setActiveTool } = useMapStore(
+    useShallow((s) => ({ setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd, setActiveTool: s.setActiveTool })),
+  );
+  const showToast = useToastStore((s) => s.show);
   const openView = useOpenView();
   const showOnMap = useShowOnMap();
 
@@ -88,7 +92,7 @@ export const EquipmentInventoryView: React.FC = () => {
 
   const handleOpenTerminalBox = (eq: Equipment) => {
     setSelectedObject({ type: 'equipment', data: eq });
-    setIsTerminalBoxModalOpen(true);
+    setModalOpen('terminalBox', true);
   };
 
   // KPI Metrics

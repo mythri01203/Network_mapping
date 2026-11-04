@@ -11,6 +11,12 @@ export type SelectedObject =
   | { type: 'fault'; data: Fault };
 export type SelectedObjectType = SelectedObject['type'];
 
+/** Human-readable label for a selection (faults are titled, everything else is named). */
+export function selectionLabel(selection: SelectedObject): string {
+  const label = selection.type === 'fault' ? selection.data.title : selection.data.name;
+  return label || selection.data.id;
+}
+
 export const MODAL_IDS = [
   'cableWizard',
   'customerWizard',

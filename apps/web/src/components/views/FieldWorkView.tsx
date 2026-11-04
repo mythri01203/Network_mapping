@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { updateWorkOrderStatus } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from '../../stores/uiStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useBikerStore } from '../../stores/bikerStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView } from '../../app/views';
 import { Bike, MapPin, CheckCircle2, Clock, Camera } from 'lucide-react';
 
 export const FieldWorkView: React.FC = () => {
-  const {
-    workOrders,
-    updateWorkOrderStatus,
-    setIsBikerMode,
-    flyToLocation,
-    equipments,
-    setSelectedObject,
-    setIsTechnicianMobileOpen,
-    setIsFaultModalOpen,
-  } = useNetwork();
+  const { workOrders, equipments } = useNetworkStore(
+    useShallow((s) => ({ workOrders: s.workOrders, equipments: s.equipment })),
+  );
+  const setIsBikerMode = useBikerStore((s) => s.setBikerMode);
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const { setSelectedObject, setModalOpen } = useUiStore(
+    useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
+  );
   const openView = useOpenView();
   const [offlineDraft, setOfflineDraft] = useState(false);
 
@@ -36,7 +39,7 @@ export const FieldWorkView: React.FC = () => {
               <Bike className="w-4 h-4" /> Open Biker Mode
             </button>
             <button
-              onClick={() => setIsTechnicianMobileOpen(true)}
+              onClick={() => setModalOpen('technicianMobile', true)}
               className="px-3 py-2 bg-white border rounded-xl text-xs font-semibold"
             >
               Technician phone view
@@ -85,7 +88,7 @@ export const FieldWorkView: React.FC = () => {
                     <MapPin className="w-3.5 h-3.5" /> Navigate
                   </button>
                   <button
-                    onClick={() => setIsFaultModalOpen(true)}
+                    onClick={() => setModalOpen('faults', true)}
                     className="px-2.5 py-1.5 border rounded-lg text-[11px] font-semibold"
                   >
                     Report fault

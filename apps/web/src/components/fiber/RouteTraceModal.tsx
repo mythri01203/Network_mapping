@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { traceNetworkPath } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useTraceStore } from '../../stores/traceStore';
+import { useUiStore } from '../../stores/uiStore';
 import { Activity, TriangleAlert, MapPin, Route, X } from 'lucide-react';
 import {
   Badge,
@@ -32,19 +38,17 @@ const HOP_TONE: Record<string, BadgeTone> = {
 };
 
 export const RouteTraceModal: React.FC = () => {
-  const {
-    isRouteTraceModalOpen,
-    setIsRouteTraceModalOpen,
-    activeTracePath,
-    activeTraceSummary,
-    customers,
-    equipments,
-    cables,
-    traceNetworkPath,
-    clearTrace,
-    flyToLocation,
-    showToast,
-  } = useNetwork();
+  const { isRouteTraceModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isRouteTraceModalOpen: s.modals.routeTrace, setModalOpen: s.setModalOpen })),
+  );
+  const { activeTracePath, activeTraceSummary, clearTrace } = useTraceStore(
+    useShallow((s) => ({ activeTracePath: s.path, activeTraceSummary: s.summary, clearTrace: s.clear })),
+  );
+  const { customers, equipments, cables } = useNetworkStore(
+    useShallow((s) => ({ customers: s.customers, equipments: s.equipment, cables: s.cables })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const showToast = useToastStore((s) => s.show);
 
   const [searchTarget, setSearchTarget] = useState('');
 
@@ -87,7 +91,7 @@ export const RouteTraceModal: React.FC = () => {
 
   const quickTargets = customers.slice(0, 5);
   const summary = activeTraceSummary;
-  const close = () => setIsRouteTraceModalOpen(false);
+  const close = () => setModalOpen('routeTrace', false);
 
   return (
     <Modal

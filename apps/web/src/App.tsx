@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
-import { NetworkProvider, useNetwork } from './context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from './stores/uiStore';
 import { VIEW_META, useActiveView } from './app/views';
 import type { MainView } from './types/ui';
 import { TopNavBar } from './components/navbar/TopNavBar';
@@ -82,7 +83,13 @@ import { PortManagerModal } from './components/ports/PortManagerModal';
 import { EquipmentKnowledgeModal } from './components/knowledge/EquipmentKnowledgeModal';
 
 export const AppContent: React.FC = () => {
-  const { isKnowledgeModalOpen, setIsKnowledgeModalOpen, selectedKnowledgeId } = useNetwork();
+  const { isKnowledgeModalOpen, setModalOpen, selectedKnowledgeId } = useUiStore(
+    useShallow((s) => ({
+      isKnowledgeModalOpen: s.modals.knowledge,
+      setModalOpen: s.setModalOpen,
+      selectedKnowledgeId: s.selectedKnowledgeId,
+    })),
+  );
   const activeView = useActiveView();
 
   useEffect(() => {
@@ -128,7 +135,7 @@ export const AppContent: React.FC = () => {
       <PortManagerModal />
       <EquipmentKnowledgeModal
         isOpen={isKnowledgeModalOpen}
-        onClose={() => setIsKnowledgeModalOpen(false)}
+        onClose={() => setModalOpen('knowledge', false)}
         initialEquipmentId={selectedKnowledgeId}
       />
 
@@ -141,9 +148,7 @@ export const AppContent: React.FC = () => {
 export default function App() {
   return (
     <BrowserRouter>
-      <NetworkProvider>
-        <AppContent />
-      </NetworkProvider>
+      <AppContent />
     </BrowserRouter>
   );
 }

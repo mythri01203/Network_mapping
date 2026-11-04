@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addSplice, removeSplice } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { type SpliceRecord, getFiberColor } from '@fibergis/shared';
 import { X, GitBranch, Trash2, Zap } from 'lucide-react';
 
 export const SplicingModal: React.FC = () => {
-  const { isSplicingModalOpen, setIsSplicingModalOpen, closures, cables, addSplice, removeSplice, showToast } =
-    useNetwork();
+  const { isSplicingModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isSplicingModalOpen: s.modals.splicing, setModalOpen: s.setModalOpen })),
+  );
+  const { closures, cables } = useNetworkStore(useShallow((s) => ({ closures: s.closures, cables: s.cables })));
+  const showToast = useToastStore((s) => s.show);
 
   const [selectedClosureId, setSelectedClosureId] = useState<string>(closures[0]?.id || 'JC-01');
 
@@ -98,7 +105,7 @@ export const SplicingModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsSplicingModalOpen(false)}
+            onClick={() => setModalOpen('splicing', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

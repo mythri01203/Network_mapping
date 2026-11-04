@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addCable } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { CableType, RouteStatus } from '@fibergis/shared';
 import { X, ChevronRight, ChevronLeft, Check, Cable as CableIcon, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const CableWizardModal: React.FC = () => {
-  const {
-    isCableWizardOpen,
-    setIsCableWizardOpen,
-    equipments,
-    addCable,
-    activeDrawingPoints,
-    setActiveDrawingPoints,
-    showToast,
-  } = useNetwork();
+  const { isCableWizardOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isCableWizardOpen: s.modals.cableWizard, setModalOpen: s.setModalOpen })),
+  );
+  const equipments = useNetworkStore((s) => s.equipment);
+  const { activeDrawingPoints, setActiveDrawingPoints } = useMapStore(
+    useShallow((s) => ({ activeDrawingPoints: s.drawingPoints, setActiveDrawingPoints: s.setDrawingPoints })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [step, setStep] = useState(1);
 
@@ -81,7 +85,7 @@ export const CableWizardModal: React.FC = () => {
 
     if (created) {
       setActiveDrawingPoints([]);
-      setIsCableWizardOpen(false);
+      setModalOpen('cableWizard', false);
       setStep(1);
     }
   };
@@ -158,7 +162,10 @@ export const CableWizardModal: React.FC = () => {
               </p>
             </div>
           </div>
-          <button onClick={() => setIsCableWizardOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+          <button
+            onClick={() => setModalOpen('cableWizard', false)}
+            className="p-1 text-slate-400 hover:text-slate-700"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>

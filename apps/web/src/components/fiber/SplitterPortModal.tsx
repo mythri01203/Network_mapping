@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { X, Split } from 'lucide-react';
 
 export const SplitterPortModal: React.FC = () => {
-  const { isSplitterModalOpen, setIsSplitterModalOpen, splitters } = useNetwork();
+  const { isSplitterModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isSplitterModalOpen: s.modals.splitter, setModalOpen: s.setModalOpen })),
+  );
+  const splitters = useNetworkStore((s) => s.splitters);
 
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>(splitters[0]?.id || 'SP-01');
   const [selectedPortDetail, setSelectedPortDetail] = useState<any | null>(null);
@@ -27,7 +32,7 @@ export const SplitterPortModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsSplitterModalOpen(false)}
+            onClick={() => setModalOpen('splitter', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

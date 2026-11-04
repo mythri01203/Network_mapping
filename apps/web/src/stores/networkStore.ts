@@ -267,6 +267,9 @@ useNetworkStore.subscribe((state, prev) => {
   if (state.projectStartPoint !== prev.projectStartPoint) writeJson(PROJECT_START_KEY, state.projectStartPoint);
 });
 
+export const selectCanUndo = (state: NetworkState): boolean => state.history.index > 0;
+export const selectCanRedo = (state: NetworkState): boolean => state.history.index < state.history.stack.length - 1;
+
 /** The current network as plain data (for commands, exports and sync). */
 export const getNetworkData = (): NetworkData => pickData(useNetworkStore.getState());
 

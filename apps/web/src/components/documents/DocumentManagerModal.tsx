@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addDocument, deleteDocument } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import type { NetworkDocument } from '@fibergis/shared';
 import { FileText, Search, Download, Trash2, PlusCircle, FileCheck, X } from 'lucide-react';
 
 export const DocumentManagerModal: React.FC = () => {
-  const { documents, addDocument, deleteDocument, isDocumentModalOpen, setIsDocumentModalOpen, showToast } =
-    useNetwork();
+  const documents = useNetworkStore((s) => s.documents);
+  const { isDocumentModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isDocumentModalOpen: s.modals.documents, setModalOpen: s.setModalOpen })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -85,7 +92,7 @@ export const DocumentManagerModal: React.FC = () => {
               <span>Upload Document</span>
             </button>
             <button
-              onClick={() => setIsDocumentModalOpen(false)}
+              onClick={() => setModalOpen('documents', false)}
               className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />

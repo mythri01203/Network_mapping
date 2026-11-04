@@ -1,5 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { addCatalogComponent } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { BUILT_IN_COMPONENTS } from '../../data/componentCatalog';
 import type { EquipmentCategory, EquipmentType } from '@fibergis/shared';
 import { Search, X, Plus, GripVertical } from 'lucide-react';
@@ -16,15 +21,14 @@ const CATEGORIES = [
 ];
 
 export const ComponentCatalogModal: React.FC = () => {
-  const {
-    isComponentCatalogOpen,
-    setIsComponentCatalogOpen,
-    customComponents,
-    addCustomComponent,
-    setSelectedEquipmentTypeToAdd,
-    setActiveTool,
-    showToast,
-  } = useNetwork();
+  const { isComponentCatalogOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isComponentCatalogOpen: s.modals.componentCatalog, setModalOpen: s.setModalOpen })),
+  );
+  const customComponents = useNetworkStore((s) => s.catalog);
+  const { setSelectedEquipmentTypeToAdd, setActiveTool } = useMapStore(
+    useShallow((s) => ({ setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd, setActiveTool: s.setActiveTool })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -51,7 +55,7 @@ export const ComponentCatalogModal: React.FC = () => {
   const place = (type: string) => {
     setSelectedEquipmentTypeToAdd(type as EquipmentType);
     setActiveTool('add_equipment');
-    setIsComponentCatalogOpen(false);
+    setModalOpen('componentCatalog', false);
     showToast('info', 'Click Map to Place', `Click the GIS map to place ${type}.`);
   };
 
@@ -71,7 +75,7 @@ export const ComponentCatalogModal: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setIsComponentCatalogOpen(false)}
+            onClick={() => setModalOpen('componentCatalog', false)}
             className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
           >
             <X className="w-5 h-5" />
@@ -171,7 +175,7 @@ export const ComponentCatalogModal: React.FC = () => {
             <button
               onClick={() => {
                 if (!newName.trim()) return;
-                addCustomComponent({
+                addCatalogComponent({
                   id: `custom-${Date.now()}`,
                   type: newName.trim() as EquipmentType,
                   category: newCategory,

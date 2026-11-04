@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { traceNetworkPath } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from '../../stores/uiStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView } from '../../app/views';
 import {
   GitFork,
@@ -18,7 +22,11 @@ import {
 } from 'lucide-react';
 
 export const NetworkTopologyView: React.FC = () => {
-  const { equipments, customers, faults, flyToLocation, setIsTerminalBoxModalOpen, traceNetworkPath } = useNetwork();
+  const { equipments, customers, faults } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, customers: s.customers, faults: s.faults })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
+  const setModalOpen = useUiStore((s) => s.setModalOpen);
   const openView = useOpenView();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -503,7 +511,7 @@ export const NetworkTopologyView: React.FC = () => {
 
               {(selectedNode.type === 'FAT' || selectedNode.type.includes('Terminal Box')) && (
                 <button
-                  onClick={() => setIsTerminalBoxModalOpen(true)}
+                  onClick={() => setModalOpen('terminalBox', true)}
                   className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
                 >
                   <Camera className="w-3.5 h-3.5" />

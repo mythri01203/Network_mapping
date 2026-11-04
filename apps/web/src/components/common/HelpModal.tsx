@@ -1,10 +1,13 @@
 import React from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from '../../stores/uiStore';
 import { STANDARD_12_COLORS } from '@fibergis/shared';
 import { X, BookOpen, Map, ShieldCheck } from 'lucide-react';
 
 export const HelpModal: React.FC = () => {
-  const { isHelpModalOpen, setIsHelpModalOpen } = useNetwork();
+  const { isHelpModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isHelpModalOpen: s.modals.help, setModalOpen: s.setModalOpen })),
+  );
 
   if (!isHelpModalOpen) return null;
 
@@ -25,7 +28,7 @@ export const HelpModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsHelpModalOpen(false)}
+            onClick={() => setModalOpen('help', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

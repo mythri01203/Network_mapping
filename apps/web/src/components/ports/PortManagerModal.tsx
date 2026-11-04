@@ -1,21 +1,26 @@
 import React, { useMemo, useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { updateEquipmentPort } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { generateLogicalPorts, summarizePorts, type LogicalPortStatus, type PonTechnology } from '@fibergis/shared';
 import { PORT_STATUS_STYLE } from '../../data/componentCatalog';
 import { X, Cpu, Radio, HelpCircle, Table, Grid } from 'lucide-react';
 
 export const PortManagerModal: React.FC = () => {
-  const {
-    isPortManagerOpen,
-    setIsPortManagerOpen,
-    selectedObject,
-    updateEquipmentPort,
-    cables,
-    splitters,
-    customers,
-    showToast,
-    openKnowledgeForEquipment,
-  } = useNetwork();
+  const { isPortManagerOpen, setModalOpen, selectedObject, openKnowledgeForEquipment } = useUiStore(
+    useShallow((s) => ({
+      isPortManagerOpen: s.modals.portManager,
+      setModalOpen: s.setModalOpen,
+      selectedObject: s.selectedObject,
+      openKnowledgeForEquipment: s.openKnowledge,
+    })),
+  );
+  const { cables, splitters, customers } = useNetworkStore(
+    useShallow((s) => ({ cables: s.cables, splitters: s.splitters, customers: s.customers })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [viewTab, setViewTab] = useState<'table' | 'visual'>('table');
@@ -143,7 +148,7 @@ export const PortManagerModal: React.FC = () => {
               <span className="hidden sm:inline">Port Guide</span>
             </button>
             <button
-              onClick={() => setIsPortManagerOpen(false)}
+              onClick={() => setModalOpen('portManager', false)}
               className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -460,7 +465,7 @@ export const PortManagerModal: React.FC = () => {
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 text-xs text-slate-500">
           <div>Verified against ITU-T G.984 and IEEE 802.3ah telecommunication specifications.</div>
           <button
-            onClick={() => setIsPortManagerOpen(false)}
+            onClick={() => setModalOpen('portManager', false)}
             className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition-colors"
           >
             Done

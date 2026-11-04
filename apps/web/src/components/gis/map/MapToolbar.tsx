@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { deleteCable, deleteEquipment } from '../../../stores/networkActions';
+import { useToastStore } from '../../../stores/toastStore';
+import { selectionLabel, useUiStore } from '../../../stores/uiStore';
 import {
   Bike,
   Check,
@@ -19,7 +22,9 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useNetwork } from '../../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../../stores/mapStore';
+import { useNetworkStore, selectCanUndo, selectCanRedo } from '../../../stores/networkStore';
 import { BUILT_IN_COMPONENTS } from '../../../data/componentCatalog';
 import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/shared';
 import { cableStyle } from '../../../theme/network';
@@ -155,7 +160,10 @@ function Divider() {
 /* ------------------------------------------------------------------ */
 
 function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) => void; onClose: () => void }) {
-  const { customComponents, selectedEquipmentTypeToAdd, activeTool } = useNetwork();
+  const customComponents = useNetworkStore((s) => s.catalog);
+  const { selectedEquipmentTypeToAdd, activeTool } = useMapStore(
+    useShallow((s) => ({ selectedEquipmentTypeToAdd: s.equipmentTypeToAdd, activeTool: s.activeTool })),
+  );
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('All');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -353,7 +361,9 @@ function CableSwatch({ type }: { type: string }) {
 }
 
 function CablePicker({ onPick }: { onPick: (t: CableType) => void }) {
-  const { selectedCableTypeToDraw, activeTool } = useNetwork();
+  const { selectedCableTypeToDraw, activeTool } = useMapStore(
+    useShallow((s) => ({ selectedCableTypeToDraw: s.cableTypeToDraw, activeTool: s.activeTool })),
+  );
   return (
     <div className="animate-pop-in absolute left-0 top-full z-[1500] mt-2 w-72 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-[var(--shadow-overlay)]">
       <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -401,17 +411,27 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
     setSelectedCableTypeToDraw,
     setActiveDrawingPoints,
     setMeasuringPoints,
-    setIsCustomerWizardOpen,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    selectedObject,
-    setSelectedObject,
-    deleteCable,
-    deleteEquipment,
-    showToast,
-  } = useNetwork();
+  } = useMapStore(
+    useShallow((s) => ({
+      activeTool: s.activeTool,
+      setActiveTool: s.setActiveTool,
+      setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+      setSelectedCableTypeToDraw: s.setCableTypeToDraw,
+      setActiveDrawingPoints: s.setDrawingPoints,
+      setMeasuringPoints: s.setMeasuringPoints,
+    })),
+  );
+  const { setModalOpen, selectedObject, setSelectedObject } = useUiStore(
+    useShallow((s) => ({
+      setModalOpen: s.setModalOpen,
+      selectedObject: s.selectedObject,
+      setSelectedObject: s.select,
+    })),
+  );
+  const { undo, redo, canUndo, canRedo } = useNetworkStore(
+    useShallow((s) => ({ undo: s.undo, redo: s.redo, canUndo: selectCanUndo(s), canRedo: selectCanRedo(s) })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [menu, setMenu] = useState<null | 'equipment' | 'cable'>(null);
   const closeMenu = () => setMenu(null);
@@ -451,7 +471,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   const canDelete = selectedObject?.type === 'cable' || selectedObject?.type === 'equipment';
   const deleteSelected = () => {
     if (!selectedObject) return;
-    const name = selectedObject.data.name || selectedObject.data.id;
+    const name = selectionLabel(selectedObject);
     if (selectedObject.type === 'cable') deleteCable(selectedObject.data.id);
     else if (selectedObject.type === 'equipment') deleteEquipment(selectedObject.data.id);
     else return;
@@ -521,7 +541,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
           showLabel
           onClick={() => {
             closeMenu();
-            setIsCustomerWizardOpen(true);
+            setModalOpen('customerWizard', true);
           }}
         />
 
@@ -591,7 +611,17 @@ export function MapModeBar({
     setActiveDrawingPoints,
     measuringPoints,
     setMeasuringPoints,
-  } = useNetwork();
+  } = useMapStore(
+    useShallow((s) => ({
+      activeTool: s.activeTool,
+      selectedCableTypeToDraw: s.cableTypeToDraw,
+      selectedEquipmentTypeToAdd: s.equipmentTypeToAdd,
+      activeDrawingPoints: s.drawingPoints,
+      setActiveDrawingPoints: s.setDrawingPoints,
+      measuringPoints: s.measuringPoints,
+      setMeasuringPoints: s.setMeasuringPoints,
+    })),
+  );
 
   const active = activeTool === 'draw_cable' || activeTool === 'measure' || activeTool === 'add_equipment';
   const keys = useRef({ onCancel, onFinish, activeTool, points: activeDrawingPoints.length });

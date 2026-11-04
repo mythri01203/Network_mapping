@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useOpenView, useShowOnMap } from '../../app/views';
 import { getFiberColor } from '@fibergis/shared';
 
 export const CableInventoryView: React.FC = () => {
-  const { cables, setIsCableWizardOpen, setIsBottomPanelOpen } = useNetwork();
+  const cables = useNetworkStore((s) => s.cables);
+  const { setModalOpen, setPanelOpen } = useUiStore(
+    useShallow((s) => ({ setModalOpen: s.setModalOpen, setPanelOpen: s.setPanelOpen })),
+  );
   const openView = useOpenView();
   const showOnMap = useShowOnMap();
   const [q, setQ] = useState('');
@@ -25,7 +30,7 @@ export const CableInventoryView: React.FC = () => {
           <button
             onClick={() => {
               openView('map');
-              setIsCableWizardOpen(true);
+              setModalOpen('cableWizard', true);
             }}
             className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold"
           >
@@ -61,7 +66,7 @@ export const CableInventoryView: React.FC = () => {
                     className="border-t hover:bg-slate-50 cursor-pointer"
                     onClick={() => {
                       showOnMap({ type: 'cable', data: c });
-                      setIsBottomPanelOpen(true);
+                      setPanelOpen('bottom', true);
                     }}
                   >
                     <td className="px-3 py-2 font-mono text-blue-700">{c.id}</td>

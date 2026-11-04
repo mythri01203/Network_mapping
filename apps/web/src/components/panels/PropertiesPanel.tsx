@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { deleteCable, deleteEquipment, traceNetworkPath, updateEquipment } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../stores/mapStore';
+import { useToastStore } from '../../stores/toastStore';
+import { useBikerStore } from '../../stores/bikerStore';
+import { selectionLabel, useUiStore } from '../../stores/uiStore';
 import { simulatedOpticalPower } from '@fibergis/shared';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';
@@ -30,27 +35,34 @@ export const PropertiesPanel: React.FC = () => {
     selectedObject,
     setSelectedObject,
     isRightPanelOpen,
-    setIsRightPanelOpen,
-    setIsTerminalBoxModalOpen,
-    setIsSplitterModalOpen,
-    setIsSplicingModalOpen,
-    setIsBottomPanelOpen,
-    setIsFaultModalOpen,
-    setIsPortManagerOpen,
+    setPanelOpen,
+    setModalOpen,
     openKnowledgeForEquipment,
-    setIsBikerMode,
-    navigateToAsset,
-    updateEquipment,
-    traceNetworkPath,
-    deleteEquipment,
-    deleteCable,
-    showToast,
-    setSelectedCableTypeToDraw,
-    setActiveDrawingPoints,
-    setActiveTool,
-    setSelectedEquipmentTypeToAdd,
     uiMode,
-  } = useNetwork();
+  } = useUiStore(
+    useShallow((s) => ({
+      selectedObject: s.selectedObject,
+      setSelectedObject: s.select,
+      isRightPanelOpen: s.panels.right,
+      setPanelOpen: s.setPanelOpen,
+      setModalOpen: s.setModalOpen,
+      openKnowledgeForEquipment: s.openKnowledge,
+      uiMode: s.uiMode,
+    })),
+  );
+  const { setIsBikerMode, navigateToAsset } = useBikerStore(
+    useShallow((s) => ({ setIsBikerMode: s.setBikerMode, navigateToAsset: s.navigateTo })),
+  );
+  const showToast = useToastStore((s) => s.show);
+  const { setSelectedCableTypeToDraw, setActiveDrawingPoints, setActiveTool, setSelectedEquipmentTypeToAdd } =
+    useMapStore(
+      useShallow((s) => ({
+        setSelectedCableTypeToDraw: s.setCableTypeToDraw,
+        setActiveDrawingPoints: s.setDrawingPoints,
+        setActiveTool: s.setActiveTool,
+        setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+      })),
+    );
 
   const [selectedPonIndex, setSelectedPonIndex] = useState(0);
   const [showAdvancedSpecs, setShowAdvancedSpecs] = useState(false);
@@ -58,7 +70,7 @@ export const PropertiesPanel: React.FC = () => {
   if (!isRightPanelOpen) {
     return (
       <button
-        onClick={() => setIsRightPanelOpen(true)}
+        onClick={() => setPanelOpen('right', true)}
         className="absolute top-20 right-0 z-20 bg-white/95 backdrop-blur-md border border-slate-200 border-r-0 rounded-l-xl p-2 shadow-md hover:bg-slate-50 transition-all text-slate-600"
         title="Open Properties Inspector"
       >
@@ -163,10 +175,12 @@ export const PropertiesPanel: React.FC = () => {
           };
       }
     }
-    return { title: data.name || data.title, emoji: '📍', badge: type, desc: '', signalLevel: 'Normal' };
+    return { title: selectionLabel(selectedObject), emoji: '📍', badge: type, desc: '', signalLevel: 'Normal' };
   };
 
   const friendly = getFriendlyDetails();
+  const status = 'status' in data ? data.status : undefined;
+  const address = 'street' in data ? `${data.street}, ${data.area}` : 'area' in data ? data.area : '';
 
   return (
     <div className="w-84 sm:w-88 bg-white/95 backdrop-blur-md border-l border-slate-200/80 flex flex-col z-20 shrink-0 select-none shadow-md transition-all duration-200 overflow-hidden">
@@ -221,7 +235,7 @@ export const PropertiesPanel: React.FC = () => {
             <X className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setIsRightPanelOpen(false)}
+            onClick={() => setPanelOpen('right', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
             title="Collapse Panel"
           >
@@ -240,32 +254,28 @@ export const PropertiesPanel: React.FC = () => {
             </span>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                data.status === 'Active' || data.status === 'Resolved'
+                status === 'Active' || status === 'Resolved'
                   ? 'bg-emerald-100 text-emerald-700'
-                  : data.status === 'Faulty' || data.status === 'Critical'
+                  : status === 'Faulty'
                     ? 'bg-rose-100 text-rose-700 animate-pulse'
                     : 'bg-amber-100 text-amber-700'
               }`}
             >
               {uiMode === 'simple'
-                ? data.status === 'Active'
+                ? status === 'Active'
                   ? '🟢 Working Great'
-                  : data.status === 'Faulty'
+                  : status === 'Faulty'
                     ? '🔴 Needs Repair'
-                    : `🟡 ${data.status || 'Active'}`
-                : data.status || 'Active'}
+                    : `🟡 ${status || 'Active'}`
+                : status || 'Active'}
             </span>
           </div>
           <h3 className="font-bold text-sm text-slate-900 leading-snug">
             {uiMode === 'simple' && type === 'equipment'
               ? `${friendly.title} (${data.name || data.id})`
-              : data.name || data.title}
+              : selectionLabel(selectedObject)}
           </h3>
-          {data.area && (
-            <p className="text-[11px] text-slate-500">
-              {data.street}, {data.area}
-            </p>
-          )}
+          {address && <p className="text-[11px] text-slate-500">{address}</p>}
         </div>
 
         {/* EQUIPMENT DETAILS */}
@@ -512,7 +522,7 @@ export const PropertiesPanel: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => setIsPortManagerOpen(true)}
+                    onClick={() => setModalOpen('portManager', true)}
                     className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
                   >
                     <Grid className="w-3.5 h-3.5" />
@@ -529,7 +539,7 @@ export const PropertiesPanel: React.FC = () => {
 
                   {(data.type === 'FAT' || data.type.includes('Terminal Box')) && (
                     <button
-                      onClick={() => setIsTerminalBoxModalOpen(true)}
+                      onClick={() => setModalOpen('terminalBox', true)}
                       className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
                     >
                       <Camera className="w-3.5 h-3.5 text-slate-600" />
@@ -711,7 +721,7 @@ export const PropertiesPanel: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => setIsPortManagerOpen(true)}
+                      onClick={() => setModalOpen('portManager', true)}
                       className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
                     >
                       <Grid className="w-3.5 h-3.5" />
@@ -878,7 +888,7 @@ export const PropertiesPanel: React.FC = () => {
                       Inspect high-resolution terminal photographs and interactive port annotations.
                     </p>
                     <button
-                      onClick={() => setIsTerminalBoxModalOpen(true)}
+                      onClick={() => setModalOpen('terminalBox', true)}
                       className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Camera className="w-3.5 h-3.5" />
@@ -899,7 +909,7 @@ export const PropertiesPanel: React.FC = () => {
                       Manage core-to-core optical fusion splices and splice tray mappings.
                     </p>
                     <button
-                      onClick={() => setIsSplicingModalOpen(true)}
+                      onClick={() => setModalOpen('splicing', true)}
                       className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <GitBranch className="w-3.5 h-3.5" />
@@ -920,7 +930,7 @@ export const PropertiesPanel: React.FC = () => {
                       Manage input feeder and output distribution drop ports.
                     </p>
                     <button
-                      onClick={() => setIsSplitterModalOpen(true)}
+                      onClick={() => setModalOpen('splitter', true)}
                       className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Sliders className="w-3.5 h-3.5" />
@@ -939,7 +949,7 @@ export const PropertiesPanel: React.FC = () => {
                     data.type === 'FDT' ||
                     data.type === 'FAT') && (
                     <button
-                      onClick={() => setIsPortManagerOpen(true)}
+                      onClick={() => setModalOpen('portManager', true)}
                       className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Grid className="w-3.5 h-3.5" />
@@ -1058,7 +1068,7 @@ export const PropertiesPanel: React.FC = () => {
                 {/* 4. Action Buttons */}
                 <div className="space-y-2 pt-1">
                   <button
-                    onClick={() => setIsBottomPanelOpen(true)}
+                    onClick={() => setPanelOpen('bottom', true)}
                     className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
                   >
                     <Layers className="w-3.5 h-3.5" />
@@ -1066,7 +1076,7 @@ export const PropertiesPanel: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => setIsSplicingModalOpen(true)}
+                    onClick={() => setModalOpen('splicing', true)}
                     className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
                   >
                     <GitBranch className="w-3.5 h-3.5 text-cyan-600" />
@@ -1168,7 +1178,7 @@ export const PropertiesPanel: React.FC = () => {
                 {/* Actions */}
                 <div className="pt-2 border-t border-slate-100 space-y-2">
                   <button
-                    onClick={() => setIsBottomPanelOpen(true)}
+                    onClick={() => setPanelOpen('bottom', true)}
                     className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Layers className="w-3.5 h-3.5" />
@@ -1176,7 +1186,7 @@ export const PropertiesPanel: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => setIsSplicingModalOpen(true)}
+                    onClick={() => setModalOpen('splicing', true)}
                     className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <GitBranch className="w-3.5 h-3.5 text-cyan-600" />
@@ -1348,7 +1358,7 @@ export const PropertiesPanel: React.FC = () => {
                 <div className="space-y-2 pt-1">
                   <button
                     onClick={() => {
-                      navigateToAsset({ id: data.id, name: data.title, lat: data.lat, lng: data.lng, type: 'fault' });
+                      navigateToAsset({ id: data.id, name: data.title, ...data.affectedLocation, type: 'fault' });
                       setIsBikerMode(true);
                     }}
                     className="w-full py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all"
@@ -1358,7 +1368,7 @@ export const PropertiesPanel: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => setIsFaultModalOpen(true)}
+                    onClick={() => setModalOpen('faults', true)}
                     className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-colors"
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
@@ -1402,7 +1412,7 @@ export const PropertiesPanel: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setIsFaultModalOpen(true)}
+                  onClick={() => setModalOpen('faults', true)}
                   className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />

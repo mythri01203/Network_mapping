@@ -1,21 +1,35 @@
 import React, { useMemo, useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { selectionLabel, useUiStore } from '../../stores/uiStore';
+import { focusFor } from '../../app/mapFocus';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useBikerStore } from '../../stores/bikerStore';
 import { Bike, X, Navigation, Plus, Compass, ChevronRight } from 'lucide-react';
 
 export const BikerModePanel: React.FC = () => {
   const {
     isBikerMode,
     setIsBikerMode,
-    equipments,
-    customers,
-    faults,
     bikerRoute,
     bikerWaypoints,
     addBikerWaypoint,
     clearBikerRoute,
     navigateToAsset,
-    selectedObject,
-  } = useNetwork();
+  } = useBikerStore(
+    useShallow((s) => ({
+      isBikerMode: s.isBikerMode,
+      setIsBikerMode: s.setBikerMode,
+      bikerRoute: s.route,
+      bikerWaypoints: s.waypoints,
+      addBikerWaypoint: s.addWaypoint,
+      clearBikerRoute: s.clearRoute,
+      navigateToAsset: s.navigateTo,
+    })),
+  );
+  const { equipments, customers, faults } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, customers: s.customers, faults: s.faults })),
+  );
+  const selectedObject = useUiStore((s) => s.selectedObject);
 
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
@@ -72,13 +86,11 @@ export const BikerModePanel: React.FC = () => {
 
   if (!isBikerMode) return null;
 
-  const origin = selectedObject?.data?.lat
-    ? {
-        lat: selectedObject.data.lat,
-        lng: selectedObject.data.lng,
-        name: selectedObject.data.name || selectedObject.data.id,
-      }
-    : { lat: 12.9352, lng: 77.6245, name: 'OLT-01 Central Telco Hub' };
+  const selectedFocus = selectedObject ? focusFor(selectedObject) : null;
+  const origin =
+    selectedObject && selectedFocus
+      ? { lat: selectedFocus.lat, lng: selectedFocus.lng, name: selectionLabel(selectedObject) }
+      : { lat: 12.9352, lng: 77.6245, name: 'OLT-01 Central Telco Hub' };
 
   return (
     <div className="absolute top-4 right-4 z-[450] w-88 max-w-[calc(100%-2rem)] bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-orange-200 overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in slide-in-from-right-4 select-none">

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { traceNetworkPath } from '../../stores/networkActions';
+import { useToastStore } from '../../stores/toastStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useShowOnMap } from '../../app/views';
 import type { Customer } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, GitFork } from 'lucide-react';
 
 export const CustomerDirectoryView: React.FC = () => {
-  const { customers, setIsCustomerWizardOpen, traceNetworkPath, showToast } = useNetwork();
+  const customers = useNetworkStore((s) => s.customers);
+  const setModalOpen = useUiStore((s) => s.setModalOpen);
+  const showToast = useToastStore((s) => s.show);
   const showOnMap = useShowOnMap();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,7 +111,7 @@ export const CustomerDirectoryView: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setIsCustomerWizardOpen(true)}
+            onClick={() => setModalOpen('customerWizard', true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
           >
             <PlusCircle className="w-4 h-4" />

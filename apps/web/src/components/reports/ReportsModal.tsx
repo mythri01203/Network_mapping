@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import jsPDF from 'jspdf';
 import { X, Download, FileSpreadsheet } from 'lucide-react';
 
 export const ReportsModal: React.FC = () => {
-  const { isReportsModalOpen, setIsReportsModalOpen, equipments, cables, customers, faults, showToast } = useNetwork();
+  const { isReportsModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isReportsModalOpen: s.modals.reports, setModalOpen: s.setModalOpen })),
+  );
+  const { equipments, cables, customers, faults } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, cables: s.cables, customers: s.customers, faults: s.faults })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [selectedReport, setSelectedReport] = useState<'inventory' | 'cores' | 'customers' | 'faults'>('inventory');
 
@@ -156,7 +165,7 @@ export const ReportsModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsReportsModalOpen(false)}
+            onClick={() => setModalOpen('reports', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

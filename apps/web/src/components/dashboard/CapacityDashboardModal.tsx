@@ -1,9 +1,16 @@
 import React from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { X, BarChart3, Users, Cable, Split, Percent } from 'lucide-react';
 
 export const CapacityDashboardModal: React.FC = () => {
-  const { isCapacityDashboardOpen, setIsCapacityDashboardOpen, cables, customers, splitters, faults } = useNetwork();
+  const { isCapacityDashboardOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isCapacityDashboardOpen: s.modals.capacityDashboard, setModalOpen: s.setModalOpen })),
+  );
+  const { cables, customers, splitters, faults } = useNetworkStore(
+    useShallow((s) => ({ cables: s.cables, customers: s.customers, splitters: s.splitters, faults: s.faults })),
+  );
 
   if (!isCapacityDashboardOpen) return null;
 
@@ -45,7 +52,7 @@ export const CapacityDashboardModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsCapacityDashboardOpen(false)}
+            onClick={() => setModalOpen('capacityDashboard', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

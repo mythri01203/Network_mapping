@@ -1,19 +1,22 @@
 import React, { useState, useRef } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { deleteImageAnnotation, saveImageAnnotation, uploadEquipmentPhoto } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { EquipmentImage, ImageAnnotation } from '@fibergis/shared';
 import { X, Camera, Upload, Trash2, Crosshair } from 'lucide-react';
 
 export const TerminalBoxModal: React.FC = () => {
-  const {
-    isTerminalBoxModalOpen,
-    setIsTerminalBoxModalOpen,
-    equipments,
-    selectedObject,
-    splitters,
-    uploadEquipmentPhoto,
-    saveImageAnnotation,
-    deleteImageAnnotation,
-  } = useNetwork();
+  const { isTerminalBoxModalOpen, setModalOpen, selectedObject } = useUiStore(
+    useShallow((s) => ({
+      isTerminalBoxModalOpen: s.modals.terminalBox,
+      setModalOpen: s.setModalOpen,
+      selectedObject: s.selectedObject,
+    })),
+  );
+  const { equipments, splitters } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, splitters: s.splitters })),
+  );
 
   // Find target terminal box (from selected object or first FAT)
   const targetTerminal =
@@ -120,7 +123,7 @@ export const TerminalBoxModal: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setIsTerminalBoxModalOpen(false)}
+            onClick={() => setModalOpen('terminalBox', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

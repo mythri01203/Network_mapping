@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useMapStore } from '../../stores/mapStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { EquipmentType, CableType } from '@fibergis/shared';
 import { Box, Search, ChevronLeft, ChevronRight, GripVertical, Plus, BookOpen } from 'lucide-react';
 import { OltChassisIcon } from '../common/OltChassisIcon';
@@ -263,19 +266,24 @@ const SIMPLE_COMPONENTS: Array<{
 ];
 
 export const ComponentLibrary: React.FC = () => {
-  const {
-    isLeftPanelOpen,
-    setIsLeftPanelOpen,
-    setActiveTool,
-    setSelectedEquipmentTypeToAdd,
-    selectedEquipmentTypeToAdd,
-    setSelectedCableTypeToDraw,
-    setIsCableWizardOpen,
-    setIsComponentCatalogOpen,
-    setIsKnowledgeModalOpen,
-    showToast,
-    uiMode,
-  } = useNetwork();
+  const { isLeftPanelOpen, setPanelOpen, setModalOpen, uiMode } = useUiStore(
+    useShallow((s) => ({
+      isLeftPanelOpen: s.panels.left,
+      setPanelOpen: s.setPanelOpen,
+      setModalOpen: s.setModalOpen,
+      uiMode: s.uiMode,
+    })),
+  );
+  const { setActiveTool, setSelectedEquipmentTypeToAdd, selectedEquipmentTypeToAdd, setSelectedCableTypeToDraw } =
+    useMapStore(
+      useShallow((s) => ({
+        setActiveTool: s.setActiveTool,
+        setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+        selectedEquipmentTypeToAdd: s.equipmentTypeToAdd,
+        setSelectedCableTypeToDraw: s.setCableTypeToDraw,
+      })),
+    );
+  const showToast = useToastStore((s) => s.show);
 
   const [activeTab, setActiveTab] = useState<string>('All');
   const [filterQuery, setFilterQuery] = useState('');
@@ -319,7 +327,7 @@ export const ComponentLibrary: React.FC = () => {
     return (
       <div className="w-9 shrink-0 bg-white border-r border-slate-200 flex flex-col items-center py-3 gap-2 z-20">
         <button
-          onClick={() => setIsLeftPanelOpen(true)}
+          onClick={() => setPanelOpen('left', true)}
           className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
           title="Open Component Library"
         >
@@ -340,7 +348,7 @@ export const ComponentLibrary: React.FC = () => {
           </span>
         </div>
         <button
-          onClick={() => setIsLeftPanelOpen(false)}
+          onClick={() => setPanelOpen('left', false)}
           className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
           title="Collapse Panel"
         >
@@ -351,7 +359,7 @@ export const ComponentLibrary: React.FC = () => {
       {/* Equipment Knowledge Discovery Button */}
       <div className="p-2 border-b border-slate-100 bg-indigo-50/40">
         <button
-          onClick={() => setIsKnowledgeModalOpen(true)}
+          onClick={() => setModalOpen('knowledge', true)}
           className="w-full py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
           title="Search what any network equipment is, how it works, and FTTH connection rules"
         >
@@ -406,7 +414,7 @@ export const ComponentLibrary: React.FC = () => {
           {/* Search Button */}
           <div className="p-2.5 border-b border-slate-100">
             <button
-              onClick={() => setIsComponentCatalogOpen(true)}
+              onClick={() => setModalOpen('componentCatalog', true)}
               className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
             >
               <Search className="w-3.5 h-3.5" /> Search All Types of Boxes
@@ -457,7 +465,7 @@ export const ComponentLibrary: React.FC = () => {
           {/* Search Input */}
           <div className="p-2.5 border-b border-slate-100">
             <button
-              onClick={() => setIsComponentCatalogOpen(true)}
+              onClick={() => setModalOpen('componentCatalog', true)}
               className="w-full mb-2 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"
             >
               <Search className="w-3.5 h-3.5" /> Search Components
@@ -494,7 +502,7 @@ export const ComponentLibrary: React.FC = () => {
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
               <span>Quick Draw Cable</span>
               <button
-                onClick={() => setIsCableWizardOpen(true)}
+                onClick={() => setModalOpen('cableWizard', true)}
                 className="text-blue-600 hover:underline font-semibold text-[10px]"
               >
                 Wizard &rarr;

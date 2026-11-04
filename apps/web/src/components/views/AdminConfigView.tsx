@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { backupSystem, exportKML, restoreSystem } from '../../stores/networkActions';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { type UserRole, STANDARD_12_COLORS, type FiberColorDef } from '@fibergis/shared';
 import { Download, Upload, Search, Check, X, Layers } from 'lucide-react';
 
 export const AdminConfigView: React.FC = () => {
-  const { userRole, auditLogs, backupSystem, restoreSystem, exportKML } = useNetwork();
+  const userRole = useUiStore((s) => s.userRole);
+  const auditLogs = useNetworkStore((s) => s.auditLogs);
 
   const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');

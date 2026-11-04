@@ -20,7 +20,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Link } from 'react-router';
-import { useNetwork } from '../../context/NetworkContext';
+import { backupSystem, exportKML, resetToSampleData, restoreSystem } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../stores/mapStore';
+import { useUiStore } from '../../stores/uiStore';
+import { useNetworkStore, selectCanUndo, selectCanRedo } from '../../stores/networkStore';
 import type { UserRole } from '@fibergis/shared';
 import {
   IconButton,
@@ -75,29 +79,30 @@ const roleInitials = (role: string) =>
     .toUpperCase();
 
 export const TopNavBar: React.FC = () => {
-  const {
-    equipments,
-    cables,
-    customers,
-    faults,
-    userRole,
-    setUserRole,
-    networkMode,
-    setNetworkMode,
-    uiMode,
-    setUiMode,
-    setIsFaultModalOpen,
-    setIsHelpModalOpen,
-    setIsLayersDrawerOpen,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    backupSystem,
-    restoreSystem,
-    resetToSampleData,
-    exportKML,
-  } = useNetwork();
+  const { equipments, cables, customers, faults, undo, redo, canUndo, canRedo } = useNetworkStore(
+    useShallow((s) => ({
+      equipments: s.equipment,
+      cables: s.cables,
+      customers: s.customers,
+      faults: s.faults,
+      undo: s.undo,
+      redo: s.redo,
+      canUndo: selectCanUndo(s),
+      canRedo: selectCanRedo(s),
+    })),
+  );
+  const { userRole, setUserRole, networkMode, setNetworkMode, uiMode, setUiMode, setModalOpen } = useUiStore(
+    useShallow((s) => ({
+      userRole: s.userRole,
+      setUserRole: s.setUserRole,
+      networkMode: s.networkMode,
+      setNetworkMode: s.setNetworkMode,
+      uiMode: s.uiMode,
+      setUiMode: s.setUiMode,
+      setModalOpen: s.setModalOpen,
+    })),
+  );
+  const setIsLayersDrawerOpen = useMapStore((s) => s.setLayersDrawerOpen);
 
   const activeView = useActiveView();
   const showOnMap = useShowOnMap();
@@ -442,13 +447,13 @@ export const TopNavBar: React.FC = () => {
           label={activeFaultsCount ? `${activeFaultsCount} open faults` : 'No open faults'}
           variant="dark"
           badge={activeFaultsCount || null}
-          onClick={() => setIsFaultModalOpen(true)}
+          onClick={() => setModalOpen('faults', true)}
         />
         <IconButton
           icon={CircleHelp}
           label="Help and user guide"
           variant="dark"
-          onClick={() => setIsHelpModalOpen(true)}
+          onClick={() => setModalOpen('help', true)}
         />
 
         <Popover

@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { updateWorkOrderStatus, uploadEquipmentPhoto } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useToastStore } from '../../stores/toastStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import { X, Camera, CheckCircle2 } from 'lucide-react';
 
 export const TechnicianMobileView: React.FC = () => {
-  const {
-    isTechnicianMobileOpen,
-    setIsTechnicianMobileOpen,
-    workOrders,
-    updateWorkOrderStatus,
-    equipments,
-    splitters,
-    uploadEquipmentPhoto,
-    showToast,
-  } = useNetwork();
+  const { isTechnicianMobileOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isTechnicianMobileOpen: s.modals.technicianMobile, setModalOpen: s.setModalOpen })),
+  );
+  const { workOrders, equipments, splitters } = useNetworkStore(
+    useShallow((s) => ({ workOrders: s.workOrders, equipments: s.equipment, splitters: s.splitters })),
+  );
+  const showToast = useToastStore((s) => s.show);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'box_checker' | 'photo_capture'>('orders');
   const [selectedBoxId, setSelectedBoxId] = useState<string>('FAT-01');
@@ -49,7 +50,7 @@ export const TechnicianMobileView: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsTechnicianMobileOpen(false)}
+            onClick={() => setModalOpen('technicianMobile', false)}
             className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />

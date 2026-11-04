@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOAST_DURATION_MS, useToastStore } from './toastStore';
-import { knowledgeKeyFor, useUiStore } from './uiStore';
+import { createSampleNetwork } from '@fibergis/shared/sample';
+import { knowledgeKeyFor, selectionLabel, useUiStore } from './uiStore';
 
 describe('toastStore', () => {
   beforeEach(() => {
@@ -38,6 +39,22 @@ describe('knowledgeKeyFor', () => {
     ['Optical Receiver', 'optical-receiver'],
     ['Core Switch', 'core-switch'],
   ])('%s → %s', (input, key) => expect(knowledgeKeyFor(input)).toBe(key));
+});
+
+describe('selectionLabel', () => {
+  const sample = createSampleNetwork();
+
+  it('uses the name, or the title for faults', () => {
+    const equipment = sample.equipment[0];
+    const fault = sample.faults[0];
+    expect(selectionLabel({ type: 'equipment', data: equipment })).toBe(equipment.name);
+    expect(selectionLabel({ type: 'fault', data: fault })).toBe(fault.title);
+  });
+
+  it('falls back to the id when the label is empty', () => {
+    const cable = { ...sample.cables[0], name: '' };
+    expect(selectionLabel({ type: 'cable', data: cable })).toBe(cable.id);
+  });
 });
 
 describe('uiStore', () => {

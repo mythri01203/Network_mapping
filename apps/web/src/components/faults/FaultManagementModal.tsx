@@ -1,21 +1,20 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../../context/NetworkContext';
+import { recordNewFault, resolveExistingFault, updateWorkOrderStatus } from '../../stores/networkActions';
+import { useShallow } from 'zustand/react/shallow';
+import { useMapStore } from '../../stores/mapStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { Fault } from '@fibergis/shared';
 import { X, AlertTriangle, Users, MapPin, CheckCircle2, Send, Plus } from 'lucide-react';
 
 export const FaultManagementModal: React.FC = () => {
-  const {
-    isFaultModalOpen,
-    setIsFaultModalOpen,
-    faults,
-    workOrders,
-    customers,
-    cables,
-    recordNewFault,
-    resolveExistingFault,
-    updateWorkOrderStatus,
-    flyToLocation,
-  } = useNetwork();
+  const { isFaultModalOpen, setModalOpen } = useUiStore(
+    useShallow((s) => ({ isFaultModalOpen: s.modals.faults, setModalOpen: s.setModalOpen })),
+  );
+  const { faults, workOrders, customers, cables } = useNetworkStore(
+    useShallow((s) => ({ faults: s.faults, workOrders: s.workOrders, customers: s.customers, cables: s.cables })),
+  );
+  const flyToLocation = useMapStore((s) => s.flyTo);
 
   const [activeTab, setActiveTab] = useState<'active_faults' | 'new_fault' | 'work_orders'>('active_faults');
   const [selectedFaultId, setSelectedFaultId] = useState<string>(faults[0]?.id || '');
@@ -63,7 +62,7 @@ export const FaultManagementModal: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => setIsFaultModalOpen(false)}
+            onClick={() => setModalOpen('faults', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
@@ -185,7 +184,7 @@ export const FaultManagementModal: React.FC = () => {
                     <button
                       onClick={() => {
                         flyToLocation(currentFault.affectedLocation.lat, currentFault.affectedLocation.lng, 18);
-                        setIsFaultModalOpen(false);
+                        setModalOpen('faults', false);
                       }}
                       className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold flex items-center gap-1.5 transition-colors"
                     >

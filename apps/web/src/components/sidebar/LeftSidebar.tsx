@@ -22,7 +22,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Link } from 'react-router';
-import { useNetwork } from '../../context/NetworkContext';
+import { useShallow } from 'zustand/react/shallow';
+import { useBikerStore } from '../../stores/bikerStore';
+import { useNetworkStore } from '../../stores/networkStore';
+import { useUiStore } from '../../stores/uiStore';
 import type { MainView } from '../../types/ui';
 import { VIEW_META, useActiveView, useOpenView } from '../../app/views';
 import { Popover, MenuItem, MenuLabel, MenuSeparator, cn } from '../ui';
@@ -51,36 +54,29 @@ interface TooltipState {
 }
 
 export const LeftSidebar: React.FC = () => {
-  const {
-    isSidebarCollapsed,
-    setIsSidebarCollapsed,
-    uiMode,
-    equipments,
-    cables,
-    customers,
-    faults,
-    workOrders,
-    zones,
-    documents,
-    closures,
-    splitters,
-    setIsCableWizardOpen,
-    setIsCustomerWizardOpen,
-    setIsLeftPanelOpen,
-    setIsTerminalBoxModalOpen,
-    setIsSplitterModalOpen,
-    setIsSplicingModalOpen,
-    setIsRouteTraceModalOpen,
-    setIsFaultModalOpen,
-    setIsTechnicianMobileOpen,
-    setIsCapacityDashboardOpen,
-    setIsReportsModalOpen,
-    setIsDocumentModalOpen,
-    setIsComponentCatalogOpen,
-    setIsPortManagerOpen,
-    setIsKnowledgeModalOpen,
-    setIsBikerMode,
-  } = useNetwork();
+  const { isSidebarCollapsed, setIsSidebarCollapsed, uiMode, setModalOpen, setPanelOpen } = useUiStore(
+    useShallow((s) => ({
+      isSidebarCollapsed: s.isSidebarCollapsed,
+      setIsSidebarCollapsed: s.setSidebarCollapsed,
+      uiMode: s.uiMode,
+      setModalOpen: s.setModalOpen,
+      setPanelOpen: s.setPanelOpen,
+    })),
+  );
+  const { equipments, cables, customers, faults, workOrders, zones, documents, closures, splitters } = useNetworkStore(
+    useShallow((s) => ({
+      equipments: s.equipment,
+      cables: s.cables,
+      customers: s.customers,
+      faults: s.faults,
+      workOrders: s.workOrders,
+      zones: s.zones,
+      documents: s.documents,
+      closures: s.closures,
+      splitters: s.splitters,
+    })),
+  );
+  const setIsBikerMode = useBikerStore((s) => s.setBikerMode);
 
   const activeView = useActiveView();
   const openView = useOpenView();
@@ -135,7 +131,7 @@ export const LeftSidebar: React.FC = () => {
       items: [
         view('operations', { count: openFaults + openWorkOrders || undefined, alert: openFaults > 0, simple: true }),
         view('field', { simple: true }),
-        tool('tech', 'Technician App', Smartphone, () => setIsTechnicianMobileOpen(true)),
+        tool('tech', 'Technician App', Smartphone, () => setModalOpen('technicianMobile', true)),
         tool('biker', 'Ride Navigation', Bike, () => {
           openView('map');
           setIsBikerMode(true);
@@ -145,30 +141,30 @@ export const LeftSidebar: React.FC = () => {
     {
       label: 'Fiber Tools',
       items: [
-        tool('trace', 'Route Trace', Route, () => setIsRouteTraceModalOpen(true), { simple: true }),
-        tool('fat', 'Terminal Boxes', Box, () => setIsTerminalBoxModalOpen(true), {
+        tool('trace', 'Route Trace', Route, () => setModalOpen('routeTrace', true), { simple: true }),
+        tool('fat', 'Terminal Boxes', Box, () => setModalOpen('terminalBox', true), {
           count: fatCount || undefined,
           simple: true,
         }),
-        tool('splitter', 'Splitters', Split, () => setIsSplitterModalOpen(true), {
+        tool('splitter', 'Splitters', Split, () => setModalOpen('splitter', true), {
           count: splitters.length || undefined,
         }),
-        tool('splice', 'Splicing', Combine, () => setIsSplicingModalOpen(true), {
+        tool('splice', 'Splicing', Combine, () => setModalOpen('splicing', true), {
           count: closures.length || undefined,
         }),
-        tool('ports', 'Port Manager', Unplug, () => setIsPortManagerOpen(true)),
+        tool('ports', 'Port Manager', Unplug, () => setModalOpen('portManager', true)),
       ],
     },
     {
       label: 'Insights',
       items: [
-        tool('capacity', 'Capacity', ChartColumn, () => setIsCapacityDashboardOpen(true)),
-        tool('reports', 'Reports', FileText, () => setIsReportsModalOpen(true)),
-        tool('docs', 'Documents', FolderOpen, () => setIsDocumentModalOpen(true), {
+        tool('capacity', 'Capacity', ChartColumn, () => setModalOpen('capacityDashboard', true)),
+        tool('reports', 'Reports', FileText, () => setModalOpen('reports', true)),
+        tool('docs', 'Documents', FolderOpen, () => setModalOpen('documents', true), {
           count: documents.length || undefined,
         }),
-        tool('knowledge', 'Equipment Guide', BookOpenText, () => setIsKnowledgeModalOpen(true), { simple: true }),
-        tool('catalog', 'Component Catalog', LibraryBig, () => setIsComponentCatalogOpen(true)),
+        tool('knowledge', 'Equipment Guide', BookOpenText, () => setModalOpen('knowledge', true), { simple: true }),
+        tool('catalog', 'Component Catalog', LibraryBig, () => setModalOpen('componentCatalog', true)),
       ],
     },
   ];
@@ -280,7 +276,7 @@ export const LeftSidebar: React.FC = () => {
                 icon={UserPlus}
                 label="New customer connection"
                 onClick={() => {
-                  setIsCustomerWizardOpen(true);
+                  setModalOpen('customerWizard', true);
                   close();
                 }}
               />
@@ -288,7 +284,7 @@ export const LeftSidebar: React.FC = () => {
                 icon={Cable}
                 label="New cable route"
                 onClick={() => {
-                  setIsCableWizardOpen(true);
+                  setModalOpen('cableWizard', true);
                   close();
                 }}
               />
@@ -298,7 +294,7 @@ export const LeftSidebar: React.FC = () => {
                 hint="from library"
                 onClick={() => {
                   openView('map');
-                  setIsLeftPanelOpen(true);
+                  setPanelOpen('left', true);
                   close();
                 }}
               />
@@ -307,7 +303,7 @@ export const LeftSidebar: React.FC = () => {
                 icon={TriangleAlert}
                 label="Report a fault"
                 onClick={() => {
-                  setIsFaultModalOpen(true);
+                  setModalOpen('faults', true);
                   close();
                 }}
               />
