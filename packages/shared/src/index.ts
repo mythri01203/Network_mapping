@@ -2,6 +2,7 @@ export * from './model/enums';
 export * from './model/schemas';
 export * from './model/types';
 export * from './model/collections';
+export * from './model/api';
 export * from './fiber/colors';
 export * from './domain/ids';
 export * from './domain/geo';

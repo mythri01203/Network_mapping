@@ -12,9 +12,10 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "npm run dev -w @fibergis/web",
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:web": "npm run dev -w @fibergis/web",
-    "server": "npm run server -w @fibergis/web",
+    "dev:server": "npm run dev -w @fibergis/server",
+    "start": "npm run start -w @fibergis/server",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",

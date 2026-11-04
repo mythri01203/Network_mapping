@@ -5,7 +5,8 @@
   "description": "Domain model, validation schemas and network logic shared by the FiberGIS web app and API",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./sample": "./src/sample/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -167,17 +167,53 @@ To experience the full prototype workflow:
 Requirements: Node.js 22.13+ (Node 24 recommended, see `.nvmrc`).
 
 ```bash
-npm install        # installs every workspace from the repo root
-npm run dev        # starts the web app (Vite) at http://localhost:3000
-npm run server     # starts the API server on port 5000
-npm run build      # production build of every workspace
-npm run typecheck  # type-checks every workspace
+npm install          # installs every workspace from the repo root
+npm run dev          # API (http://127.0.0.1:5000) + web app (http://localhost:3000) with hot reload
+npm run dev:server   # API only
+npm run dev:web      # web app only (proxies /api to the API)
+npm run build        # production build of every workspace
+npm start            # serves the built web app and the API from http://127.0.0.1:5000
+npm run typecheck    # type-checks every workspace
+npm test             # unit and API tests
 ```
+
+### API server
+
+`apps/server` is a Fastify API that stores the network in SQLite (`node:sqlite`, no native dependencies). On first start
+it creates the database and seeds it with the sample network. All endpoints live under `/api/v1`:
+
+| Method               | Path                 | Purpose                                                             |
+| -------------------- | -------------------- | ------------------------------------------------------------------- |
+| `GET`                | `/health`            | Status, data revision and record counts                             |
+| `GET`                | `/network`           | The whole network snapshot with its revision                        |
+| `POST`               | `/changes`           | Atomic batch of upserts and deletes across collections              |
+| `GET`/`PUT`/`DELETE` | `/:collection[/:id]` | Record-level access, e.g. `/equipment/OLT-01`                       |
+| `GET`                | `/backup`            | Download a versioned JSON backup                                    |
+| `POST`               | `/restore`           | Restore a backup (current and legacy formats are accepted)          |
+| `POST`               | `/reset`             | Reload the sample network (the custom component catalog is kept)    |
+| `POST`               | `/routing/route`     | Road route between points via OSRM, optionally stop-order optimised |
+
+Every record is validated against the shared schemas before it is written. Configuration is read from environment
+variables:
+
+| Variable             | Default                                | Description                                                  |
+| -------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| `HOST`               | `127.0.0.1`                            | Interface to bind; use `0.0.0.0` to expose on a LAN          |
+| `PORT`               | `5000`                                 | HTTP port                                                    |
+| `DATABASE_PATH`      | `apps/server/data/fibergis.db`         | SQLite database file                                         |
+| `STATIC_DIR`         | `apps/web/dist`                        | Built web app to serve (skipped if not built)                |
+| `CORS_ORIGINS`       | localhost / 127.0.0.1 on 3000 and 5173 | Comma-separated origins allowed to call the API              |
+| `OSRM_URL`           | `https://router.project-osrm.org`      | OSRM routing service                                         |
+| `ROUTING_TIMEOUT_MS` | `5000`                                 | Routing request timeout                                      |
+| `SEED_SAMPLE_DATA`   | `true`                                 | Seed the sample network into an empty database               |
+| `LOG_LEVEL`          | `info`                                 | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent` |
 
 ## Repository Layout
 
 ```
 apps/
+  server/     Fastify + SQLite REST API that also serves the built web app (@fibergis/server)
   web/        React + Vite + Leaflet single-page app (@fibergis/web)
-packages/     shared libraries (added as the codebase is modularised)
+packages/
+  shared/     Domain model, validation schemas, business rules and API contract (@fibergis/shared)
 ```

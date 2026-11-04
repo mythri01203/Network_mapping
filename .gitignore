@@ -29,12 +29,14 @@ pnpm-debug.log*
 Thumbs.db
 
 # Server runtime data
+apps/server/data/
+*.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
-server_data.json
-server_data.json.tmp
 
 # Test output
 coverage/

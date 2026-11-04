@@ -14,7 +14,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
-      "@fibergis/shared": ["./packages/shared/src/index.ts"]
+      "@fibergis/shared": ["./packages/shared/src/index.ts"],
+      "@fibergis/shared/sample": ["./packages/shared/src/sample/index.ts"]
     }
   }
 }

@@ -44,7 +44,7 @@ import {
   SAMPLE_AUDIT_LOGS,
   SAMPLE_ZONES,
   SAMPLE_DOCUMENTS,
-} from '../data/sampleNetwork';
+} from '@fibergis/shared/sample';
 
 /**
  * Bump whenever the bundled sample network changes shape so stale browser data

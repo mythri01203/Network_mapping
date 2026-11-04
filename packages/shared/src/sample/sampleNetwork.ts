@@ -1,17 +1,16 @@
-import {
-  type Equipment,
-  type Cable,
-  type Splitter,
-  type JointClosure,
-  type Customer,
-  type Fault,
-  type WorkOrder,
-  type AuditLog,
-  type NetworkZone,
-  type NetworkDocument,
-  getFiberColor,
-  getTubeNumber,
-} from '@fibergis/shared';
+import type {
+  Equipment,
+  Cable,
+  Splitter,
+  JointClosure,
+  Customer,
+  Fault,
+  WorkOrder,
+  AuditLog,
+  NetworkZone,
+  NetworkDocument,
+} from '../model/types';
+import { getFiberColor, getTubeNumber } from '../fiber/colors';
 
 // Helper to generate fiber cores
 function generateCores(count: number, usedCount: number, reservedCount = 2, damagedCount = 1) {
