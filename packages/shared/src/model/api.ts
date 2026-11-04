@@ -1,9 +1,10 @@
 import { z } from 'zod';
+
 import {
   COLLECTION_NAMES,
   COLLECTION_SCHEMAS,
-  isCollectionName,
   type CollectionName,
+  isCollectionName,
   type NetworkSnapshot,
 } from './collections';
 import { latLngSchema } from './schemas';

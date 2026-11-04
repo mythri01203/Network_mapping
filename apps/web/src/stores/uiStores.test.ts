@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TOAST_DURATION_MS, useToastStore } from './toastStore';
+
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
+import { TOAST_DURATION_MS, useToastStore } from './toastStore';
 import { knowledgeKeyFor, selectionLabel, useUiStore } from './uiStore';
 
 describe('toastStore', () => {

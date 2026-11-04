@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { applyPatch } from '../src/domain/command';
 import {
   addEquipmentPhoto,
@@ -8,7 +9,7 @@ import {
   saveImageAnnotation,
   updateEquipmentPort,
 } from '../src/domain/equipment';
-import { NOW, cable, customer, emptyNetwork, equipment, smallNetwork, splitter } from './fixtures';
+import { cable, customer, emptyNetwork, equipment, NOW, smallNetwork, splitter } from './fixtures';
 
 const ctx = { now: NOW, actor: 'Planner User' };
 

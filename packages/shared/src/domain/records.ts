@@ -2,9 +2,9 @@ import type { NetworkDocument, NetworkZone } from '../model/types';
 import {
   type CommandContext,
   type CommandResult,
-  type NetworkData,
   fail,
   networkAnchor,
+  type NetworkData,
   notice,
   sameId,
   succeed,

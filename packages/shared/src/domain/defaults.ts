@@ -1,6 +1,6 @@
+import { getFiberColor, getTubeNumber } from '../fiber/colors';
 import type { CableType, EquipmentType } from '../model/enums';
 import type { FiberCore } from '../model/types';
-import { getFiberColor, getTubeNumber } from '../fiber/colors';
 
 const PASSIVE_INFRASTRUCTURE = new Set<string>([
   'Manhole',

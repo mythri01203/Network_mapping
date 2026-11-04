@@ -1,5 +1,5 @@
 import type { JointClosure, SpliceRecord } from '../model/types';
-import { type CommandResult, type NetworkData, fail, notice, succeed } from './command';
+import { type CommandResult, fail, type NetworkData, notice, succeed } from './command';
 
 const usesEndpoint = (s: SpliceRecord, cableId: string, core: number) =>
   (s.inputCableId === cableId && s.inputCore === core) || (s.outputCableId === cableId && s.outputCore === core);

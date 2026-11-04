@@ -1,4 +1,5 @@
-import { type StateStorage, createJSONStorage } from 'zustand/middleware';
+import { createJSONStorage, type StateStorage } from 'zustand/middleware';
+
 import { browserStorage, storageKey } from '../lib/storage';
 
 const noopStorage: StateStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };

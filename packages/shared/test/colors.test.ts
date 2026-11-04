@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { STANDARD_12_COLORS, getFiberColor, getTubeColor, getTubeNumber } from '../src/fiber/colors';
+
+import { getFiberColor, getTubeColor, getTubeNumber, STANDARD_12_COLORS } from '../src/fiber/colors';
 
 describe('TIA-598 fiber colours', () => {
   it('defines 12 colours in standard order', () => {

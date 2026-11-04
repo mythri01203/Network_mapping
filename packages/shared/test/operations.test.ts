@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { applyPatch } from '../src/domain/command';
 import {
   createWorkOrder,
@@ -7,7 +8,7 @@ import {
   resolveFault,
   setWorkOrderStatus,
 } from '../src/domain/operations';
-import { NOW, emptyNetwork, fault, smallNetwork, workOrder } from './fixtures';
+import { emptyNetwork, fault, NOW, smallNetwork, workOrder } from './fixtures';
 
 const ctx = { now: NOW };
 

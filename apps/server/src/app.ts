@@ -1,10 +1,12 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
+
 import { API_PREFIX, type ApiErrorBody } from '@fibergis/shared';
+
 import type { AppConfig } from './config';
 import type { NetworkRepository } from './db/repository';
 import { HttpError } from './lib/errors';

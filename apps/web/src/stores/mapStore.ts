@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import type { CableType, EquipmentType, LatLng } from '@fibergis/shared';
+
 import { preferenceKey, preferenceStorage } from './persistStorage';
 
 export type MapTool = 'select' | 'draw_cable' | 'add_equipment' | 'measure' | 'trace';

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { generateLogicalPorts, setPortUsage, summarizePorts } from '../src/domain/ports';
 import { equipment } from './fixtures';
 

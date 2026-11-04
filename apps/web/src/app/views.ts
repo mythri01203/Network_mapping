@@ -1,22 +1,23 @@
 import { useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router';
 import {
+  Boxes,
+  Cable,
+  ClipboardList,
+  HardHat,
+  Hexagon,
+  type LucideIcon,
   Map as MapIcon,
   Network,
   Server,
-  Boxes,
-  Cable,
-  Users,
-  Tv,
-  Hexagon,
-  ClipboardList,
-  HardHat,
   Settings2,
-  type LucideIcon,
+  Tv,
+  Users,
 } from 'lucide-react';
-import type { MainView } from '../types/ui';
+import { useLocation, useNavigate } from 'react-router';
+
 import { useMapStore } from '../stores/mapStore';
-import { useUiStore, type SelectedObject } from '../stores/uiStore';
+import { type SelectedObject, useUiStore } from '../stores/uiStore';
+import type { MainView } from './mainView';
 import { focusFor } from './mapFocus';
 
 export interface ViewMeta {

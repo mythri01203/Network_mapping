@@ -1,15 +1,17 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
-  COLLECTION_NAMES,
-  isCollectionName,
   type ChangeResult,
   type ChangeSet,
+  COLLECTION_NAMES,
   type CollectionName,
   type CollectionRecord,
+  isCollectionName,
   type NetworkSnapshot,
 } from '@fibergis/shared';
+
 import type { NetworkRepository } from './repository';
 
 /** Ordered schema migrations; `PRAGMA user_version` records how many have been applied. */

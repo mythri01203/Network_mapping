@@ -1,12 +1,14 @@
+import type { FastifyInstance } from 'fastify';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { API_PREFIX, createBackup, type NetworkResponse } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { buildApp } from '../src/app';
-import { loadConfig, type AppConfig } from '../src/config';
+import { type AppConfig, loadConfig } from '../src/config';
 import { seedSampleNetwork } from '../src/db/seed';
 import { SqliteNetworkRepository } from '../src/db/sqliteRepository';
 

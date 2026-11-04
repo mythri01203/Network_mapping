@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import { uniqueId } from '@fibergis/shared';
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';

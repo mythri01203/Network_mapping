@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
 import { SAMPLE_CABLES, SAMPLE_CUSTOMERS, SAMPLE_EQUIPMENT, SAMPLE_FAULTS } from '@fibergis/shared/sample';
-import { POINT_FOCUS_ZOOM, ROUTE_FOCUS_ZOOM, focusFor } from './mapFocus';
+
+import { focusFor, POINT_FOCUS_ZOOM, ROUTE_FOCUS_ZOOM } from './mapFocus';
 
 describe('focusFor', () => {
   it('centres on equipment and customers at street zoom', () => {

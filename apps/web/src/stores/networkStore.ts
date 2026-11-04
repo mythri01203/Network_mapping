@@ -1,24 +1,26 @@
 import { create } from 'zustand';
+
 import {
+  applyPatch,
   type AuditEntry,
   type AuditLog,
   type CatalogComponent,
+  COLLECTION_NAMES,
   type CollectionName,
   type CommandContext,
   type CommandResult,
   type CommandSuccess,
+  formatLogTimestamp,
+  isLatLngPair,
   type LatLng,
   type NetworkData,
   type NetworkPatch,
   type NetworkSnapshot,
-  type UserRole,
-  COLLECTION_NAMES,
-  applyPatch,
-  formatLogTimestamp,
-  isLatLngPair,
   uniqueId,
+  type UserRole,
 } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { confirmAction } from '../lib/browser';
 import { browserStorage, readJson, removeKeys, storageKey, writeJson } from '../lib/storage';
 import { showToast } from './toastStore';

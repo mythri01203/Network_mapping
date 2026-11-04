@@ -1,4 +1,5 @@
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import type { NetworkRepository } from './repository';
 
 /**

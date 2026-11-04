@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { changeSetSchema, createBackup, parseBackup, type ChangeSet, type NetworkSnapshot } from '@fibergis/shared';
+
+import { type ChangeSet, changeSetSchema, createBackup, type NetworkSnapshot, parseBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
-import { badRequest } from '../lib/errors';
+
 import type { NetworkRepository } from '../db/repository';
+import { badRequest } from '../lib/errors';
 
 /** Whole-network operations: snapshot reads, batched changes, backup/restore and demo reset. */
 export const networkRoutes =

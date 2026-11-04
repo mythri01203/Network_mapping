@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { cn } from './cn';
 
 export type BadgeTone = 'neutral' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'cyan';

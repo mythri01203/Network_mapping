@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+
 import { allocateCore, createCable, deleteCable } from '../src/domain/cables';
 import { applyPatch } from '../src/domain/command';
 import { buildCores } from '../src/domain/defaults';
-import { NOW, cable, closure, emptyNetwork, equipment, smallNetwork, splice } from './fixtures';
+import { cable, closure, emptyNetwork, equipment, NOW, smallNetwork, splice } from './fixtures';
 
 const ctx = { now: NOW };
 const route: [number, number][] = [

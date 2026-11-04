@@ -1,16 +1,16 @@
-import type {
-  Equipment,
-  Cable,
-  Splitter,
-  JointClosure,
-  Customer,
-  Fault,
-  WorkOrder,
-  AuditLog,
-  NetworkZone,
-  NetworkDocument,
-} from '../model/types';
 import { getFiberColor, getTubeNumber } from '../fiber/colors';
+import type {
+  AuditLog,
+  Cable,
+  Customer,
+  Equipment,
+  Fault,
+  JointClosure,
+  NetworkDocument,
+  NetworkZone,
+  Splitter,
+  WorkOrder,
+} from '../model/types';
 
 // Helper to generate fiber cores
 function generateCores(count: number, usedCount: number, reservedCount = 2, damagedCount = 1) {

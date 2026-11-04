@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { COLLECTION_SCHEMAS, isCollectionName, type ChangeSet, type CollectionName } from '@fibergis/shared';
-import { badRequest, notFound } from '../lib/errors';
+
+import { type ChangeSet, COLLECTION_SCHEMAS, type CollectionName, isCollectionName } from '@fibergis/shared';
+
 import type { NetworkRepository } from '../db/repository';
+import { badRequest, notFound } from '../lib/errors';
 
 interface CollectionParams {
   collection: string;

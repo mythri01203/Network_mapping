@@ -2,15 +2,15 @@ import type { Fault, WorkOrder } from '../model/types';
 import {
   type CommandContext,
   type CommandResult,
-  type NetworkData,
   fail,
   networkAnchor,
+  type NetworkData,
   notice,
   succeed,
 } from './command';
 import { nextSequentialId } from './ids';
-import { collectDownstream } from './trace';
 import { formatTimestamp, isoDate } from './time';
+import { collectDownstream } from './trace';
 
 export type FaultDraft = Partial<Fault>;
 export type WorkOrderDraft = Partial<WorkOrder> & { title: string };

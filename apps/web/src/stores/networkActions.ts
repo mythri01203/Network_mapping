@@ -2,7 +2,6 @@
  * User-level network operations. Each is a thin adapter over a pure domain command from
  * `@fibergis/shared`, run through the network store so it gets toasts, confirmation, undo and audit.
  */
-import * as domain from '@fibergis/shared';
 import type {
   AuditLog,
   Cable,
@@ -18,6 +17,8 @@ import type {
   SpliceRecord,
   WorkOrder,
 } from '@fibergis/shared';
+import * as domain from '@fibergis/shared';
+
 import { syncEngine } from '../api/syncEngine';
 import { confirmAction, downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+
 import type { TracePathNode, TraceResult, TraceSummary } from '@fibergis/shared';
 
 export interface TraceState {

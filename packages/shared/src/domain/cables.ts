@@ -3,8 +3,8 @@ import type { Cable } from '../model/types';
 import {
   type CommandContext,
   type CommandResult,
-  type NetworkData,
   fail,
+  type NetworkData,
   notice,
   previewIds,
   sameId,

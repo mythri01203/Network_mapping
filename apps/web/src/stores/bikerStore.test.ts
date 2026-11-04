@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { useBikerStore } from './bikerStore';
 import { useMapStore } from './mapStore';
 import { useNetworkStore } from './networkStore';

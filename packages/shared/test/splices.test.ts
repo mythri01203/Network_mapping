@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { applyPatch } from '../src/domain/command';
 import { addSplice, removeSplice } from '../src/domain/splices';
 import { closure, emptyNetwork, splice } from './fixtures';

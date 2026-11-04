@@ -1,5 +1,7 @@
-import { createSampleNetwork } from '@fibergis/shared/sample';
 import { describe, expect, it, vi } from 'vitest';
+
+import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { ApiError, ApiUnavailableError, createApiClient, describeApiError, isTransientError } from './client';
 
 const jsonResponse = (body: unknown, status = 200) =>

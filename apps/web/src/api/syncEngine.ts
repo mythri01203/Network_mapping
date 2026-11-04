@@ -1,11 +1,11 @@
 import type { NetworkSnapshot, ParsedBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { readJson, writeJson } from '../lib/storage';
-import { SYNC_META_STORAGE_KEY, getNetworkSnapshot, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
-import { type SyncPhase, initialSyncState, useSyncStore } from '../stores/syncStore';
+import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
+import { initialSyncState, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
 import {
-  type PendingIds,
   buildChangeSet,
   changedIds,
   countPending,
@@ -13,6 +13,7 @@ import {
   isEmptyPending,
   mergePending,
   omitCollections,
+  type PendingIds,
   reconcile,
   sameValue,
 } from './changeTracking';

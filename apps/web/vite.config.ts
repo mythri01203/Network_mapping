@@ -1,8 +1,8 @@
 /// <reference types="vitest/config" />
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
 
 const sharedSource = (file: string) => fileURLToPath(new URL(`../../packages/shared/src/${file}`, import.meta.url));
 

@@ -1,6 +1,8 @@
-import { type NetworkSnapshot, changeSetSchema } from '@fibergis/shared';
-import { createSampleNetwork } from '@fibergis/shared/sample';
 import { describe, expect, it } from 'vitest';
+
+import { changeSetSchema, type NetworkSnapshot } from '@fibergis/shared';
+import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import {
   buildChangeSet,
   changedIds,

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { createBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { storageKey } from '../lib/storage';
 import * as actions from './networkActions';
-import { MAX_HISTORY, getNetworkSnapshot, selectCanRedo, selectCanUndo, useNetworkStore } from './networkStore';
+import { getNetworkSnapshot, MAX_HISTORY, selectCanRedo, selectCanUndo, useNetworkStore } from './networkStore';
 import { useToastStore } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { useUiStore } from './uiStore';

@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
+
 import type { HealthResponse } from '@fibergis/shared';
-import type { NetworkRepository } from '../db/repository';
+
 import pkg from '../../package.json' with { type: 'json' };
+import type { NetworkRepository } from '../db/repository';
 
 export const systemRoutes =
   (repository: NetworkRepository): FastifyPluginAsync =>

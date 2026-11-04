@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
 import type { Cable, Customer, Equipment, Fault, JointClosure, UserRole } from '@fibergis/shared';
+
 import { preferenceKey, preferenceStorage } from './persistStorage';
 
 export type SelectedObject =

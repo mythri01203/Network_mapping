@@ -1,9 +1,9 @@
 import {
   API_PREFIX,
-  COLLECTION_NAMES,
   type ApiErrorBody,
   type ChangeResult,
   type ChangeSet,
+  COLLECTION_NAMES,
   type CollectionName,
   type HealthResponse,
   type LatLng,

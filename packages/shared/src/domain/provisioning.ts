@@ -1,11 +1,11 @@
 import type { Cable, Customer, Equipment } from '../model/types';
-import { type CommandContext, type CommandResult, type NetworkData, fail, notice, sameId, succeed } from './command';
+import { type CommandContext, type CommandResult, fail, type NetworkData, notice, sameId, succeed } from './command';
 import { buildCores } from './defaults';
 import { polylineLengthMeters } from './geo';
 import { nextSequentialId, uniqueId } from './ids';
 import { setPortUsage } from './ports';
-import { RX_WARNING_DBM, estimateRxForSplitter } from './trace';
 import { isoDate } from './time';
+import { estimateRxForSplitter, RX_WARNING_DBM } from './trace';
 
 export type CustomerDraft = Partial<Customer>;
 

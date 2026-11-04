@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, type LucideIcon } from 'lucide-react';
+import { type LucideIcon, X } from 'lucide-react';
+
 import { cn } from './cn';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';

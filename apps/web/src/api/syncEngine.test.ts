@@ -1,20 +1,22 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
-  COLLECTION_NAMES,
   type ChangeSet,
+  changeSetSchema,
+  COLLECTION_NAMES,
   type CollectionName,
   type HealthResponse,
   type NetworkSnapshot,
-  changeSetSchema,
 } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { storageKey } from '../lib/storage';
-import { SYNC_META_STORAGE_KEY, getNetworkSnapshot, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
-import { useSyncStore } from '../stores/syncStore';
 import type * as NetworkStore from '../stores/networkStore';
+import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
+import { useSyncStore } from '../stores/syncStore';
 import { useToastStore } from '../stores/toastStore';
-import { ApiError, type ApiClient, ApiUnavailableError } from './client';
-import { type SyncEngine, createSyncEngine } from './syncEngine';
+import { type ApiClient, ApiError, ApiUnavailableError } from './client';
+import { createSyncEngine, type SyncEngine } from './syncEngine';
 
 vi.mock('../stores/networkStore', async (importOriginal) => ({
   ...(await importOriginal<typeof NetworkStore>()),

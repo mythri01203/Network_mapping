@@ -10,6 +10,7 @@ import {
   Disc,
   HardDrive,
   House,
+  type LucideIcon,
   Network,
   PanelsTopLeft,
   RadioTower,
@@ -19,16 +20,16 @@ import {
   Server,
   Shield,
   Signal,
-  Split,
   Spline,
+  Split,
   SquareDashed,
   Tv,
   UtilityPole,
   Warehouse,
   Waypoints,
   Wifi,
-  type LucideIcon,
 } from 'lucide-react';
+
 import type { EquipmentType } from '@fibergis/shared';
 
 export const EQUIPMENT_ICONS: Record<EquipmentType, LucideIcon> = {

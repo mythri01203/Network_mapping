@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
 import { applyPatch } from '../src/domain/command';
 import { createDocument, createZone, deleteDocument, deleteZone, updateZone } from '../src/domain/records';
-import { NOW, emptyNetwork, smallNetwork } from './fixtures';
+import { emptyNetwork, NOW, smallNetwork } from './fixtures';
 
 const ctx = { now: NOW, actor: 'Admin User' };
 

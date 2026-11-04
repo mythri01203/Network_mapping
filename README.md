@@ -229,3 +229,21 @@ apps/
 packages/
   shared/     Domain model, validation schemas, business rules and API contract (@fibergis/shared)
 ```
+
+Inside `apps/web/src`:
+
+```
+app/          App shell: router, view registry, top bar, sidebar, global modal host, toasts
+features/     One folder per product area (map, inspector, catalog, ports, splicing, trace,
+              faults, reports, field-work, cables, customers, inventory, topology, olt-rack,
+              cable-tv, zones, operations, settings, documents, knowledge, help)
+components/   Shared building blocks: ui/ (design system) and icons/ (equipment illustrations)
+stores/       Zustand stores (network data + undo, map, UI, trace, biker, sync, toasts)
+api/          Typed API client and the offline-first sync engine
+lib/          Framework-free helpers (routing, KML export, storage)
+theme/        Visual tokens shared by the map and UI (cable styles)
+```
+
+A feature folder may import from `components/`, `stores/`, `api/`, `lib/` and `@fibergis/shared`, and
+from another feature only for an explicit entry point (for example the map workspace composes the
+inspector and catalog panels). Imports are auto-sorted by ESLint (`npm run lint:fix`).

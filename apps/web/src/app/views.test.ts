@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
+import type { MainView } from './mainView';
 import { VIEW_META, viewForPath } from './views';
-import type { MainView } from '../types/ui';
 
 describe('viewForPath', () => {
   it('maps the root to the network map', () => {

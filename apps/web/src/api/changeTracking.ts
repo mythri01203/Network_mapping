@@ -1,4 +1,4 @@
-import { COLLECTION_NAMES, type ChangeSet, type CollectionName, type NetworkSnapshot } from '@fibergis/shared';
+import { type ChangeSet, COLLECTION_NAMES, type CollectionName, type NetworkSnapshot } from '@fibergis/shared';
 
 /** Ids of records changed locally and not yet acknowledged by the server, per collection. */
 export type PendingIds = Partial<Record<CollectionName, string[]>>;

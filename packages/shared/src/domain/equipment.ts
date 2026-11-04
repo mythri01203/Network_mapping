@@ -3,8 +3,8 @@ import type { Equipment, EquipmentImage, EquipmentPort, ImageAnnotation } from '
 import {
   type CommandContext,
   type CommandResult,
-  type NetworkData,
   fail,
+  type NetworkData,
   notice,
   previewIds,
   sameId,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { classifyRxPower, simulatedOpticalPower } from '../src/domain/opticalPower';
 import { equipment } from './fixtures';
 

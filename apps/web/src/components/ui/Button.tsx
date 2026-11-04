@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2, type LucideIcon } from 'lucide-react';
+
 import { cn } from './cn';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'subtle' | 'dark';

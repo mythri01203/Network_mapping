@@ -1,6 +1,8 @@
 import { create } from 'zustand';
+
 import type { LatLng } from '@fibergis/shared';
-import { type RoadRoute, type RouteStop, estimateRoadRoute, fetchRoadRoute } from '../lib/routing';
+
+import { estimateRoadRoute, fetchRoadRoute, type RoadRoute, type RouteStop } from '../lib/routing';
 import { useMapStore } from './mapStore';
 import { useNetworkStore } from './networkStore';
 import { showToast } from './toastStore';

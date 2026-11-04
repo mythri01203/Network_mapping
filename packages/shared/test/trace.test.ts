@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+
 import {
-  type TraceData,
   budgetStatusFor,
   collectDownstream,
   findServingOlt,
   resolveTraceTarget,
   traceCable,
+  type TraceData,
   traceEquipment,
 } from '../src/domain/trace';
 import { cable, closure, equipment, fault, smallNetwork } from './fixtures';

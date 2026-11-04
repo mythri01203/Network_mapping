@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
 import { applyPatch } from '../src/domain/command';
 import { allocateIpAddress, provisionCustomer } from '../src/domain/provisioning';
-import { NOW, customer, smallNetwork } from './fixtures';
+import { customer, NOW, smallNetwork } from './fixtures';
 
 const ctx = { now: NOW };
 const target = { terminalBoxId: 'FAT-01', splitterId: 'SPL-01', splitterOutputPort: 2 };

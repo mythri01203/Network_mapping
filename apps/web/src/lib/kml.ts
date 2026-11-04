@@ -1,4 +1,5 @@
 import type { Cable, Customer, Equipment } from '@fibergis/shared';
+
 import { escapeXml as x } from './xml';
 
 export interface KmlSource {

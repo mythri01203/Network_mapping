@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { createSampleNetwork } from '@fibergis/shared/sample';
+
 import { buildNetworkKml } from './kml';
 
 describe('buildNetworkKml', () => {

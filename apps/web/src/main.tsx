@@ -1,8 +1,10 @@
+import './index.css';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+
 import { syncEngine } from './api/syncEngine';
-import './index.css';
+import App from './app/App';
 
 syncEngine.start();
 
