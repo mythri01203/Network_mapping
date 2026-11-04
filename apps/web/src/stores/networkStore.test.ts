@@ -148,12 +148,12 @@ describe('undo / redo', () => {
 });
 
 describe('backup restore', () => {
-  it('restores a backup created from the current network', () => {
+  it('restores a backup created from the current network', async () => {
     const snapshot = { ...getNetworkSnapshot(), equipment: getNetworkSnapshot().equipment.slice(0, 2) };
     const backup = createBackup(snapshot, '2026-01-01T00:00:00.000Z', [1, 2]);
     actions.addEquipment(draft);
 
-    expect(actions.restoreSystem(JSON.stringify(backup))).toBe(true);
+    await expect(actions.restoreSystem(JSON.stringify(backup))).resolves.toBe(true);
     const state = useNetworkStore.getState();
     expect(state.equipment).toEqual(snapshot.equipment);
     expect(state.projectStartPoint).toEqual([1, 2]);
@@ -161,10 +161,10 @@ describe('backup restore', () => {
     expect(state.auditLogs[0].action).toBe('BACKUP_RESTORED');
   });
 
-  it('rejects invalid JSON and invalid backups', () => {
+  it('rejects invalid JSON and invalid backups', async () => {
     const before = useNetworkStore.getState().equipment;
-    expect(actions.restoreSystem('{not json')).toBe(false);
-    expect(actions.restoreSystem(JSON.stringify({ equipment: 'nope' }))).toBe(false);
+    await expect(actions.restoreSystem('{not json')).resolves.toBe(false);
+    await expect(actions.restoreSystem(JSON.stringify({ equipment: 'nope' }))).resolves.toBe(false);
     expect(useNetworkStore.getState().equipment).toBe(before);
     expect(lastToast()?.title).toBe('Restore Failed');
   });

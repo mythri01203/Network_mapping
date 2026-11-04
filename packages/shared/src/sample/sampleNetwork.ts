@@ -2423,17 +2423,8 @@ export const SAMPLE_WORK_ORDERS: WorkOrder[] = [
   },
 ];
 
+/** Newest first, the order the app keeps its audit trail in. */
 export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
-  {
-    id: 'LOG-001',
-    timestamp: '2026-11-01 08:35:12',
-    user: 'NOC Auto-Monitor',
-    role: 'Administrator',
-    action: 'FAULT_DETECTED',
-    details: 'Optical Loss of Signal detected on OLT-01 PON-01 (Feeder 01 downstream branch)',
-    assetId: 'CBL-BRANCH-01',
-    assetType: 'Cable',
-  },
   {
     id: 'LOG-002',
     timestamp: '2026-11-01 08:42:00',
@@ -2443,6 +2434,16 @@ export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
     details: 'Dispatched emergency work order WO-2026-104 to technician Arun Varma',
     assetId: 'WO-2026-104',
     assetType: 'WorkOrder',
+  },
+  {
+    id: 'LOG-001',
+    timestamp: '2026-11-01 08:35:12',
+    user: 'NOC Auto-Monitor',
+    role: 'Administrator',
+    action: 'FAULT_DETECTED',
+    details: 'Optical Loss of Signal detected on OLT-01 PON-01 (Feeder 01 downstream branch)',
+    assetId: 'CBL-BRANCH-01',
+    assetType: 'Cable',
   },
   {
     id: 'LOG-003',

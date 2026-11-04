@@ -18,10 +18,9 @@ import type {
   SpliceRecord,
   WorkOrder,
 } from '@fibergis/shared';
-import { createSampleNetwork } from '@fibergis/shared/sample';
+import { syncEngine } from '../api/syncEngine';
 import { confirmAction, downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';
-import { writeJson } from '../lib/storage';
 import { useMapStore } from './mapStore';
 import { type Command, type CommandOptions, getNetworkData, getNetworkSnapshot, useNetworkStore } from './networkStore';
 import { showToast } from './toastStore';
@@ -187,7 +186,11 @@ export function backupSystem() {
   );
 }
 
-export function restoreSystem(json: string): boolean {
+/**
+ * Restores a backup file. The file is validated here; the data then goes to the server (or this
+ * browser while offline). Resolves to whether anything was restored.
+ */
+export async function restoreSystem(json: string): Promise<boolean> {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -201,22 +204,29 @@ export function restoreSystem(json: string): boolean {
     return false;
   }
 
-  const { collections, projectStartPoint } = parsed.backup;
-  const restored = Object.keys(collections);
-  useNetworkStore.getState().replaceCollections(collections, projectStartPoint);
+  const outcome = await syncEngine.restore(parsed.backup);
+  if (outcome === 'failed') return false;
+  const restored = Object.keys(parsed.backup.collections);
   clearTransientState();
-  showToast('success', 'System Restored', `Restored ${restored.length} dataset(s): ${restored.join(', ')}`);
+  showToast(
+    'success',
+    'System Restored',
+    `Restored ${restored.length} dataset(s): ${restored.join(', ')}${outcome === 'local' ? ' (offline; will sync when the server is back)' : ''}`,
+  );
   logAudit('BACKUP_RESTORED', `Restored datasets: ${restored.join(', ')}`, 'SYSTEM', 'System');
   return true;
 }
 
-export function resetToSampleData() {
-  if (!confirmAction('Reset the entire network to the bundled sample dataset? All local changes will be lost.')) return;
-  // The component catalog is user configuration, not network data, so it survives a reset.
-  const { catalog } = useNetworkStore.getState();
-  useNetworkStore.getState().replaceCollections({ ...createSampleNetwork(), catalog });
+/** Reloads the demo network. The component catalog is user configuration, so it is kept. */
+export async function resetToSampleData(): Promise<boolean> {
+  if (!confirmAction('Reset the entire network to the bundled sample dataset? All network changes will be lost.')) {
+    return false;
+  }
+  const outcome = await syncEngine.reset();
+  if (outcome === 'failed') return false;
   clearTransientState();
   showToast('info', 'Sample Data Restored', 'The network has been reset to the bundled sample dataset.');
+  return true;
 }
 
 export function exportKML() {
@@ -230,26 +240,5 @@ export function exportKML() {
     'success',
     'KML Export Complete',
     `Exported ${equipment.length} equipment, ${cables.length} cables and ${customers.length} customers.`,
-  );
-}
-
-// --- Draft / publish (local prototype workflow) --------------------------------------------------
-
-export function saveDraft() {
-  useUiStore.getState().setPublishState('draft');
-  showToast(
-    'info',
-    'Draft Saved',
-    'Changes are stored locally as a prototype draft. This is not a production database.',
-  );
-}
-
-export function publishNetwork() {
-  useUiStore.getState().setPublishState('published');
-  writeJson('published_at', new Date().toISOString());
-  showToast(
-    'success',
-    'Published (prototype)',
-    'A local published snapshot was stored. No live GIS or hardware sync is connected.',
   );
 }

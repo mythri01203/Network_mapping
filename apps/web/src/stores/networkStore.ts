@@ -32,6 +32,8 @@ import { type SelectedObject, type SelectedObjectType, useUiStore } from './uiSt
 const DATA_VERSION = '3';
 const DATA_VERSION_KEY = 'data_version';
 const PROJECT_START_KEY = 'project_start';
+/** Server sync bookkeeping (last revision, unsent ids); it describes the cached collections below. */
+export const SYNC_META_STORAGE_KEY = 'sync';
 /** localStorage keys predate the shared collection names, so they are mapped explicitly. */
 const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   equipment: 'equipment',
@@ -97,7 +99,7 @@ export interface NetworkState extends NetworkSnapshot {
   logAudit: (...entries: AuditEntry[]) => void;
   undo: () => void;
   redo: () => void;
-  /** Swaps in whole collections (restore, reset, server load) and starts a fresh undo history. */
+  /** Swaps in whole collections (restore, reset, server load); changed network data starts a fresh undo history. */
   replaceCollections: (collections: Partial<NetworkSnapshot>, projectStartPoint?: LatLng | null) => void;
   setProjectStartPoint: (point: LatLng | null) => void;
   addCatalogComponent: (item: CatalogComponent) => void;
@@ -117,15 +119,26 @@ function ensureStorageVersion(): void {
   const storage = browserStorage();
   try {
     if (!storage || storage.getItem(storageKey(DATA_VERSION_KEY)) === DATA_VERSION) return;
-    removeKeys([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY]);
+    removeKeys([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY, SYNC_META_STORAGE_KEY]);
     storage.setItem(storageKey(DATA_VERSION_KEY), DATA_VERSION);
   } catch {
     // Storage unavailable: the bundled sample is used in memory.
   }
 }
 
+let loadedFromCache = false;
+
+/** Whether the store started from collections cached in this browser rather than the bundled sample. */
+export const wasLoadedFromCache = (): boolean => loadedFromCache;
+
 function loadInitialState(): Pick<NetworkState, CollectionName | 'projectStartPoint'> {
   ensureStorageVersion();
+  try {
+    const storage = browserStorage();
+    loadedFromCache = Object.values(COLLECTION_STORAGE_KEYS).some((key) => storage?.getItem(storageKey(key)) != null);
+  } catch {
+    loadedFromCache = false;
+  }
   const sample = createSampleNetwork();
   const collections = Object.fromEntries(
     COLLECTION_NAMES.map((name) => [name, readJson(COLLECTION_STORAGE_KEYS[name], sample[name], isRecordArray)]),
@@ -232,7 +245,8 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
         ...(projectStartPoint !== undefined ? { projectStartPoint } : {}),
       });
       const after = pickData(get());
-      set({ history: freshHistory(after) });
+      // Undo only covers DATA_KEYS, so audit-log or catalog refreshes leave the history intact.
+      if (DATA_KEYS.some((key) => before[key] !== after[key])) set({ history: freshHistory(after) });
       syncSelection(before, after);
     },
 

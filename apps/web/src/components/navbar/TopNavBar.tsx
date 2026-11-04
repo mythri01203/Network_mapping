@@ -33,6 +33,7 @@ import {
   cableColor,
 } from '../ui';
 import { VIEW_META, ROLE_INITIALS } from '../sidebar/navigation';
+import { SyncStatus } from './SyncStatus';
 
 type ResultKind = 'equipment' | 'cable' | 'customer' | 'fault';
 
@@ -247,16 +248,13 @@ export const TopNavBar: React.FC = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') restoreSystem(reader.result);
+      if (typeof reader.result === 'string') void restoreSystem(reader.result);
     };
     reader.readAsText(file);
   };
 
-  const handleReset = () => {
-    if (window.confirm('Reset all network data to the sample dataset? Unsaved changes will be lost.')) {
-      resetToSampleData();
-    }
-  };
+  // resetToSampleData asks for confirmation itself.
+  const handleReset = () => void resetToSampleData();
 
   const activeFaultsCount = faults.filter((f) => f.status !== 'Resolved').length;
   const view = VIEW_META[activeMainView];
@@ -436,6 +434,8 @@ export const TopNavBar: React.FC = () => {
           ))}
         </div>
 
+        <SyncStatus />
+
         <IconButton icon={Undo2} label="Undo (Ctrl+Z)" variant="dark" size="md" onClick={undo} disabled={!canUndo} />
         <IconButton icon={Redo2} label="Redo (Ctrl+Y)" variant="dark" size="md" onClick={redo} disabled={!canRedo} />
 
@@ -484,7 +484,7 @@ export const TopNavBar: React.FC = () => {
             <>
               <div className="border-b border-slate-100 px-3 pb-2.5 pt-1.5">
                 <div className="text-[13px] font-semibold text-slate-900">{userRole}</div>
-                <div className="text-xs text-slate-500">Local workspace · data stored in this browser</div>
+                <div className="text-xs text-slate-500">Shared workspace · saved to the FiberGIS server</div>
               </div>
               <MenuLabel>Switch role</MenuLabel>
               {ROLES.map((role) => (

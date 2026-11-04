@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { RouteResponse } from '@fibergis/shared';
+import { describe, expect, it, vi } from 'vitest';
+import { ApiError, type ApiClient } from '../api/client';
 import { estimateRoadRoute, fetchRoadRoute } from './routing';
 
 const origin = { id: 'A', name: 'Hub', lat: 12.97, lng: 77.59 };
 const stop = { id: 'B', name: 'FAT-1', lat: 12.98, lng: 77.6 };
 const extra = { id: 'C', name: 'FAT-2', lat: 12.99, lng: 77.61 };
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe('estimateRoadRoute', () => {
   it('builds an L-shaped path through every stop', () => {
@@ -29,66 +29,45 @@ describe('estimateRoadRoute', () => {
 });
 
 describe('fetchRoadRoute', () => {
-  it('maps an OSRM response to lat/lng and readable steps', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () =>
-      Response.json({
-        routes: [
-          {
-            distance: 1234,
-            duration: 200,
-            geometry: {
-              coordinates: [
-                [77.59, 12.97],
-                [77.6, 12.98],
-              ],
-            },
-            legs: [
-              {
-                steps: [
-                  { name: 'MG Road', maneuver: { type: 'depart' } },
-                  { name: 'Brigade Road', maneuver: { type: 'turn', modifier: 'left' } },
-                  { maneuver: { type: 'arrive' } },
-                ],
-              },
-            ],
-          },
+  const response: RouteResponse = {
+    coordinates: [
+      [12.97, 77.59],
+      [12.98, 77.6],
+    ],
+    distanceMeters: 1234,
+    durationSeconds: 200,
+    steps: ['Depart onto MG Road', 'Arrive at stop'],
+  };
+
+  it('asks the server for a route and tags it as a road route', async () => {
+    const route = vi.fn<ApiClient['route']>(async () => response);
+    expect(await fetchRoadRoute([origin, stop], { route })).toEqual({ ...response, source: 'road' });
+    expect(route).toHaveBeenCalledWith(
+      {
+        points: [
+          [12.97, 77.59],
+          [12.98, 77.6],
         ],
-      }),
+        optimize: false,
+      },
+      expect.objectContaining({ timeoutMs: expect.any(Number) }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+  });
 
-    const route = await fetchRoadRoute([origin, stop]);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/route/v1/driving/77.59,12.97;77.6,12.98');
-    expect(route).toEqual({
-      coordinates: [
-        [12.97, 77.59],
-        [12.98, 77.6],
-      ],
-      distanceMeters: 1234,
-      durationSeconds: 200,
-      steps: ['Depart onto MG Road', 'Turn left onto Brigade Road', 'Arrive at stop'],
-      source: 'road',
+  it('optimizes the visiting order when there are several destinations', async () => {
+    const route = vi.fn<ApiClient['route']>(async () => response);
+    await fetchRoadRoute([origin, stop, extra], { route });
+    expect(route.mock.calls[0][0]).toMatchObject({ optimize: true });
+  });
+
+  it('resolves to null on failures, empty routes and single stops', async () => {
+    const failing = vi.fn<ApiClient['route']>(async () => {
+      throw new ApiError(502, 'routing_unavailable', 'down');
     });
-  });
-
-  it('uses the trip service for multiple destinations', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ trips: [] }));
-    vi.stubGlobal('fetch', fetchMock);
-    expect(await fetchRoadRoute([origin, stop, extra])).toBeNull();
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/trip/v1/driving/');
-  });
-
-  it('resolves to null on network errors and bad responses', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => Promise.reject(new Error('offline'))),
-    );
-    expect(await fetchRoadRoute([origin, stop])).toBeNull();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('nope', { status: 500 })),
-    );
-    expect(await fetchRoadRoute([origin, stop])).toBeNull();
-    expect(await fetchRoadRoute([origin])).toBeNull();
+    expect(await fetchRoadRoute([origin, stop], { route: failing })).toBeNull();
+    const empty = vi.fn<ApiClient['route']>(async () => ({ ...response, coordinates: [] }));
+    expect(await fetchRoadRoute([origin, stop], { route: empty })).toBeNull();
+    expect(await fetchRoadRoute([origin], { route: failing })).toBeNull();
+    expect(failing).toHaveBeenCalledTimes(1);
   });
 });

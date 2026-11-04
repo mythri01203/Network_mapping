@@ -150,9 +150,6 @@ interface NetworkContextType {
   updateEquipmentPort: (equipmentId: string, portId: string, changes: Partial<EquipmentPort>) => void;
   addSplice: (closureId: string, splice: SpliceRecord) => boolean;
   removeSplice: (closureId: string, spliceId: string) => void;
-  publishState: 'draft' | 'published';
-  saveDraft: () => void;
-  publishNetwork: () => void;
 
   uiMode: UiMode;
   setUiMode: (mode: UiMode) => void;
@@ -195,8 +192,8 @@ interface NetworkContextType {
   deleteDocument: (id: string) => void;
 
   backupSystem: () => void;
-  restoreSystem: (jsonString: string) => boolean;
-  resetToSampleData: () => void;
+  restoreSystem: (jsonString: string) => Promise<boolean>;
+  resetToSampleData: () => Promise<boolean>;
   exportKML: () => void;
 
   mapFlyToTarget: { lat: number; lng: number; zoom?: number } | null;
@@ -326,9 +323,6 @@ export const useNetwork = (): NetworkContextType => {
     updateEquipmentPort: actions.updateEquipmentPort,
     addSplice: actions.addSplice,
     removeSplice: actions.removeSplice,
-    publishState: ui.publishState,
-    saveDraft: actions.saveDraft,
-    publishNetwork: actions.publishNetwork,
 
     uiMode: ui.uiMode,
     setUiMode: ui.setUiMode,

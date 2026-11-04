@@ -35,7 +35,6 @@ export type ModalId = (typeof MODAL_IDS)[number];
 export type PanelId = 'left' | 'right' | 'bottom';
 export type UiMode = 'simple' | 'pro';
 export type NetworkMode = 'All' | 'Fiber' | 'CableTV';
-export type PublishState = 'draft' | 'published';
 
 type Updater<T> = T | ((prev: T) => T);
 const resolve = <T>(next: Updater<T>, prev: T): T =>
@@ -69,7 +68,6 @@ export interface UiState {
   panels: Record<PanelId, boolean>;
   isSidebarCollapsed: boolean;
   selectedKnowledgeId: string | null;
-  publishState: PublishState;
   // Preferences (persisted)
   uiMode: UiMode;
   userRole: UserRole;
@@ -82,7 +80,6 @@ export interface UiState {
   setSidebarCollapsed: (collapsed: Updater<boolean>) => void;
   setSelectedKnowledgeId: (id: string | null) => void;
   openKnowledge: (equipmentTypeOrId: string) => void;
-  setPublishState: (state: PublishState) => void;
   setUiMode: (mode: UiMode) => void;
   setUserRole: (role: UserRole) => void;
   setNetworkMode: (mode: NetworkMode) => void;
@@ -98,7 +95,6 @@ export const useUiStore = create<UiState>()(
       panels: { left: false, right: false, bottom: false },
       isSidebarCollapsed: true,
       selectedKnowledgeId: null,
-      publishState: 'draft',
       uiMode: 'simple',
       userRole: 'Network Engineer',
       networkMode: 'All',
@@ -115,7 +111,6 @@ export const useUiStore = create<UiState>()(
           selectedKnowledgeId: knowledgeKeyFor(equipmentTypeOrId),
           modals: { ...s.modals, knowledge: true },
         })),
-      setPublishState: (publishState) => set({ publishState }),
       setUiMode: (uiMode) => set({ uiMode }),
       setUserRole: (userRole) => set({ userRole }),
       setNetworkMode: (networkMode) => set({ networkMode }),

@@ -168,7 +168,7 @@ Requirements: Node.js 22.13+ (Node 24 recommended, see `.nvmrc`).
 
 ```bash
 npm install          # installs every workspace from the repo root
-npm run dev          # API (http://127.0.0.1:5000) + web app (http://localhost:3000) with hot reload
+npm run dev          # API (http://127.0.0.1:5000) + web app (http://localhost:5173) with hot reload
 npm run dev:server   # API only
 npm run dev:web      # web app only (proxies /api to the API)
 npm run build        # production build of every workspace
@@ -176,6 +176,17 @@ npm start            # serves the built web app and the API from http://127.0.0.
 npm run typecheck    # type-checks every workspace
 npm test             # unit and API tests
 ```
+
+### Saving and offline use
+
+The web app loads the network from the API and saves every edit automatically: changes are batched a moment after you
+stop editing and sent to `POST /api/v1/changes`. The status pill in the top bar shows whether everything is saved,
+lets you retry, and lets you discard unsaved edits. Other users' changes are picked up when the tab regains focus and
+every 30 seconds.
+
+A copy of the network is cached in the browser, so the app keeps working while the API is unreachable. Edits made
+offline are kept (including across reloads) and uploaded once the server is back; for records changed on both sides,
+the last saved version wins. Set `VITE_API_URL` when the API is not served from the same origin as the web app.
 
 ### API server
 

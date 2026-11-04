@@ -94,7 +94,7 @@ export const AdminConfigView: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        restoreSystem(content);
+        void restoreSystem(content);
       };
       reader.readAsText(file);
     }
