@@ -96,7 +96,7 @@ export const opticalPowerSampleSchema = z.object({
 
 export const opticalPowerInfoSchema = z.object({
   dataSource: z.literal('simulated_sample'),
-  lastUpdated: isoDate,
+  lastUpdated: isoDate.optional(),
   txPowerDbm: z.number().optional(),
   rxPowerDbm: z.number().optional(),
   signalLevel: signalLevelSchema,
