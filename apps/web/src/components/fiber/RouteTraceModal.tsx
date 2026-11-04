@@ -43,7 +43,7 @@ export const RouteTraceModal: React.FC = () => {
     traceNetworkPath,
     clearTrace,
     flyToLocation,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [searchTarget, setSearchTarget] = useState('');
@@ -64,21 +64,19 @@ export const RouteTraceModal: React.FC = () => {
     if (!q) return;
 
     // Exact identifiers first, then partial name matches.
-    const cust =
-      customers.find(c => c.id.toLowerCase() === q || c.ontSerialNumber.toLowerCase() === q) ||
-      undefined;
+    const cust = customers.find((c) => c.id.toLowerCase() === q || c.ontSerialNumber.toLowerCase() === q) || undefined;
     if (cust) return traceAndFly(cust.id, cust.lat, cust.lng);
 
-    const eq = equipments.find(x => x.id.toLowerCase() === q);
+    const eq = equipments.find((x) => x.id.toLowerCase() === q);
     if (eq) return traceAndFly(eq.id, eq.lat, eq.lng);
 
-    const cable = cables.find(c => c.id.toLowerCase() === q);
+    const cable = cables.find((c) => c.id.toLowerCase() === q);
     if (cable) return traceAndFly(cable.id, cable.coordinates[0]?.[0], cable.coordinates[0]?.[1]);
 
-    const custByName = customers.find(c => c.name.toLowerCase().includes(q));
+    const custByName = customers.find((c) => c.name.toLowerCase().includes(q));
     if (custByName) return traceAndFly(custByName.id, custByName.lat, custByName.lng);
 
-    const eqByName = equipments.find(x => x.name.toLowerCase().includes(q));
+    const eqByName = equipments.find((x) => x.name.toLowerCase().includes(q));
     if (eqByName) return traceAndFly(eqByName.id, eqByName.lat, eqByName.lng);
 
     // Faults, closures, splitters and PON ports are resolved by the context.
@@ -107,7 +105,11 @@ export const RouteTraceModal: React.FC = () => {
           </Button>
         ) : undefined
       }
-      footer={<Button variant="secondary" onClick={close}>Close</Button>}
+      footer={
+        <Button variant="secondary" onClick={close}>
+          Close
+        </Button>
+      }
     >
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
         <form onSubmit={handleSearchTrace} className="flex gap-2">
@@ -126,7 +128,7 @@ export const RouteTraceModal: React.FC = () => {
         {quickTargets.length > 0 && (
           <div className="mt-2 flex items-center gap-1.5 overflow-x-auto">
             <span className="mr-1 shrink-0 text-xs text-slate-500">Quick trace</span>
-            {quickTargets.map(c => (
+            {quickTargets.map((c) => (
               <Button
                 key={c.id}
                 variant="secondary"
@@ -151,7 +153,8 @@ export const RouteTraceModal: React.FC = () => {
                   {summary?.targetLabel || 'Traced path'}
                 </div>
                 <div className="tabular text-xs text-slate-500">
-                  {activeTracePath.length} nodes · {formatLength(summary?.totalLengthMeters ?? 0)} · {(summary?.totalLossDb ?? 0).toFixed(2)} dB loss
+                  {activeTracePath.length} nodes · {formatLength(summary?.totalLengthMeters ?? 0)} ·{' '}
+                  {(summary?.totalLossDb ?? 0).toFixed(2)} dB loss
                 </div>
               </div>
               {summary && (
@@ -169,14 +172,23 @@ export const RouteTraceModal: React.FC = () => {
 
             {summary && (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <StatTile label="OLT Tx power" value={<span className="font-mono text-base">{formatDbm(summary.txPowerDbm)}</span>} />
+                <StatTile
+                  label="OLT Tx power"
+                  value={<span className="font-mono text-base">{formatDbm(summary.txPowerDbm)}</span>}
+                />
                 <StatTile
                   label="Estimated Rx"
                   value={<span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm)}</span>}
                   tone={BUDGET_TILE_TONE[summary.budgetStatus] ?? 'default'}
                 />
-                <StatTile label="Measured Rx" value={<span className="font-mono text-base">{formatDbm(summary.measuredRxDbm)}</span>} />
-                <StatTile label="Downstream customers" value={<span className="tabular text-base">{summary.downstreamCustomerCount}</span>} />
+                <StatTile
+                  label="Measured Rx"
+                  value={<span className="font-mono text-base">{formatDbm(summary.measuredRxDbm)}</span>}
+                />
+                <StatTile
+                  label="Downstream customers"
+                  value={<span className="tabular text-base">{summary.downstreamCustomerCount}</span>}
+                />
               </div>
             )}
 
@@ -201,15 +213,17 @@ export const RouteTraceModal: React.FC = () => {
                   const canFly = hop.lat !== undefined && hop.lng !== undefined;
                   return (
                     <li key={`${hop.id}-${idx}`} className="relative flex gap-3 pb-3 last:pb-0">
-                      {!isLast && <span className="absolute left-[9.5px] top-6 bottom-0 w-px bg-slate-200" aria-hidden />}
+                      {!isLast && (
+                        <span className="absolute left-[9.5px] top-6 bottom-0 w-px bg-slate-200" aria-hidden />
+                      )}
                       <span
                         className={cn(
                           'relative z-10 mt-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold tabular',
                           isFaulty
                             ? 'border-red-600 bg-red-600 text-white'
                             : isWarning
-                            ? 'border-amber-500 bg-amber-500 text-white'
-                            : 'border-slate-300 bg-white text-slate-600'
+                              ? 'border-amber-500 bg-amber-500 text-white'
+                              : 'border-slate-300 bg-white text-slate-600',
                         )}
                       >
                         {idx + 1}
@@ -217,7 +231,11 @@ export const RouteTraceModal: React.FC = () => {
                       <div
                         className={cn(
                           'min-w-0 flex-1 rounded-md border px-3 py-2',
-                          isFaulty ? 'border-red-200 bg-red-50/60' : isWarning ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white'
+                          isFaulty
+                            ? 'border-red-200 bg-red-50/60'
+                            : isWarning
+                              ? 'border-amber-200 bg-amber-50/60'
+                              : 'border-slate-200 bg-white',
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -239,11 +257,15 @@ export const RouteTraceModal: React.FC = () => {
                         </div>
                         <div className="mt-1 text-[13px] font-medium text-slate-900">{hop.name}</div>
                         <div className="mt-0.5 text-xs text-slate-500">{hop.details}</div>
-                        {(hop.lengthMeters !== undefined || hop.lossDb !== undefined || hop.cumulativeLossDb !== undefined) && (
+                        {(hop.lengthMeters !== undefined ||
+                          hop.lossDb !== undefined ||
+                          hop.cumulativeLossDb !== undefined) && (
                           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px] text-slate-600">
                             {hop.lengthMeters !== undefined && <span>Length {formatLength(hop.lengthMeters)}</span>}
                             {hop.lossDb !== undefined && <span>Loss {hop.lossDb.toFixed(2)} dB</span>}
-                            {hop.cumulativeLossDb !== undefined && <span>Cumulative {hop.cumulativeLossDb.toFixed(2)} dB</span>}
+                            {hop.cumulativeLossDb !== undefined && (
+                              <span>Cumulative {hop.cumulativeLossDb.toFixed(2)} dB</span>
+                            )}
                           </div>
                         )}
                       </div>

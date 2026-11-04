@@ -25,7 +25,7 @@ export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
       rxMinDbm: rxMin,
       rxWarnDbm: rxWarn,
       rxCriticalDbm: rxCritical,
-      history: []
+      history: [],
     };
   }
 
@@ -34,7 +34,7 @@ export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
   const history: OpticalPowerInfo['history'] = Array.from({ length: 12 }, (_, i) => ({
     timestamp: `${String(8 + Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`,
     txPowerDbm: +(tx + Math.sin(i / 2) * 0.15).toFixed(2),
-    rxPowerDbm: +(rx + Math.cos(i / 3) * 0.4).toFixed(2)
+    rxPowerDbm: +(rx + Math.cos(i / 3) * 0.4).toFixed(2),
   }));
 
   return {
@@ -48,7 +48,7 @@ export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
     rxMinDbm: rxMin,
     rxWarnDbm: rxWarn,
     rxCriticalDbm: rxCritical,
-    history
+    history,
   };
 }
 

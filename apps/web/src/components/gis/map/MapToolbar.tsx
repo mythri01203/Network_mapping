@@ -55,7 +55,9 @@ const CATEGORY_TINT: Record<string, string> = {
 
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+  return (
+    !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+  );
 }
 
 function useOutsideClose(open: boolean, setOpen: (v: boolean) => void) {
@@ -103,7 +105,17 @@ interface ToolButtonProps {
   onClick?: () => void;
 }
 
-function ToolButton({ icon: Icon, label, shortcut, active, disabled, danger, caret, showLabel, onClick }: ToolButtonProps) {
+function ToolButton({
+  icon: Icon,
+  label,
+  shortcut,
+  active,
+  disabled,
+  danger,
+  caret,
+  showLabel,
+  onClick,
+}: ToolButtonProps) {
   return (
     <div className="group relative">
       <button
@@ -118,8 +130,8 @@ function ToolButton({ icon: Icon, label, shortcut, active, disabled, danger, car
           active
             ? 'bg-slate-900 text-white shadow-sm'
             : danger
-            ? 'text-rose-600 hover:bg-rose-50'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+              ? 'text-rose-600 hover:bg-rose-50'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         )}
       >
         <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
@@ -171,7 +183,10 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
     return all.filter(
       (c) =>
         (category === 'All' || c.category === category) &&
-        (!q || c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)),
+        (!q ||
+          c.name.toLowerCase().includes(q) ||
+          c.type.toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q)),
     );
   }, [all, category, query]);
 
@@ -188,7 +203,9 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
   return (
     <div className="animate-pop-in absolute left-1/2 top-full z-[1500] mt-2 flex h-[440px] w-[640px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-[var(--shadow-overlay)]">
       <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-slate-100 bg-slate-50/70 p-2">
-        <div className="px-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Categories</div>
+        <div className="px-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          Categories
+        </div>
         {['All', ...categories].map((c) => {
           const count = c === 'All' ? all.length : all.filter((x) => x.category === c).length;
           return (
@@ -198,7 +215,9 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
               onClick={() => setCategory(c)}
               className={cn(
                 'flex items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] transition-colors',
-                category === c ? 'bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/70',
+                category === c
+                  ? 'bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-200'
+                  : 'text-slate-600 hover:bg-white/70',
               )}
             >
               <span className="truncate">{c === 'All' ? 'All equipment' : c}</span>
@@ -221,7 +240,12 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
               if (e.key === 'Enter' && filtered[0]) onPick(filtered[0]);
             }}
           />
-          <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -276,7 +300,9 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                           </span>
                         ) : null}
                         {c.isCustom && (
-                          <span className="shrink-0 rounded bg-slate-900 px-1.5 py-px text-[10px] font-medium text-white">Custom</span>
+                          <span className="shrink-0 rounded bg-slate-900 px-1.5 py-px text-[10px] font-medium text-white">
+                            Custom
+                          </span>
                         )}
                       </span>
                       <span className="block truncate text-xs text-slate-500">{c.description}</span>
@@ -330,7 +356,9 @@ function CablePicker({ onPick }: { onPick: (t: CableType) => void }) {
   const { selectedCableTypeToDraw, activeTool } = useNetwork();
   return (
     <div className="animate-pop-in absolute left-0 top-full z-[1500] mt-2 w-72 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-[var(--shadow-overlay)]">
-      <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Draw cable route</div>
+      <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        Draw cable route
+      </div>
       {CABLE_TYPES.map(({ type, hint }) => {
         const selected = activeTool === 'draw_cable' && selectedCableTypeToDraw === type;
         return (
@@ -454,7 +482,13 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   return (
     <div ref={rootRef} className="absolute left-1/2 top-3 z-[450] -translate-x-1/2">
       <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/90 bg-white/95 p-1 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_-6px_rgb(15_23_42/0.18)] backdrop-blur">
-        <ToolButton icon={MousePointer2} label="Select" shortcut="V" active={activeTool === 'select'} onClick={selectTool} />
+        <ToolButton
+          icon={MousePointer2}
+          label="Select"
+          shortcut="V"
+          active={activeTool === 'select'}
+          onClick={selectTool}
+        />
 
         <Divider />
 
@@ -481,18 +515,44 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
           />
           {menu === 'cable' && <CablePicker onPick={pickCable} />}
         </div>
-        <ToolButton icon={UserPlus} label="Add customer" showLabel onClick={() => { closeMenu(); setIsCustomerWizardOpen(true); }} />
+        <ToolButton
+          icon={UserPlus}
+          label="Add customer"
+          showLabel
+          onClick={() => {
+            closeMenu();
+            setIsCustomerWizardOpen(true);
+          }}
+        />
 
         <Divider />
 
-        <ToolButton icon={Ruler} label="Measure distance" shortcut="M" active={activeTool === 'measure'} onClick={startMeasure} />
-        <ToolButton icon={Bike} label={isBikerMode ? 'Exit field navigation' : 'Field navigation'} active={isBikerMode} onClick={onToggleBikerMode} />
+        <ToolButton
+          icon={Ruler}
+          label="Measure distance"
+          shortcut="M"
+          active={activeTool === 'measure'}
+          onClick={startMeasure}
+        />
+        <ToolButton
+          icon={Bike}
+          label={isBikerMode ? 'Exit field navigation' : 'Field navigation'}
+          active={isBikerMode}
+          onClick={onToggleBikerMode}
+        />
 
         <Divider />
 
         <ToolButton icon={Undo2} label="Undo" shortcut="Ctrl Z" disabled={!canUndo} onClick={undo} />
         <ToolButton icon={Redo2} label="Redo" shortcut="Ctrl Y" disabled={!canRedo} onClick={redo} />
-        <ToolButton icon={Trash2} label="Delete selected" shortcut="Del" danger disabled={!canDelete} onClick={deleteSelected} />
+        <ToolButton
+          icon={Trash2}
+          label="Delete selected"
+          shortcut="Del"
+          danger
+          disabled={!canDelete}
+          onClick={deleteSelected}
+        />
       </div>
 
       {menu === 'equipment' && <EquipmentPicker onPick={pickEquipment} onClose={closeMenu} />}
@@ -514,7 +574,15 @@ export interface MapModeBarProps {
   onCancel: () => void;
 }
 
-export function MapModeBar({ distanceMeters, snapTargetName, autoPole, onAutoPoleChange, onAddPole, onFinish, onCancel }: MapModeBarProps) {
+export function MapModeBar({
+  distanceMeters,
+  snapTargetName,
+  autoPole,
+  onAutoPoleChange,
+  onAddPole,
+  onFinish,
+  onCancel,
+}: MapModeBarProps) {
   const {
     activeTool,
     selectedCableTypeToDraw,
@@ -556,7 +624,8 @@ export function MapModeBar({ distanceMeters, snapTargetName, autoPole, onAutoPol
     else setActiveDrawingPoints(activeDrawingPoints.slice(0, -1));
   };
 
-  const darkBtn = 'flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40';
+  const darkBtn =
+    'flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40';
 
   return (
     <div className="animate-pop-in absolute left-1/2 top-[64px] z-[440] -translate-x-1/2">
@@ -575,8 +644,8 @@ export function MapModeBar({ distanceMeters, snapTargetName, autoPole, onAutoPol
               {activeTool === 'add_equipment'
                 ? 'Click anywhere on the map to drop it'
                 : points === 0
-                ? 'Click on the map to start'
-                : `${points} point${points === 1 ? '' : 's'} · ${formatDistance(distanceMeters)}`}
+                  ? 'Click on the map to start'
+                  : `${points} point${points === 1 ? '' : 's'} · ${formatDistance(distanceMeters)}`}
             </div>
           </div>
         </div>
@@ -590,7 +659,12 @@ export function MapModeBar({ distanceMeters, snapTargetName, autoPole, onAutoPol
         <div className="flex items-center gap-1 border-l border-white/10 pl-2">
           {activeTool === 'draw_cable' && (
             <>
-              <button type="button" onClick={onAddPole} className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')} title="Drop a pole at the last point">
+              <button
+                type="button"
+                onClick={onAddPole}
+                className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')}
+                title="Drop a pole at the last point"
+              >
                 <UtilityPole className="h-4 w-4" /> Pole <Shortcut dark>P</Shortcut>
               </button>
               <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-[12px] text-slate-300 hover:bg-white/5">
@@ -600,7 +674,13 @@ export function MapModeBar({ distanceMeters, snapTargetName, autoPole, onAutoPol
             </>
           )}
           {activeTool !== 'add_equipment' && (
-            <button type="button" onClick={undoPoint} disabled={points === 0} className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')} title="Remove last point">
+            <button
+              type="button"
+              onClick={undoPoint}
+              disabled={points === 0}
+              className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')}
+              title="Remove last point"
+            >
               <CornerUpLeft className="h-4 w-4" /> Undo point
             </button>
           )}

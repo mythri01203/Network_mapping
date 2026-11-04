@@ -16,7 +16,15 @@ import { Tabs, Select, IconButton, Button, Badge, StatusBadge, EmptyState, Progr
 
 type Tab = 'cores' | 'trace' | 'audit';
 
-const CORE_FILTERS: Array<'All' | CoreStatus> = ['All', 'Available', 'In Use', 'Reserved', 'Damaged', 'Under Maintenance', 'Unverified'];
+const CORE_FILTERS: Array<'All' | CoreStatus> = [
+  'All',
+  'Available',
+  'In Use',
+  'Reserved',
+  'Damaged',
+  'Under Maintenance',
+  'Unverified',
+];
 
 const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 
@@ -40,7 +48,10 @@ export const BottomInfoPanel: React.FC = () => {
   const [coreFilter, setCoreFilter] = useState<'All' | CoreStatus>('All');
 
   const selectedCableId = selectedObject?.type === 'cable' ? selectedObject.data?.id : null;
-  const cable = useMemo(() => (selectedCableId ? cables.find((c) => c.id === selectedCableId) ?? null : null), [cables, selectedCableId]);
+  const cable = useMemo(
+    () => (selectedCableId ? (cables.find((c) => c.id === selectedCableId) ?? null) : null),
+    [cables, selectedCableId],
+  );
 
   useEffect(() => {
     if (selectedCableId) setActiveTab('cores');
@@ -51,8 +62,8 @@ export const BottomInfoPanel: React.FC = () => {
     if (traceKey !== null) setActiveTab('trace');
   }, [traceKey]);
 
-  const equipmentName = (id?: string) => (id ? equipments.find((e) => e.id === id)?.name ?? id : undefined);
-  const customerName = (id?: string) => (id ? customers.find((c) => c.id === id)?.name ?? id : undefined);
+  const equipmentName = (id?: string) => (id ? (equipments.find((e) => e.id === id)?.name ?? id) : undefined);
+  const customerName = (id?: string) => (id ? (customers.find((c) => c.id === id)?.name ?? id) : undefined);
 
   const allocationTargetId = cable ? cable.endEquipmentId || cable.startEquipmentId : undefined;
   const allocationTargetName = equipmentName(allocationTargetId);
@@ -85,7 +96,8 @@ export const BottomInfoPanel: React.FC = () => {
         <span className="truncate text-slate-500">
           {cable ? (
             <>
-              <span className="font-medium text-slate-700">{cable.name}</span> · {cable.fiberCount}F · {coreStats.available} available
+              <span className="font-medium text-slate-700">{cable.name}</span> · {cable.fiberCount}F ·{' '}
+              {coreStats.available} available
             </>
           ) : activeTraceSummary ? (
             <>
@@ -183,7 +195,11 @@ export const BottomInfoPanel: React.FC = () => {
                 )}
               </div>
               {filteredCores.length === 0 ? (
-                <EmptyState compact title="No cores match this filter" description={`No ${coreFilter.toLowerCase()} cores on this cable.`} />
+                <EmptyState
+                  compact
+                  title="No cores match this filter"
+                  description={`No ${coreFilter.toLowerCase()} cores on this cable.`}
+                />
               ) : (
                 <table className="ui-table">
                   <thead>
@@ -208,7 +224,9 @@ export const BottomInfoPanel: React.FC = () => {
                         customerName(core.customerId);
                       return (
                         <tr key={core.coreNumber}>
-                          <td className="tabular font-mono font-medium text-slate-900">{String(core.coreNumber).padStart(2, '0')}</td>
+                          <td className="tabular font-mono font-medium text-slate-900">
+                            {String(core.coreNumber).padStart(2, '0')}
+                          </td>
                           <td>
                             <span className="inline-flex items-center gap-2">
                               <span
@@ -222,7 +240,9 @@ export const BottomInfoPanel: React.FC = () => {
                           <td>
                             <StatusBadge status={core.status} />
                           </td>
-                          <td className="max-w-[220px] truncate">{connected ?? <span className="text-slate-400">—</span>}</td>
+                          <td className="max-w-[220px] truncate">
+                            {connected ?? <span className="text-slate-400">—</span>}
+                          </td>
                           <td className="font-mono text-[11px] text-slate-500">{core.connectedPort || '—'}</td>
                           <td className="tabular text-right text-slate-600">
                             {core.attenuationDb !== undefined ? `${core.attenuationDb.toFixed(2)} dB` : '—'}
@@ -242,7 +262,8 @@ export const BottomInfoPanel: React.FC = () => {
                                     : 'This cable is not terminated on any equipment'
                                 }
                                 onClick={() =>
-                                  allocationTargetId && allocateFiberCore(cable.id, core.coreNumber, undefined, allocationTargetId)
+                                  allocationTargetId &&
+                                  allocateFiberCore(cable.id, core.coreNumber, undefined, allocationTargetId)
                                 }
                               >
                                 Allocate
@@ -277,14 +298,21 @@ export const BottomInfoPanel: React.FC = () => {
                     {
                       label: 'Est. Rx power',
                       value:
-                        activeTraceSummary.estimatedRxDbm !== undefined ? `${activeTraceSummary.estimatedRxDbm.toFixed(2)} dBm` : '—',
+                        activeTraceSummary.estimatedRxDbm !== undefined
+                          ? `${activeTraceSummary.estimatedRxDbm.toFixed(2)} dBm`
+                          : '—',
                     },
                     {
                       label: 'Measured Rx',
                       value:
-                        activeTraceSummary.measuredRxDbm !== undefined ? `${activeTraceSummary.measuredRxDbm.toFixed(2)} dBm` : '—',
+                        activeTraceSummary.measuredRxDbm !== undefined
+                          ? `${activeTraceSummary.measuredRxDbm.toFixed(2)} dBm`
+                          : '—',
                     },
-                    { label: 'Downstream customers', value: activeTraceSummary.downstreamCustomerCount.toLocaleString() },
+                    {
+                      label: 'Downstream customers',
+                      value: activeTraceSummary.downstreamCustomerCount.toLocaleString(),
+                    },
                   ].map((kpi) => (
                     <div key={kpi.label} className="min-w-[120px] flex-1 bg-white px-3 py-2">
                       <div className="text-[11px] text-slate-500">{kpi.label}</div>
@@ -343,9 +371,15 @@ export const BottomInfoPanel: React.FC = () => {
                         title={locatable ? 'Zoom to this hop' : undefined}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <Badge tone={hop.status === 'Faulty' ? 'red' : hop.status === 'Warning' ? 'amber' : 'neutral'}>{hop.type}</Badge>
+                          <Badge
+                            tone={hop.status === 'Faulty' ? 'red' : hop.status === 'Warning' ? 'amber' : 'neutral'}
+                          >
+                            {hop.type}
+                          </Badge>
                           {hop.cumulativeLossDb !== undefined && (
-                            <span className="tabular text-[11px] text-slate-500">{hop.cumulativeLossDb.toFixed(2)} dB</span>
+                            <span className="tabular text-[11px] text-slate-500">
+                              {hop.cumulativeLossDb.toFixed(2)} dB
+                            </span>
                           )}
                         </div>
                         <div className="mt-1 truncate text-[13px] font-medium text-slate-900" title={hop.name}>
@@ -356,7 +390,9 @@ export const BottomInfoPanel: React.FC = () => {
                           {hop.details}
                         </div>
                       </button>
-                      {idx < activeTracePath.length - 1 && <ChevronRight size={16} className="mx-1 shrink-0 text-slate-300" />}
+                      {idx < activeTracePath.length - 1 && (
+                        <ChevronRight size={16} className="mx-1 shrink-0 text-slate-300" />
+                      )}
                     </li>
                   );
                 })}
@@ -366,7 +402,12 @@ export const BottomInfoPanel: React.FC = () => {
 
         {activeTab === 'audit' &&
           (auditLogs.length === 0 ? (
-            <EmptyState compact icon={History} title="No activity yet" description="Edits, allocations and connections will be logged here." />
+            <EmptyState
+              compact
+              icon={History}
+              title="No activity yet"
+              description="Edits, allocations and connections will be logged here."
+            />
           ) : (
             <table className="ui-table">
               <thead>

@@ -8,9 +8,9 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\
  */
 export function nextSequentialId(prefix: string, existingIds: string[], pad = 2): string {
   const pattern = new RegExp(`^${escapeRegExp(prefix)}(\\d+)$`, 'i');
-  const taken = new Set(existingIds.map(id => id.toLowerCase()));
+  const taken = new Set(existingIds.map((id) => id.toLowerCase()));
   let max = 0;
-  existingIds.forEach(id => {
+  existingIds.forEach((id) => {
     const match = pattern.exec(id);
     if (match) max = Math.max(max, parseInt(match[1], 10));
   });
@@ -29,7 +29,8 @@ export function uniqueId(prefix: string): string {
 }
 
 export function equipmentIdPrefix(type: string): string {
-  if (type === 'OLT' || type === 'ODF' || type === 'FDMS' || type === 'FDT' || type === 'ONT' || type === 'ONU') return `${type}-`;
+  if (type === 'OLT' || type === 'ODF' || type === 'FDMS' || type === 'FDT' || type === 'ONT' || type === 'ONU')
+    return `${type}-`;
   if (type === 'FAT' || type.includes('Terminal Box')) return 'FAT-';
   if (type.includes('Pole')) return 'POLE-';
   if (type === 'Manhole') return 'MH-';
@@ -38,18 +39,28 @@ export function equipmentIdPrefix(type: string): string {
   if (type === 'CATV RF Amplifier') return 'CATV-AMP-';
   if (type.includes('Splitter')) return 'SPL-';
   if (type.includes('Closure')) return 'JC-';
-  return `${type.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '')}-`;
+  return `${type
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}-`;
 }
 
 export function cableIdPrefix(type: CableType | string): string {
   switch (type) {
-    case 'Main Feeder Fiber': return 'CBL-FEEDER-';
-    case 'Distribution Fiber': return 'CBL-DIST-';
-    case 'Drop Fiber': return 'DROP-';
-    case 'Coaxial Cable': return 'CBL-COAX-';
-    case 'Aerial Fiber': return 'CBL-AERIAL-';
-    case 'Underground Fiber': return 'CBL-UG-';
-    default: return 'CBL-CUSTOM-';
+    case 'Main Feeder Fiber':
+      return 'CBL-FEEDER-';
+    case 'Distribution Fiber':
+      return 'CBL-DIST-';
+    case 'Drop Fiber':
+      return 'DROP-';
+    case 'Coaxial Cable':
+      return 'CBL-COAX-';
+    case 'Aerial Fiber':
+      return 'CBL-AERIAL-';
+    case 'Underground Fiber':
+      return 'CBL-UG-';
+    default:
+      return 'CBL-CUSTOM-';
   }
 }
 

@@ -16,7 +16,7 @@ import {
   Cpu,
   Layers,
   Thermometer,
-  HardDrive
+  HardDrive,
 } from 'lucide-react';
 
 export const OLTRackView: React.FC = () => {
@@ -28,21 +28,23 @@ export const OLTRackView: React.FC = () => {
     setActiveMainView,
     flyToLocation,
     traceNetworkPath,
-    setIsCableWizardOpen
+    setIsCableWizardOpen,
   } = useNetwork();
 
-  const olts = equipments.filter(e => e.type === 'OLT');
+  const olts = equipments.filter((e) => e.type === 'OLT');
   const [selectedOltId, setSelectedOltId] = useState<string>(olts[0]?.id || 'OLT-01');
   const [selectedPonPort, setSelectedPonPort] = useState<number | null>(1);
 
-  const currentOlt = equipments.find(e => e.id === selectedOltId) || olts[0];
+  const currentOlt = equipments.find((e) => e.id === selectedOltId) || olts[0];
 
   // PON port data generator
   const ponPorts = Array.from({ length: 16 }, (_, i) => {
     const portNum = i + 1;
-    const connectedFeeder = cables.find(c => c.type === 'Main Feeder Fiber');
-    const portCustomers = customers.filter(c => c.oltId === selectedOltId && c.ponPort === `PON-${portNum.toString().padStart(2, '0')}`);
-    const isFaulty = faults.some(f => f.affectedEquipmentId === selectedOltId);
+    const connectedFeeder = cables.find((c) => c.type === 'Main Feeder Fiber');
+    const portCustomers = customers.filter(
+      (c) => c.oltId === selectedOltId && c.ponPort === `PON-${portNum.toString().padStart(2, '0')}`,
+    );
+    const isFaulty = faults.some((f) => f.affectedEquipmentId === selectedOltId);
     const hasSubscribers = portCustomers.length > 0;
 
     return {
@@ -56,11 +58,11 @@ export const OLTRackView: React.FC = () => {
       maxCapacity: 64,
       splitRatio: '1:64 (Two-Stage 1:8 + 1:8)',
       wavelength: '1490nm Tx / 1310nm Rx',
-      transceiver: 'Class C+ XFP / SFP+'
+      transceiver: 'Class C+ XFP / SFP+',
     };
   });
 
-  const selectedPortData = ponPorts.find(p => p.portNumber === selectedPonPort) || ponPorts[0];
+  const selectedPortData = ponPorts.find((p) => p.portNumber === selectedPonPort) || ponPorts[0];
 
   const handleLocateOnMap = () => {
     if (currentOlt) {
@@ -86,7 +88,9 @@ export const OLTRackView: React.FC = () => {
                 19-INCH TELECOM RACK
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Huawei SmartAX MA5800-X15 / Nokia 7360 FX-4 Optical Line Terminal</p>
+            <p className="text-[11px] text-slate-400">
+              Huawei SmartAX MA5800-X15 / Nokia 7360 FX-4 Optical Line Terminal
+            </p>
           </div>
         </div>
 
@@ -96,11 +100,13 @@ export const OLTRackView: React.FC = () => {
             <span className="text-slate-400">Active Chassis:</span>
             <select
               value={selectedOltId}
-              onChange={e => setSelectedOltId(e.target.value)}
+              onChange={(e) => setSelectedOltId(e.target.value)}
               className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-1.5 text-xs font-semibold outline-none focus:border-blue-500"
             >
-              {olts.map(o => (
-                <option key={o.id} value={o.id}>{o.name} ({o.id})</option>
+              {olts.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} ({o.id})
+                </option>
               ))}
             </select>
           </div>
@@ -133,7 +139,9 @@ export const OLTRackView: React.FC = () => {
             {/* Chassis Header / Top PDU Banner */}
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
               <div className="flex items-center gap-4">
-                <span className="font-mono text-xs font-bold text-slate-300 tracking-wider">HUAWEI SMARTAX MA5800-X7</span>
+                <span className="font-mono text-xs font-bold text-slate-300 tracking-wider">
+                  HUAWEI SMARTAX MA5800-X7
+                </span>
                 <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/80 flex items-center gap-1">
                   <Activity className="w-3 h-3" /> NORMAL TELEMETRY
                 </span>
@@ -167,9 +175,14 @@ export const OLTRackView: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   {['10GE-UP-01', '10GE-UP-02', '100GE-CORE', 'SYNC-BITS'].map((port, idx) => (
-                    <div key={port} className="flex flex-col items-center bg-slate-950 border border-slate-700 px-2 py-1 rounded">
+                    <div
+                      key={port}
+                      className="flex flex-col items-center bg-slate-950 border border-slate-700 px-2 py-1 rounded"
+                    >
                       <span className="text-[9px] font-mono text-blue-400">{port}</span>
-                      <span className={`w-1.5 h-1.5 rounded-full mt-1 ${idx < 2 ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full mt-1 ${idx < 2 ? 'bg-emerald-400' : 'bg-slate-600'}`}
+                      />
                     </div>
                   ))}
                 </div>
@@ -189,7 +202,7 @@ export const OLTRackView: React.FC = () => {
 
                 {/* 16 Optical PON Ports Grid */}
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
-                  {ponPorts.map(p => {
+                  {ponPorts.map((p) => {
                     const isSelected = selectedPonPort === p.portNumber;
                     const isActive = p.status === 'Active';
                     const isAlarm = p.status === 'Alarm';
@@ -202,8 +215,8 @@ export const OLTRackView: React.FC = () => {
                           isSelected
                             ? 'bg-blue-600/30 border-blue-400 ring-2 ring-blue-500/50'
                             : isAlarm
-                            ? 'bg-rose-950/40 border-rose-600/60 hover:border-rose-500'
-                            : 'bg-slate-950 border-slate-800 hover:border-slate-600'
+                              ? 'bg-rose-950/40 border-rose-600/60 hover:border-rose-500'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-600'
                         }`}
                       >
                         <div className="flex items-center justify-between w-full mb-1">
@@ -258,11 +271,13 @@ export const OLTRackView: React.FC = () => {
                   <p className="text-[11px] text-slate-400">{currentOlt.name}</p>
                 </div>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                selectedPortData.status === 'Alarm'
-                  ? 'bg-rose-950 text-rose-400 border-rose-800'
-                  : 'bg-emerald-950 text-emerald-400 border-emerald-800'
-              }`}>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  selectedPortData.status === 'Alarm'
+                    ? 'bg-rose-950 text-rose-400 border-rose-800'
+                    : 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                }`}
+              >
                 {selectedPortData.status}
               </span>
             </div>
@@ -290,7 +305,9 @@ export const OLTRackView: React.FC = () => {
 
               {/* Connected Feeder Cable */}
               <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Outgoing Feeder Trunk</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Outgoing Feeder Trunk
+                </span>
                 <div className="mt-1.5 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-white text-xs">{selectedPortData.connectedFeederName}</div>
@@ -307,7 +324,8 @@ export const OLTRackView: React.FC = () => {
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-slate-400">Subscriber Port Capacity:</span>
                   <span className="font-bold text-white">
-                    {selectedPortData.subscribersCount} / {selectedPortData.maxCapacity} ({Math.round((selectedPortData.subscribersCount / selectedPortData.maxCapacity) * 100)}%)
+                    {selectedPortData.subscribersCount} / {selectedPortData.maxCapacity} (
+                    {Math.round((selectedPortData.subscribersCount / selectedPortData.maxCapacity) * 100)}%)
                   </span>
                 </div>
                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">

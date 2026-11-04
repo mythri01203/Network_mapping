@@ -17,7 +17,7 @@ import {
   Crosshair,
   User,
   Wrench,
-  Activity
+  Activity,
 } from 'lucide-react';
 
 export const TerminalBoxModal: React.FC = () => {
@@ -30,13 +30,15 @@ export const TerminalBoxModal: React.FC = () => {
     uploadEquipmentPhoto,
     saveImageAnnotation,
     deleteImageAnnotation,
-    showToast
+    showToast,
   } = useNetwork();
 
   // Find target terminal box (from selected object or first FAT)
-  const targetTerminal = (selectedObject?.type === 'equipment' && (selectedObject.data.type === 'FAT' || selectedObject.data.type.includes('Terminal Box'))
-    ? selectedObject.data
-    : equipments.find(e => e.type === 'FAT')) || equipments[0];
+  const targetTerminal =
+    (selectedObject?.type === 'equipment' &&
+    (selectedObject.data.type === 'FAT' || selectedObject.data.type.includes('Terminal Box'))
+      ? selectedObject.data
+      : equipments.find((e) => e.type === 'FAT')) || equipments[0];
 
   const [activeTab, setActiveTab] = useState<'overview' | 'ports' | 'photos' | 'maintenance' | 'audit'>('photos');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -45,7 +47,9 @@ export const TerminalBoxModal: React.FC = () => {
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [annotationType, setAnnotationType] = useState<'port_circle' | 'port_box' | 'label'>('port_circle');
   const [newAnnotationLabel, setNewAnnotationLabel] = useState('Port 04 (FREE)');
-  const [newAnnotationStatus, setNewAnnotationStatus] = useState<'Available' | 'Occupied' | 'Reserved' | 'Faulty'>('Available');
+  const [newAnnotationStatus, setNewAnnotationStatus] = useState<'Available' | 'Occupied' | 'Reserved' | 'Faulty'>(
+    'Available',
+  );
   const [newAnnotationPortNum, setNewAnnotationPortNum] = useState<number>(4);
 
   // Photo upload form state
@@ -58,8 +62,9 @@ export const TerminalBoxModal: React.FC = () => {
 
   if (!isTerminalBoxModalOpen) return null;
 
-  const currentImage: EquipmentImage | undefined = targetTerminal.images?.[selectedImageIndex] || targetTerminal.images?.[0];
-  const terminalSplitter = splitters.find(s => s.terminalBoxId === targetTerminal.id);
+  const currentImage: EquipmentImage | undefined =
+    targetTerminal.images?.[selectedImageIndex] || targetTerminal.images?.[0];
+  const terminalSplitter = splitters.find((s) => s.terminalBoxId === targetTerminal.id);
 
   // Handle clicking on image to add annotation
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -77,11 +82,11 @@ export const TerminalBoxModal: React.FC = () => {
       label: newAnnotationLabel || `Port ${newAnnotationPortNum}`,
       portNumber: newAnnotationPortNum,
       status: newAnnotationStatus,
-      remarks: `Marked by Field Technician at [${x.toFixed(1)}%, ${y.toFixed(1)}%]`
+      remarks: `Marked by Field Technician at [${x.toFixed(1)}%, ${y.toFixed(1)}%]`,
     };
 
     saveImageAnnotation(targetTerminal.id, currentImage.id, newAnno);
-    setNewAnnotationPortNum(prev => prev + 1);
+    setNewAnnotationPortNum((prev) => prev + 1);
     setNewAnnotationLabel(`Port ${(newAnnotationPortNum + 1).toString().padStart(2, '0')}`);
   };
 
@@ -98,7 +103,7 @@ export const TerminalBoxModal: React.FC = () => {
         description: photoDesc || 'Technician field inspection upload',
         url: result,
         uploadedBy: 'Current Operator',
-        annotations: []
+        annotations: [],
       });
       setIsUploadingPhoto(false);
       setPhotoName('');
@@ -126,7 +131,8 @@ export const TerminalBoxModal: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                {targetTerminal.type} &bull; {targetTerminal.street}, {targetTerminal.area} {targetTerminal.poleNumber ? `(Mounted on ${targetTerminal.poleNumber})` : ''}
+                {targetTerminal.type} &bull; {targetTerminal.street}, {targetTerminal.area}{' '}
+                {targetTerminal.poleNumber ? `(Mounted on ${targetTerminal.poleNumber})` : ''}
               </p>
             </div>
           </div>
@@ -145,8 +151,8 @@ export const TerminalBoxModal: React.FC = () => {
             { id: 'photos', label: 'Field Photographs & Annotator', count: targetTerminal.images?.length || 0 },
             { id: 'ports', label: 'Port Management (Splitter 1:8)', count: targetTerminal.totalPorts || 8 },
             { id: 'overview', label: 'Technical Overview' },
-            { id: 'maintenance', label: 'Maintenance Log' }
-          ].map(t => (
+            { id: 'maintenance', label: 'Maintenance Log' },
+          ].map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id as any)}
@@ -211,7 +217,7 @@ export const TerminalBoxModal: React.FC = () => {
                         type="text"
                         placeholder="e.g. Front Door Open View"
                         value={photoName}
-                        onChange={e => setPhotoName(e.target.value)}
+                        onChange={(e) => setPhotoName(e.target.value)}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none"
                       />
                     </div>
@@ -219,7 +225,7 @@ export const TerminalBoxModal: React.FC = () => {
                       <label className="block text-[11px] font-semibold text-slate-600 mb-1">Category</label>
                       <select
                         value={photoCategory}
-                        onChange={e => setPhotoCategory(e.target.value as any)}
+                        onChange={(e) => setPhotoCategory(e.target.value as any)}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg outline-none"
                       >
                         <option value="Front View">Front View</option>
@@ -231,7 +237,9 @@ export const TerminalBoxModal: React.FC = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select File (JPG, PNG, WEBP)</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Select File (JPG, PNG, WEBP)
+                      </label>
                       <input
                         type="file"
                         accept="image/*"
@@ -252,7 +260,9 @@ export const TerminalBoxModal: React.FC = () => {
                       <button
                         onClick={() => setIsAnnotating(!isAnnotating)}
                         className={`px-3 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
-                          isAnnotating ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          isAnnotating
+                            ? 'bg-emerald-500 text-white shadow-sm'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                         }`}
                       >
                         <Crosshair className="w-3.5 h-3.5" />
@@ -262,14 +272,20 @@ export const TerminalBoxModal: React.FC = () => {
                       {isAnnotating && (
                         <div className="flex items-center gap-2 border-l border-slate-700 pl-3">
                           <span className="text-[11px] text-slate-400">Status:</span>
-                          {(['Available', 'Occupied', 'Reserved', 'Faulty'] as const).map(st => (
+                          {(['Available', 'Occupied', 'Reserved', 'Faulty'] as const).map((st) => (
                             <button
                               key={st}
                               type="button"
                               onClick={() => setNewAnnotationStatus(st)}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
                                 newAnnotationStatus === st
-                                  ? st === 'Available' ? 'bg-emerald-500 text-white' : st === 'Occupied' ? 'bg-blue-600 text-white' : st === 'Reserved' ? 'bg-amber-500 text-white' : 'bg-rose-600 text-white'
+                                  ? st === 'Available'
+                                    ? 'bg-emerald-500 text-white'
+                                    : st === 'Occupied'
+                                      ? 'bg-blue-600 text-white'
+                                      : st === 'Reserved'
+                                        ? 'bg-amber-500 text-white'
+                                        : 'bg-rose-600 text-white'
                                   : 'bg-slate-800 text-slate-400 hover:text-white'
                               }`}
                             >
@@ -300,15 +316,24 @@ export const TerminalBoxModal: React.FC = () => {
                     />
 
                     {/* Render Annotations Non-Destructively */}
-                    {currentImage.annotations.map(anno => {
-                      const badgeBg = anno.status === 'Available' ? 'bg-emerald-600' : anno.status === 'Occupied' ? 'bg-blue-600' : anno.status === 'Reserved' ? 'bg-amber-600' : 'bg-rose-600';
+                    {currentImage.annotations.map((anno) => {
+                      const badgeBg =
+                        anno.status === 'Available'
+                          ? 'bg-emerald-600'
+                          : anno.status === 'Occupied'
+                            ? 'bg-blue-600'
+                            : anno.status === 'Reserved'
+                              ? 'bg-amber-600'
+                              : 'bg-rose-600';
                       return (
                         <div
                           key={anno.id}
                           style={{ left: `${anno.x}%`, top: `${anno.y}%` }}
                           className="absolute -translate-x-1/2 -translate-y-1/2 group"
                         >
-                          <div className={`w-6 h-6 rounded-full ${badgeBg} border-2 border-white text-white font-bold text-[10px] flex items-center justify-center shadow-lg transition-transform hover:scale-125`}>
+                          <div
+                            className={`w-6 h-6 rounded-full ${badgeBg} border-2 border-white text-white font-bold text-[10px] flex items-center justify-center shadow-lg transition-transform hover:scale-125`}
+                          >
                             {anno.portNumber || '!'}
                           </div>
 
@@ -317,7 +342,7 @@ export const TerminalBoxModal: React.FC = () => {
                             <div className="font-bold text-sky-400 flex justify-between items-center">
                               <span>{anno.label}</span>
                               <button
-                                onClick={e => {
+                                onClick={(e) => {
                                   e.stopPropagation();
                                   deleteImageAnnotation(targetTerminal.id, currentImage.id, anno.id);
                                 }}
@@ -340,12 +365,11 @@ export const TerminalBoxModal: React.FC = () => {
                     <div>
                       <div className="font-bold text-slate-800">{currentImage.name}</div>
                       <div className="text-[11px] text-slate-500">
-                        Uploaded by <span className="font-semibold">{currentImage.uploadedBy}</span> on {currentImage.uploadDate} &bull; Category: {currentImage.category}
+                        Uploaded by <span className="font-semibold">{currentImage.uploadedBy}</span> on{' '}
+                        {currentImage.uploadDate} &bull; Category: {currentImage.category}
                       </div>
                     </div>
-                    <div className="text-[11px] text-slate-400 max-w-xs text-right">
-                      {currentImage.description}
-                    </div>
+                    <div className="text-[11px] text-slate-400 max-w-xs text-right">{currentImage.description}</div>
                   </div>
                 </div>
               ) : (
@@ -372,7 +396,8 @@ export const TerminalBoxModal: React.FC = () => {
                     Splitter Module: {terminalSplitter?.name || '1:8 PLC Cassette'}
                   </div>
                   <div className="text-[11px] text-blue-800">
-                    Ratio: {terminalSplitter?.ratio || '1:8'} &bull; Insertion Loss: {terminalSplitter?.insertionLossDb || 10.3} dB &bull; Status: Active
+                    Ratio: {terminalSplitter?.ratio || '1:8'} &bull; Insertion Loss:{' '}
+                    {terminalSplitter?.insertionLossDb || 10.3} dB &bull; Status: Active
                   </div>
                 </div>
                 <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-lg">
@@ -382,7 +407,7 @@ export const TerminalBoxModal: React.FC = () => {
 
               {/* Visual Port List */}
               <div className="grid grid-cols-2 gap-3">
-                {terminalSplitter?.outputPorts.map(port => {
+                {terminalSplitter?.outputPorts.map((port) => {
                   const isAvailable = port.status === 'Available';
                   const isFaulty = port.status === 'Faulty';
                   return (
@@ -392,14 +417,20 @@ export const TerminalBoxModal: React.FC = () => {
                         isAvailable
                           ? 'bg-emerald-50/40 border-emerald-200'
                           : isFaulty
-                          ? 'bg-rose-50/40 border-rose-200'
-                          : 'bg-slate-50 border-slate-200'
+                            ? 'bg-rose-50/40 border-rose-200'
+                            : 'bg-slate-50 border-slate-200'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                          isAvailable ? 'bg-emerald-600 text-white' : isFaulty ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'
-                        }`}>
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            isAvailable
+                              ? 'bg-emerald-600 text-white'
+                              : isFaulty
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-blue-600 text-white'
+                          }`}
+                        >
                           {port.portNumber}
                         </div>
                         <div>
@@ -410,9 +441,15 @@ export const TerminalBoxModal: React.FC = () => {
                         </div>
                       </div>
 
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        isAvailable ? 'bg-emerald-100 text-emerald-800' : isFaulty ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isAvailable
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : isFaulty
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
                         {port.status}
                       </span>
                     </div>
@@ -428,19 +465,48 @@ export const TerminalBoxModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                   <div className="font-bold text-xs text-slate-800 border-b pb-1">Asset Identity</div>
-                  <div><span className="text-slate-500">Name:</span> <span className="font-semibold">{targetTerminal.name}</span></div>
-                  <div><span className="text-slate-500">ID:</span> <span className="font-mono font-bold text-blue-600">{targetTerminal.id}</span></div>
-                  <div><span className="text-slate-500">Type:</span> <span className="font-semibold">{targetTerminal.type}</span></div>
-                  <div><span className="text-slate-500">Manufacturer:</span> <span className="font-semibold">{targetTerminal.manufacturer || 'Huawei OptiX'}</span></div>
-                  <div><span className="text-slate-500">Installation Date:</span> <span className="font-semibold">{targetTerminal.installedDate}</span></div>
+                  <div>
+                    <span className="text-slate-500">Name:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">ID:</span>{' '}
+                    <span className="font-mono font-bold text-blue-600">{targetTerminal.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Type:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.type}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Manufacturer:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.manufacturer || 'Huawei OptiX'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Installation Date:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.installedDate}</span>
+                  </div>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                   <div className="font-bold text-xs text-slate-800 border-b pb-1">Geographic Placement</div>
-                  <div><span className="text-slate-500">Area:</span> <span className="font-semibold">{targetTerminal.area}</span></div>
-                  <div><span className="text-slate-500">Street:</span> <span className="font-semibold">{targetTerminal.street}</span></div>
-                  <div><span className="text-slate-500">Mounting Pole:</span> <span className="font-semibold">{targetTerminal.poleNumber || 'Wall Mounted'}</span></div>
-                  <div><span className="text-slate-500">GPS Coordinates:</span> <span className="font-mono">{targetTerminal.lat.toFixed(5)}, {targetTerminal.lng.toFixed(5)}</span></div>
+                  <div>
+                    <span className="text-slate-500">Area:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.area}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Street:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.street}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Mounting Pole:</span>{' '}
+                    <span className="font-semibold">{targetTerminal.poleNumber || 'Wall Mounted'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">GPS Coordinates:</span>{' '}
+                    <span className="font-mono">
+                      {targetTerminal.lat.toFixed(5)}, {targetTerminal.lng.toFixed(5)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -455,17 +521,26 @@ export const TerminalBoxModal: React.FC = () => {
                   <div>
                     <div className="font-bold text-slate-800">Optical Clean & Splicer Inspection</div>
                     <div className="text-[11px] text-slate-500">Technician Arun Varma &bull; 2026-10-31 04:30 PM</div>
-                    <div className="text-[11px] text-slate-600 mt-1">Cleaned splitter optical ferrules, tested attenuation with optical power meter. Port 8 marked faulty.</div>
+                    <div className="text-[11px] text-slate-600 mt-1">
+                      Cleaned splitter optical ferrules, tested attenuation with optical power meter. Port 8 marked
+                      faulty.
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Verified</span>
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                    Verified
+                  </span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-800">Initial Installation & Fiber Splicing</div>
                     <div className="text-[11px] text-slate-500">Technician Ramesh Gowda &bull; 2024-05-15 11:00 AM</div>
-                    <div className="text-[11px] text-slate-600 mt-1">Mounted FAT-01 to POLE-01, spliced 12F aerial drop cable input lead to 1:8 PLC module.</div>
+                    <div className="text-[11px] text-slate-600 mt-1">
+                      Mounted FAT-01 to POLE-01, spliced 12F aerial drop cable input lead to 1:8 PLC module.
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">Completed</span>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                    Completed
+                  </span>
                 </div>
               </div>
             </div>

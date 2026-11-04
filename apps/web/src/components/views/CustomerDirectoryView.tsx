@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   Smartphone,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
 } from 'lucide-react';
 
 export const CustomerDirectoryView: React.FC = () => {
@@ -29,7 +29,7 @@ export const CustomerDirectoryView: React.FC = () => {
     setSelectedObject,
     setIsCustomerWizardOpen,
     traceNetworkPath,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,7 +37,7 @@ export const CustomerDirectoryView: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
 
   // Filtered subscribers
-  const filteredCustomers = customers.filter(c => {
+  const filteredCustomers = customers.filter((c) => {
     const matchesSearch =
       searchQuery === '' ||
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -62,8 +62,23 @@ export const CustomerDirectoryView: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const headers = ['Customer ID', 'Name', 'Mobile', 'Address', 'Area', 'Service Plan', 'Status', 'OLT ID', 'PON Port', 'FAT Terminal Box', 'Splitter Port', 'ONT Serial', 'IP Address', 'Rx Optical Power dBm'];
-    const rows = filteredCustomers.map(c => [
+    const headers = [
+      'Customer ID',
+      'Name',
+      'Mobile',
+      'Address',
+      'Area',
+      'Service Plan',
+      'Status',
+      'OLT ID',
+      'PON Port',
+      'FAT Terminal Box',
+      'Splitter Port',
+      'ONT Serial',
+      'IP Address',
+      'Rx Optical Power dBm',
+    ];
+    const rows = filteredCustomers.map((c) => [
       c.id,
       `"${c.name}"`,
       `"${c.mobile}"`,
@@ -77,10 +92,10 @@ export const CustomerDirectoryView: React.FC = () => {
       c.splitterOutputPort,
       c.ontSerialNumber,
       c.ipAddress,
-      c.rxOpticalPowerDbm
+      c.rxOpticalPowerDbm,
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -93,10 +108,12 @@ export const CustomerDirectoryView: React.FC = () => {
 
   // KPIs
   const totalSubscribers = customers.length;
-  const activeSubs = customers.filter(c => c.status === 'Active').length;
-  const fiberSubs = customers.filter(c => c.serviceType === 'Fiber Broadband' || c.serviceType === 'Triple Play').length;
-  const catvSubs = customers.filter(c => c.serviceType === 'Cable TV').length;
-  const lowSignalSubs = customers.filter(c => c.rxOpticalPowerDbm < -24.5).length;
+  const activeSubs = customers.filter((c) => c.status === 'Active').length;
+  const fiberSubs = customers.filter(
+    (c) => c.serviceType === 'Fiber Broadband' || c.serviceType === 'Triple Play',
+  ).length;
+  const catvSubs = customers.filter((c) => c.serviceType === 'Cable TV').length;
+  const lowSignalSubs = customers.filter((c) => c.rxOpticalPowerDbm < -24.5).length;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
@@ -104,7 +121,9 @@ export const CustomerDirectoryView: React.FC = () => {
       <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">Customer & Subscriber Directory</h2>
-          <p className="text-xs text-slate-500">Manage FTTH broadband, Triple Play, and Cable TV subscriber connections & telemetry</p>
+          <p className="text-xs text-slate-500">
+            Manage FTTH broadband, Triple Play, and Cable TV subscriber connections & telemetry
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -159,14 +178,14 @@ export const CustomerDirectoryView: React.FC = () => {
               type="text"
               placeholder="Search by name, ID, mobile, ONT serial, or IP..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
             />
           </div>
 
           <select
             value={selectedService}
-            onChange={e => setSelectedService(e.target.value)}
+            onChange={(e) => setSelectedService(e.target.value)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Services</option>
@@ -178,7 +197,7 @@ export const CustomerDirectoryView: React.FC = () => {
 
           <select
             value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
+            onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Statuses</option>
@@ -189,7 +208,8 @@ export const CustomerDirectoryView: React.FC = () => {
         </div>
 
         <span className="text-xs text-slate-500 font-medium">
-          Showing <span className="font-bold text-slate-800">{filteredCustomers.length}</span> of {totalSubscribers} subscribers
+          Showing <span className="font-bold text-slate-800">{filteredCustomers.length}</span> of {totalSubscribers}{' '}
+          subscribers
         </span>
       </div>
 
@@ -209,7 +229,7 @@ export const CustomerDirectoryView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredCustomers.map(c => {
+              {filteredCustomers.map((c) => {
                 const isSignalLow = c.rxOpticalPowerDbm < -24.5;
 
                 return (
@@ -218,7 +238,9 @@ export const CustomerDirectoryView: React.FC = () => {
                       <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
                         {c.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono">{c.id} &bull; {c.mobile}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {c.id} &bull; {c.mobile}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-semibold text-slate-800">{c.plan}</div>
@@ -229,7 +251,8 @@ export const CustomerDirectoryView: React.FC = () => {
                         {c.oltId} &bull; {c.ponPort}
                       </div>
                       <div className="text-[10px] text-slate-400">
-                        Box: <span className="font-semibold text-slate-600">{c.terminalBoxId}</span> (Port {c.splitterOutputPort})
+                        Box: <span className="font-semibold text-slate-600">{c.terminalBoxId}</span> (Port{' '}
+                        {c.splitterOutputPort})
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -243,14 +266,16 @@ export const CustomerDirectoryView: React.FC = () => {
                           {c.rxOpticalPowerDbm} dBm
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400">
-                        {isSignalLow ? 'Low Signal' : 'Optimal'}
-                      </div>
+                      <div className="text-[10px] text-slate-400">{isSignalLow ? 'Low Signal' : 'Optimal'}</div>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        c.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          c.status === 'Active'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
                         {c.status}
                       </span>
                     </td>

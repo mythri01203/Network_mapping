@@ -15,7 +15,7 @@ export const BikerModePanel: React.FC = () => {
     clearBikerRoute,
     navigateToAsset,
     selectedObject,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [query, setQuery] = useState('');
@@ -23,31 +23,62 @@ export const BikerModePanel: React.FC = () => {
 
   const allAssets = useMemo(() => {
     return [
-      ...equipments.map(e => ({ id: e.id, name: e.name, type: e.type, category: e.category, lat: e.lat, lng: e.lng })),
-      ...faults.filter(f => f.status !== 'Resolved').map(f => ({ id: f.id, name: `[Outage] ${f.title}`, type: 'Fault Hazard', category: 'Faults', lat: f.affectedLocation.lat, lng: f.affectedLocation.lng })),
-      ...customers.map(c => ({ id: c.id, name: `${c.name} (${c.plan})`, type: 'Customer ONT', category: 'Customers', lat: c.lat, lng: c.lng }))
+      ...equipments.map((e) => ({
+        id: e.id,
+        name: e.name,
+        type: e.type,
+        category: e.category,
+        lat: e.lat,
+        lng: e.lng,
+      })),
+      ...faults
+        .filter((f) => f.status !== 'Resolved')
+        .map((f) => ({
+          id: f.id,
+          name: `[Outage] ${f.title}`,
+          type: 'Fault Hazard',
+          category: 'Faults',
+          lat: f.affectedLocation.lat,
+          lng: f.affectedLocation.lng,
+        })),
+      ...customers.map((c) => ({
+        id: c.id,
+        name: `${c.name} (${c.plan})`,
+        type: 'Customer ONT',
+        category: 'Customers',
+        lat: c.lat,
+        lng: c.lng,
+      })),
     ];
   }, [equipments, faults, customers]);
 
   const nearby = useMemo(() => {
     const q = query.toLowerCase();
-    return allAssets.filter(a => {
-      const matchesSearch = !q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.type.toLowerCase().includes(q);
-      const matchesType = filterType === 'All' ||
-        (filterType === 'OLT' && a.type === 'OLT') ||
-        (filterType === 'FAT' && (a.type === 'FAT' || a.type.includes('Terminal Box'))) ||
-        (filterType === 'Closures' && (a.type.includes('Closure') || a.type.includes('Splice'))) ||
-        (filterType === 'Infrastructure' && (a.type.includes('Pole') || a.type.includes('Manhole'))) ||
-        (filterType === 'Faults' && a.category === 'Faults') ||
-        (filterType === 'Customers' && a.category === 'Customers');
-      return matchesSearch && matchesType;
-    }).slice(0, 16);
+    return allAssets
+      .filter((a) => {
+        const matchesSearch =
+          !q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.type.toLowerCase().includes(q);
+        const matchesType =
+          filterType === 'All' ||
+          (filterType === 'OLT' && a.type === 'OLT') ||
+          (filterType === 'FAT' && (a.type === 'FAT' || a.type.includes('Terminal Box'))) ||
+          (filterType === 'Closures' && (a.type.includes('Closure') || a.type.includes('Splice'))) ||
+          (filterType === 'Infrastructure' && (a.type.includes('Pole') || a.type.includes('Manhole'))) ||
+          (filterType === 'Faults' && a.category === 'Faults') ||
+          (filterType === 'Customers' && a.category === 'Customers');
+        return matchesSearch && matchesType;
+      })
+      .slice(0, 16);
   }, [allAssets, query, filterType]);
 
   if (!isBikerMode) return null;
 
   const origin = selectedObject?.data?.lat
-    ? { lat: selectedObject.data.lat, lng: selectedObject.data.lng, name: selectedObject.data.name || selectedObject.data.id }
+    ? {
+        lat: selectedObject.data.lat,
+        lng: selectedObject.data.lng,
+        name: selectedObject.data.name || selectedObject.data.id,
+      }
     : { lat: 12.9352, lng: 77.6245, name: 'OLT-01 Central Telco Hub' };
 
   return (
@@ -61,14 +92,19 @@ export const BikerModePanel: React.FC = () => {
           <div>
             <div className="text-xs font-bold tracking-wide flex items-center gap-1.5">
               <span>Biker Field Navigation</span>
-              <span className="text-[9px] bg-white text-orange-700 px-1.5 py-0.2 rounded font-extrabold uppercase">Field Ops</span>
+              <span className="text-[9px] bg-white text-orange-700 px-1.5 py-0.2 rounded font-extrabold uppercase">
+                Field Ops
+              </span>
             </div>
             <div className="text-[10px] text-orange-100">Motorcycle road pathing between assets</div>
           </div>
         </div>
 
         <button
-          onClick={() => { setIsBikerMode(false); clearBikerRoute(); }}
+          onClick={() => {
+            setIsBikerMode(false);
+            clearBikerRoute();
+          }}
           className="p-1.5 text-orange-100 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
           title="Exit Biker Mode"
         >
@@ -81,7 +117,8 @@ export const BikerModePanel: React.FC = () => {
         <div className="p-2.5 rounded-xl bg-orange-50/80 border border-orange-200 text-orange-950 text-[11px] leading-relaxed flex items-start gap-2">
           <Compass className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
           <div>
-            <strong className="font-semibold text-orange-900">Road traffic routing:</strong> Navigates street corridors for technicians. Clearly distinct from underground duct and aerial fiber lines.
+            <strong className="font-semibold text-orange-900">Road traffic routing:</strong> Navigates street corridors
+            for technicians. Clearly distinct from underground duct and aerial fiber lines.
           </div>
         </div>
 
@@ -100,7 +137,7 @@ export const BikerModePanel: React.FC = () => {
         <div>
           <input
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search destination OLT, FAT, Joint Closure, Customer..."
             className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl text-xs outline-none transition-all placeholder:text-slate-400"
           />
@@ -108,14 +145,12 @@ export const BikerModePanel: React.FC = () => {
 
         {/* Filter Pills */}
         <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px] font-semibold">
-          {['All', 'OLT', 'FAT', 'Closures', 'Infrastructure', 'Faults', 'Customers'].map(cat => (
+          {['All', 'OLT', 'FAT', 'Closures', 'Infrastructure', 'Faults', 'Customers'].map((cat) => (
             <button
               key={cat}
               onClick={() => setFilterType(cat)}
               className={`px-2 py-0.5 rounded-full transition-colors whitespace-nowrap ${
-                filterType === cat
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                filterType === cat ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {cat}
@@ -131,11 +166,8 @@ export const BikerModePanel: React.FC = () => {
           </div>
 
           <div className="max-h-40 overflow-y-auto space-y-1.5 pr-0.5">
-            {nearby.map(asset => (
-              <div
-                key={asset.id}
-                className="flex items-center gap-1.5 group"
-              >
+            {nearby.map((asset) => (
+              <div key={asset.id} className="flex items-center gap-1.5 group">
                 <button
                   onClick={() => navigateToAsset(asset)}
                   className="flex-1 text-left p-2 rounded-xl border border-slate-200 hover:border-orange-400 hover:bg-orange-50/50 transition-all flex items-center justify-between"
@@ -167,7 +199,9 @@ export const BikerModePanel: React.FC = () => {
         {/* Active Multi-Stop Waypoints Strip */}
         {bikerWaypoints.length > 0 && (
           <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Planned Route Waypoints</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Planned Route Waypoints
+            </span>
             <div className="font-semibold text-slate-700 flex flex-wrap items-center gap-1">
               <span className="text-orange-600">Start</span>
               <span>&rarr;</span>
@@ -206,7 +240,9 @@ export const BikerModePanel: React.FC = () => {
                 <div className="text-[10px] font-bold uppercase text-orange-800 mb-1">Turn-by-Turn Instructions</div>
                 <ol className="max-h-24 overflow-y-auto list-decimal pl-4 space-y-1 text-[11px] text-orange-950">
                   {bikerRoute.steps.map((st, i) => (
-                    <li key={i} className="leading-tight">{st}</li>
+                    <li key={i} className="leading-tight">
+                      {st}
+                    </li>
                   ))}
                 </ol>
               </div>
@@ -226,7 +262,10 @@ export const BikerModePanel: React.FC = () => {
           )}
 
           <button
-            onClick={() => { setIsBikerMode(false); clearBikerRoute(); }}
+            onClick={() => {
+              setIsBikerMode(false);
+              clearBikerRoute();
+            }}
             className="flex-1 py-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
           >
             <span>Normal GIS Mode</span>

@@ -74,7 +74,15 @@ export function PageHeader({ title, description, icon: Icon, actions, children, 
 
 /* --------------------------------------------------------- Section label */
 
-export function SectionLabel({ className, children, action }: { className?: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function SectionLabel({
+  className,
+  children,
+  action,
+}: {
+  className?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <div className={cn('flex items-center justify-between gap-2', className)}>
       <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{children}</span>
@@ -138,9 +146,20 @@ export interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon, title, description, action, className, compact }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center justify-center text-center', compact ? 'gap-1.5 px-4 py-6' : 'gap-2 px-6 py-12', className)}>
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center text-center',
+        compact ? 'gap-1.5 px-4 py-6' : 'gap-2 px-6 py-12',
+        className,
+      )}
+    >
       {Icon && (
-        <div className={cn('flex items-center justify-center rounded-full bg-slate-100 text-slate-400', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+        <div
+          className={cn(
+            'flex items-center justify-center rounded-full bg-slate-100 text-slate-400',
+            compact ? 'h-8 w-8' : 'h-10 w-10',
+          )}
+        >
           <Icon size={compact ? 16 : 20} strokeWidth={1.8} />
         </div>
       )}
@@ -159,19 +178,36 @@ export interface KeyValueItem {
   mono?: boolean;
 }
 
-export function KeyValueList({ items, className, columns = 1 }: { items: KeyValueItem[]; className?: string; columns?: 1 | 2 }) {
+export function KeyValueList({
+  items,
+  className,
+  columns = 1,
+}: {
+  items: KeyValueItem[];
+  className?: string;
+  columns?: 1 | 2;
+}) {
   return (
-    <dl className={cn(columns === 2 ? 'grid grid-cols-2 gap-x-4 gap-y-2.5' : 'flex flex-col divide-y divide-slate-100', className)}>
+    <dl
+      className={cn(
+        columns === 2 ? 'grid grid-cols-2 gap-x-4 gap-y-2.5' : 'flex flex-col divide-y divide-slate-100',
+        className,
+      )}
+    >
       {items.map((item, i) =>
         columns === 2 ? (
           <div key={i} className="min-w-0">
             <dt className="text-[11px] text-slate-500">{item.label}</dt>
-            <dd className={cn('truncate text-[13px] text-slate-900', item.mono && 'font-mono text-xs')}>{item.value ?? '—'}</dd>
+            <dd className={cn('truncate text-[13px] text-slate-900', item.mono && 'font-mono text-xs')}>
+              {item.value ?? '—'}
+            </dd>
           </div>
         ) : (
           <div key={i} className="flex items-center justify-between gap-4 py-1.5">
             <dt className="shrink-0 text-xs text-slate-500">{item.label}</dt>
-            <dd className={cn('min-w-0 truncate text-right text-[13px] text-slate-900', item.mono && 'font-mono text-xs')}>
+            <dd
+              className={cn('min-w-0 truncate text-right text-[13px] text-slate-900', item.mono && 'font-mono text-xs')}
+            >
               {item.value ?? '—'}
             </dd>
           </div>
@@ -197,7 +233,8 @@ export function ProgressBar({
   size?: 'sm' | 'md';
 }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-  const resolved = tone === 'auto' || !tone ? (pct >= 90 ? 'red' : pct >= 75 ? 'amber' : tone === 'auto' ? 'green' : 'blue') : tone;
+  const resolved =
+    tone === 'auto' || !tone ? (pct >= 90 ? 'red' : pct >= 75 ? 'amber' : tone === 'auto' ? 'green' : 'blue') : tone;
   const color = { blue: 'bg-blue-600', green: 'bg-emerald-500', amber: 'bg-amber-500', red: 'bg-red-500' }[resolved];
   return (
     <div className={cn('w-full overflow-hidden rounded-full bg-slate-200', size === 'sm' ? 'h-1' : 'h-1.5', className)}>

@@ -16,8 +16,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'bg-slate-100 text-slate-700 border border-transparent hover:bg-slate-200 hover:text-slate-900 disabled:text-slate-400',
   danger:
     'bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300 active:bg-red-100 disabled:text-red-300',
-  dark:
-    'bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700 hover:text-white disabled:text-slate-500',
+  dark: 'bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700 hover:text-white disabled:text-slate-500',
 };
 
 const SIZES: Record<ButtonSize, string> = {

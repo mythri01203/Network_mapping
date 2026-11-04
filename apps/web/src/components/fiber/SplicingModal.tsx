@@ -15,19 +15,12 @@ import {
   Tag,
   Clock,
   ShieldCheck,
-  FileText
+  FileText,
 } from 'lucide-react';
 
 export const SplicingModal: React.FC = () => {
-  const {
-    isSplicingModalOpen,
-    setIsSplicingModalOpen,
-    closures,
-    cables,
-    addSplice,
-    removeSplice,
-    showToast
-  } = useNetwork();
+  const { isSplicingModalOpen, setIsSplicingModalOpen, closures, cables, addSplice, removeSplice, showToast } =
+    useNetwork();
 
   const [selectedClosureId, setSelectedClosureId] = useState<string>(closures[0]?.id || 'JC-01');
 
@@ -44,7 +37,7 @@ export const SplicingModal: React.FC = () => {
 
   if (!isSplicingModalOpen) return null;
 
-  const currentClosure = closures.find(c => c.id === selectedClosureId) || closures[0];
+  const currentClosure = closures.find((c) => c.id === selectedClosureId) || closures[0];
 
   const inCoreColor = getFiberColor(newInCore);
   const outCoreColor = getFiberColor(newOutCore);
@@ -57,20 +50,25 @@ export const SplicingModal: React.FC = () => {
     }
 
     // Validation: prevent duplicate core endpoint within this closure
-    const isDuplicate = currentClosure.splices.some(s =>
-      (s.inputCableId === newInCableId && s.inputCore === newInCore) ||
-      (s.outputCableId === newInCableId && s.outputCore === newInCore) ||
-      (s.inputCableId === newOutCableId && s.inputCore === newOutCore) ||
-      (s.outputCableId === newOutCableId && s.outputCore === newOutCore)
+    const isDuplicate = currentClosure.splices.some(
+      (s) =>
+        (s.inputCableId === newInCableId && s.inputCore === newInCore) ||
+        (s.outputCableId === newInCableId && s.outputCore === newInCore) ||
+        (s.inputCableId === newOutCableId && s.inputCore === newOutCore) ||
+        (s.outputCableId === newOutCableId && s.outputCore === newOutCore),
     );
 
     if (isDuplicate) {
-      showToast('error', 'Duplicate Core Endpoint', `A core endpoint is already assigned in closure ${currentClosure.id}. Within the same closure, each core endpoint can only be spliced once.`);
+      showToast(
+        'error',
+        'Duplicate Core Endpoint',
+        `A core endpoint is already assigned in closure ${currentClosure.id}. Within the same closure, each core endpoint can only be spliced once.`,
+      );
       return;
     }
 
-    const inCable = cables.find(c => c.id === newInCableId);
-    const outCable = cables.find(c => c.id === newOutCableId);
+    const inCable = cables.find((c) => c.id === newInCableId);
+    const outCable = cables.find((c) => c.id === newOutCableId);
 
     const newSplice: SpliceRecord = {
       id: `SPL-${Date.now().toString().slice(-4)}`,
@@ -83,13 +81,13 @@ export const SplicingModal: React.FC = () => {
       spliceLossDb: newLossDb,
       status: newStatus,
       technician: newTechnician,
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
     };
 
     const success = addSplice(currentClosure.id, newSplice);
     if (success) {
-      setNewInCore(prev => prev + 1);
-      setNewOutCore(prev => prev + 1);
+      setNewInCore((prev) => prev + 1);
+      setNewOutCore((prev) => prev + 1);
     }
   };
 
@@ -110,7 +108,9 @@ export const SplicingModal: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-sm text-slate-900">Fiber Splicing & Joint Closure Manager</h2>
-              <p className="text-[11px] text-slate-500">Optical Core-to-Core Fusion Splicing Matrix · TIA-598 Color Standards</p>
+              <p className="text-[11px] text-slate-500">
+                Optical Core-to-Core Fusion Splicing Matrix · TIA-598 Color Standards
+              </p>
             </div>
           </div>
           <button
@@ -123,7 +123,7 @@ export const SplicingModal: React.FC = () => {
 
         {/* Closure Picker Strip */}
         <div className="px-6 py-2.5 border-b border-slate-100 bg-slate-100/50 flex items-center gap-2 overflow-x-auto">
-          {closures.map(jc => (
+          {closures.map((jc) => (
             <button
               key={jc.id}
               onClick={() => setSelectedClosureId(jc.id)}
@@ -150,9 +150,15 @@ export const SplicingModal: React.FC = () => {
                 <span className="font-bold text-sm text-amber-950">{currentClosure.name}</span>
               </div>
               <div className="text-[11px] text-amber-900 mt-1 flex flex-wrap gap-x-3">
-                <span>Type: <strong>{currentClosure.closureType}</strong></span>
-                <span>Area: <strong>{currentClosure.area}</strong></span>
-                <span>Certified Lead: <strong>{currentClosure.technician}</strong></span>
+                <span>
+                  Type: <strong>{currentClosure.closureType}</strong>
+                </span>
+                <span>
+                  Area: <strong>{currentClosure.area}</strong>
+                </span>
+                <span>
+                  Certified Lead: <strong>{currentClosure.technician}</strong>
+                </span>
               </div>
             </div>
             <div className="text-right">
@@ -175,10 +181,14 @@ export const SplicingModal: React.FC = () => {
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Incoming Cable</label>
                 <select
                   value={newInCableId}
-                  onChange={e => setNewInCableId(e.target.value)}
+                  onChange={(e) => setNewInCableId(e.target.value)}
                   className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
                 >
-                  {cables.map(c => <option key={c.id} value={c.id}>{c.id} ({c.fiberCount}F)</option>)}
+                  {cables.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.id} ({c.fiberCount}F)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -188,13 +198,16 @@ export const SplicingModal: React.FC = () => {
                   In Core ({inCoreColor.name})
                 </label>
                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                  <span className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0" style={{ backgroundColor: inCoreColor.hex }} />
+                  <span
+                    className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0"
+                    style={{ backgroundColor: inCoreColor.hex }}
+                  />
                   <input
                     type="number"
                     min="1"
                     max="96"
                     value={newInCore}
-                    onChange={e => setNewInCore(Number(e.target.value))}
+                    onChange={(e) => setNewInCore(Number(e.target.value))}
                     className="w-full text-xs outline-none font-bold"
                   />
                 </div>
@@ -205,10 +218,14 @@ export const SplicingModal: React.FC = () => {
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Outgoing Cable</label>
                 <select
                   value={newOutCableId}
-                  onChange={e => setNewOutCableId(e.target.value)}
+                  onChange={(e) => setNewOutCableId(e.target.value)}
                   className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
                 >
-                  {cables.map(c => <option key={c.id} value={c.id}>{c.id} ({c.fiberCount}F)</option>)}
+                  {cables.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.id} ({c.fiberCount}F)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -218,13 +235,16 @@ export const SplicingModal: React.FC = () => {
                   Out Core ({outCoreColor.name})
                 </label>
                 <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                  <span className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0" style={{ backgroundColor: outCoreColor.hex }} />
+                  <span
+                    className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0"
+                    style={{ backgroundColor: outCoreColor.hex }}
+                  />
                   <input
                     type="number"
                     min="1"
                     max="96"
                     value={newOutCore}
-                    onChange={e => setNewOutCore(Number(e.target.value))}
+                    onChange={(e) => setNewOutCore(Number(e.target.value))}
                     className="w-full text-xs outline-none font-bold"
                   />
                 </div>
@@ -232,14 +252,16 @@ export const SplicingModal: React.FC = () => {
 
               {/* Loss dB & Status */}
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Splice Loss (dB)</label>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                  Splice Loss (dB)
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   min="0.00"
                   max="1.50"
                   value={newLossDb}
-                  onChange={e => setNewLossDb(Number(e.target.value))}
+                  onChange={(e) => setNewLossDb(Number(e.target.value))}
                   className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
                 />
               </div>
@@ -261,7 +283,7 @@ export const SplicingModal: React.FC = () => {
                 <label className="text-slate-500">Splice Tray Selection:</label>
                 <select
                   value={newTray}
-                  onChange={e => setNewTray(e.target.value)}
+                  onChange={(e) => setNewTray(e.target.value)}
                   className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
                 >
                   <option value="Tray 1 (Primary Feeder)">Tray 1 (Primary Feeder)</option>
@@ -275,7 +297,7 @@ export const SplicingModal: React.FC = () => {
                 <label className="text-slate-500">Splice Status:</label>
                 <select
                   value={newStatus}
-                  onChange={e => setNewStatus(e.target.value as any)}
+                  onChange={(e) => setNewStatus(e.target.value as any)}
                   className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
                 >
                   <option value="Spliced">Spliced (Active)</option>
@@ -290,7 +312,7 @@ export const SplicingModal: React.FC = () => {
                 <input
                   type="text"
                   value={newTechnician}
-                  onChange={e => setNewTechnician(e.target.value)}
+                  onChange={(e) => setNewTechnician(e.target.value)}
                   className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
                 />
               </div>
@@ -323,7 +345,10 @@ export const SplicingModal: React.FC = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="flex items-center gap-1.5 text-[11px]">
-                          <span className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{ backgroundColor: inCol.hex }} />
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-slate-300"
+                            style={{ backgroundColor: inCol.hex }}
+                          />
                           <span>{inCol.name}</span>
                         </span>
                       </td>
@@ -332,22 +357,25 @@ export const SplicingModal: React.FC = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="flex items-center gap-1.5 text-[11px]">
-                          <span className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{ backgroundColor: outCol.hex }} />
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-slate-300"
+                            style={{ backgroundColor: outCol.hex }}
+                          />
                           <span>{outCol.name}</span>
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-600 font-bold">
-                        {spl.spliceLossDb} dB
-                      </td>
+                      <td className="py-2.5 px-3 font-mono text-emerald-600 font-bold">{spl.spliceLossDb} dB</td>
                       <td className="py-2.5 px-3 text-slate-600">{spl.technician}</td>
                       <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          spl.status === 'Tested' || spl.status === 'Spliced'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : spl.status === 'Failed'
-                            ? 'bg-rose-100 text-rose-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            spl.status === 'Tested' || spl.status === 'Spliced'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : spl.status === 'Failed'
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
                           {spl.status}
                         </span>
                       </td>

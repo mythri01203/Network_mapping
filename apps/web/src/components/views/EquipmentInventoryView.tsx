@@ -17,7 +17,7 @@ import {
   Tv,
   CheckCircle2,
   AlertTriangle,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react';
 
 export const EquipmentInventoryView: React.FC = () => {
@@ -31,7 +31,7 @@ export const EquipmentInventoryView: React.FC = () => {
     setIsEquipmentModalOpen,
     setSelectedEquipmentTypeToAdd,
     setActiveTool,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,7 +40,7 @@ export const EquipmentInventoryView: React.FC = () => {
   const [selectedTechnology, setSelectedTechnology] = useState<'All' | 'GPON' | 'EPON'>('All');
 
   // Filtered equipments
-  const filteredEquipments = equipments.filter(eq => {
+  const filteredEquipments = equipments.filter((eq) => {
     const matchesSearch =
       searchQuery === '' ||
       eq.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -52,16 +52,29 @@ export const EquipmentInventoryView: React.FC = () => {
     const matchesCategory = selectedCategory === 'All' || eq.category === selectedCategory;
     const matchesStatus = selectedStatus === 'All' || eq.status === selectedStatus;
     const matchesTech =
-      selectedTechnology === 'All' ||
-      (eq.type === 'OLT' && (eq.technology || 'GPON') === selectedTechnology);
+      selectedTechnology === 'All' || (eq.type === 'OLT' && (eq.technology || 'GPON') === selectedTechnology);
 
     return matchesSearch && matchesCategory && matchesStatus && matchesTech;
   });
 
   // Export to CSV
   const handleExportCSV = () => {
-    const headers = ['ID', 'Name', 'Type', 'Category', 'Area', 'Street', 'Status', 'Total Ports', 'Used Ports', 'Manufacturer', 'Installed Date', 'Latitude', 'Longitude'];
-    const rows = filteredEquipments.map(e => [
+    const headers = [
+      'ID',
+      'Name',
+      'Type',
+      'Category',
+      'Area',
+      'Street',
+      'Status',
+      'Total Ports',
+      'Used Ports',
+      'Manufacturer',
+      'Installed Date',
+      'Latitude',
+      'Longitude',
+    ];
+    const rows = filteredEquipments.map((e) => [
       e.id,
       `"${e.name}"`,
       e.type,
@@ -74,10 +87,10 @@ export const EquipmentInventoryView: React.FC = () => {
       e.manufacturer || 'N/A',
       e.installedDate,
       e.lat,
-      e.lng
+      e.lng,
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -103,10 +116,10 @@ export const EquipmentInventoryView: React.FC = () => {
 
   // KPI Metrics
   const totalCount = equipments.length;
-  const centralOfficeCount = equipments.filter(e => e.category === 'Central Office').length;
-  const distributionCount = equipments.filter(e => e.category === 'Fiber Distribution').length;
-  const civilCount = equipments.filter(e => e.category === 'Supporting Infrastructure').length;
-  const faultCount = equipments.filter(e => e.status === 'Faulty' || e.status === 'Warning').length;
+  const centralOfficeCount = equipments.filter((e) => e.category === 'Central Office').length;
+  const distributionCount = equipments.filter((e) => e.category === 'Fiber Distribution').length;
+  const civilCount = equipments.filter((e) => e.category === 'Supporting Infrastructure').length;
+  const faultCount = equipments.filter((e) => e.status === 'Faulty' || e.status === 'Warning').length;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
@@ -114,7 +127,9 @@ export const EquipmentInventoryView: React.FC = () => {
       <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">Equipment & Physical Asset Inventory</h2>
-          <p className="text-xs text-slate-500">Comprehensive directory of central office, distribution, civil, and customer assets</p>
+          <p className="text-xs text-slate-500">
+            Comprehensive directory of central office, distribution, civil, and customer assets
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -174,7 +189,7 @@ export const EquipmentInventoryView: React.FC = () => {
               type="text"
               placeholder="Filter by ID, name, area, street, or model..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
             />
           </div>
@@ -182,7 +197,7 @@ export const EquipmentInventoryView: React.FC = () => {
           {/* Category Filter */}
           <select
             value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
+            onChange={(e) => setSelectedCategory(e.target.value)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Categories</option>
@@ -196,7 +211,7 @@ export const EquipmentInventoryView: React.FC = () => {
           {/* Status Filter */}
           <select
             value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
+            onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Statuses</option>
@@ -209,7 +224,7 @@ export const EquipmentInventoryView: React.FC = () => {
           {/* OLT Technology Filter */}
           <select
             value={selectedTechnology}
-            onChange={e => setSelectedTechnology(e.target.value as any)}
+            onChange={(e) => setSelectedTechnology(e.target.value as any)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All PON Standards</option>
@@ -239,7 +254,7 @@ export const EquipmentInventoryView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEquipments.map(eq => {
+              {filteredEquipments.map((eq) => {
                 const totalPorts = eq.totalPorts || (eq.type === 'FAT' ? 8 : eq.type === 'FDT' ? 48 : 0);
                 const usedPorts = eq.usedPorts || (eq.type === 'FAT' ? 5 : eq.type === 'FDT' ? 24 : 0);
                 const portPct = totalPorts > 0 ? Math.round((usedPorts / totalPorts) * 100) : 0;
@@ -256,11 +271,13 @@ export const EquipmentInventoryView: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-slate-700">{eq.type}</span>
                         {eq.type === 'OLT' && (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
-                            (eq.technology || 'GPON') === 'EPON'
-                              ? 'bg-purple-100 text-purple-700 border-purple-200'
-                              : 'bg-blue-100 text-blue-700 border-blue-200'
-                          }`}>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                              (eq.technology || 'GPON') === 'EPON'
+                                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                : 'bg-blue-100 text-blue-700 border-blue-200'
+                            }`}
+                          >
                             {eq.technology || 'GPON'}
                           </span>
                         )}
@@ -277,11 +294,13 @@ export const EquipmentInventoryView: React.FC = () => {
                           eq.status === 'Active'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : eq.status === 'Faulty'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${eq.status === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${eq.status === 'Active' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                        />
                         {eq.status}
                       </span>
                     </td>
@@ -289,7 +308,9 @@ export const EquipmentInventoryView: React.FC = () => {
                       {totalPorts > 0 ? (
                         <div className="w-28">
                           <div className="flex justify-between text-[10px] mb-1">
-                            <span className="font-semibold text-slate-700">{usedPorts}/{totalPorts}</span>
+                            <span className="font-semibold text-slate-700">
+                              {usedPorts}/{totalPorts}
+                            </span>
                             <span className="text-slate-400">{portPct}%</span>
                           </div>
                           <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">

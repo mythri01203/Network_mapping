@@ -14,7 +14,7 @@ export const getUtilityPoleSvgString = (
   isSelected: boolean = false,
   isTraced: boolean = false,
   width: number = 32,
-  height: number = 40
+  height: number = 40,
 ): string => {
   let badgeColor = '#10b981';
   if (status === 'Faulty') badgeColor = '#ef4444';
@@ -26,8 +26,8 @@ export const getUtilityPoleSvgString = (
       isSelected
         ? 'drop-shadow(0 0 6px rgba(37,99,235,0.9))'
         : isTraced
-        ? 'drop-shadow(0 0 6px rgba(16,185,129,0.9))'
-        : 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))'
+          ? 'drop-shadow(0 0 6px rgba(16,185,129,0.9))'
+          : 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))'
     };">
       <defs>
         <linearGradient id="poleWoodGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -96,7 +96,7 @@ export const UtilityPoleIcon: React.FC<UtilityPoleIconProps> = ({
   height = 40,
   status = 'Normal',
   isSelected = false,
-  isTraced = false
+  isTraced = false,
 }) => {
   const svgHtml = getUtilityPoleSvgString(status, isSelected, isTraced, Number(width) || 32, Number(height) || 40);
   return (
@@ -106,4 +106,3 @@ export const UtilityPoleIcon: React.FC<UtilityPoleIconProps> = ({
     />
   );
 };
-

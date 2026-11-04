@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Globe, Layers, LocateFixed, Loader2, Map as MapIcon, Maximize2, Minus, Plus, Satellite, type LucideIcon } from 'lucide-react';
+import {
+  Check,
+  Globe,
+  Layers,
+  LocateFixed,
+  Loader2,
+  Map as MapIcon,
+  Maximize2,
+  Minus,
+  Plus,
+  Satellite,
+  type LucideIcon,
+} from 'lucide-react';
 import { useNetwork } from '../../../context/NetworkContext';
 import { cn } from '../../ui';
 
@@ -26,9 +38,22 @@ const BASEMAPS: { id: Basemap; label: string; icon: LucideIcon; preview: string 
   },
 ];
 
-const panel = 'rounded-lg border border-slate-200/90 bg-white/95 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_6px_18px_-6px_rgb(15_23_42/0.2)] backdrop-blur';
+const panel =
+  'rounded-lg border border-slate-200/90 bg-white/95 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_6px_18px_-6px_rgb(15_23_42/0.2)] backdrop-blur';
 
-function ControlButton({ icon: Icon, label, onClick, disabled, spinning }: { icon: LucideIcon; label: string; onClick: () => void; disabled?: boolean; spinning?: boolean }) {
+function ControlButton({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  spinning,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  spinning?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -38,7 +63,11 @@ function ControlButton({ icon: Icon, label, onClick, disabled, spinning }: { ico
       aria-label={label}
       className="flex h-9 w-9 items-center justify-center text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
     >
-      {spinning ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />}
+      {spinning ? (
+        <Loader2 className="h-[18px] w-[18px] animate-spin" />
+      ) : (
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+      )}
     </button>
   );
 }
@@ -70,10 +99,16 @@ function BasemapSwitcher() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         title="Change basemap"
-        className={cn(panel, 'group flex h-[60px] w-[60px] flex-col overflow-hidden p-1 transition-shadow hover:shadow-lg', open && 'ring-2 ring-blue-500')}
+        className={cn(
+          panel,
+          'group flex h-[60px] w-[60px] flex-col overflow-hidden p-1 transition-shadow hover:shadow-lg',
+          open && 'ring-2 ring-blue-500',
+        )}
       >
         <span className={cn('flex flex-1 items-center justify-center rounded-[5px]', current.preview)}>
-          <current.icon className={cn('h-4 w-4', current.id === 'google_satellite' ? 'text-white/90' : 'text-slate-600')} />
+          <current.icon
+            className={cn('h-4 w-4', current.id === 'google_satellite' ? 'text-white/90' : 'text-slate-600')}
+          />
         </span>
         <span className="pt-0.5 text-center text-[10px] font-medium leading-tight text-slate-700">
           {current.id === 'osm' ? 'OSM' : current.label}
@@ -92,7 +127,10 @@ function BasemapSwitcher() {
                   setMapTileProvider(b.id);
                   setOpen(false);
                 }}
-                className={cn('flex w-[76px] flex-col gap-1 rounded-md p-1 text-left transition-colors', active ? 'bg-blue-50' : 'hover:bg-slate-50')}
+                className={cn(
+                  'flex w-[76px] flex-col gap-1 rounded-md p-1 text-left transition-colors',
+                  active ? 'bg-blue-50' : 'hover:bg-slate-50',
+                )}
               >
                 <span
                   className={cn(
@@ -108,7 +146,11 @@ function BasemapSwitcher() {
                     </span>
                   )}
                 </span>
-                <span className={cn('truncate px-0.5 text-[11px] font-medium', active ? 'text-blue-700' : 'text-slate-700')}>{b.label}</span>
+                <span
+                  className={cn('truncate px-0.5 text-[11px] font-medium', active ? 'text-blue-700' : 'text-slate-700')}
+                >
+                  {b.label}
+                </span>
               </button>
             );
           })}
@@ -134,7 +176,13 @@ export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onReset
         <ControlButton icon={Layers} label="Map layers" onClick={() => setIsLayersDrawerOpen(true)} />
       </div>
       <div className={cn(panel, 'flex flex-col divide-y divide-slate-100 overflow-hidden')}>
-        <ControlButton icon={LocateFixed} label="My location" onClick={onLocate} disabled={isLocating} spinning={isLocating} />
+        <ControlButton
+          icon={LocateFixed}
+          label="My location"
+          onClick={onLocate}
+          disabled={isLocating}
+          spinning={isLocating}
+        />
         <ControlButton icon={Maximize2} label="Reset view" onClick={onResetView} />
       </div>
       <div className={cn(panel, 'flex flex-col divide-y divide-slate-100 overflow-hidden')}>
@@ -148,7 +196,15 @@ export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onReset
 
 export type OltFilter = 'All' | 'GPON' | 'EPON';
 
-export function OltFilterControl({ value, onChange, counts }: { value: OltFilter; onChange: (v: OltFilter) => void; counts: Record<OltFilter, number> }) {
+export function OltFilterControl({
+  value,
+  onChange,
+  counts,
+}: {
+  value: OltFilter;
+  onChange: (v: OltFilter) => void;
+  counts: Record<OltFilter, number>;
+}) {
   if (counts.All === 0) return null;
   const options: { id: OltFilter; label: string; dot?: string }[] = [
     { id: 'All', label: 'All' },

@@ -16,7 +16,7 @@ export const getOltChassisSvgString = (
   isTraced: boolean = false,
   width: number = 54,
   height: number = 28,
-  technology?: string
+  technology?: string,
 ): string => {
   let badgeColor = '#10b981';
   if (status === 'Faulty') badgeColor = '#ef4444';
@@ -26,8 +26,8 @@ export const getOltChassisSvgString = (
   const outline = isSelected
     ? `stroke="#2563eb" stroke-width="2.5" stroke-dasharray="3,2"`
     : isTraced
-    ? `stroke="#10b981" stroke-width="2.5"`
-    : `stroke="#334155" stroke-width="0.8"`;
+      ? `stroke="#10b981" stroke-width="2.5"`
+      : `stroke="#334155" stroke-width="0.8"`;
 
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 58 30" style="overflow: visible; filter: ${isSelected ? 'drop-shadow(0 0 6px rgba(37,99,235,0.9))' : isTraced ? 'drop-shadow(0 0 6px rgba(16,185,129,0.9))' : 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))'};">
@@ -148,12 +148,16 @@ export const getOltChassisSvgString = (
       <circle cx="53" cy="2" r="3.2" fill="${badgeColor}" stroke="#ffffff" stroke-width="1.2"/>
 
       <!-- Technology Tag (GPON = Blue, EPON = Purple) -->
-      ${technology ? `
+      ${
+        technology
+          ? `
         <g transform="translate(18, -4.5)">
           <rect x="0" y="0" width="${technology === 'Combo PON' ? 26 : 17}" height="8" rx="2" fill="${technology === 'EPON' ? '#9333ea' : '#2563eb'}" stroke="#ffffff" stroke-width="0.9" filter="drop-shadow(0 1px 2px rgba(0,0,0,0.4))"/>
           <text x="${technology === 'Combo PON' ? 13 : 8.5}" y="5.6" font-family="system-ui, -apple-system, sans-serif" font-size="4.6" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="0.3">${technology}</text>
         </g>
-      ` : ''}
+      `
+          : ''
+      }
     </svg>
   `;
 };
@@ -165,7 +169,7 @@ export const OltChassisIcon: React.FC<OltChassisIconProps> = ({
   status = 'Normal',
   isSelected = false,
   isTraced = false,
-  technology
+  technology,
 }) => {
   const svgHtml = getOltChassisSvgString(
     status,
@@ -173,7 +177,7 @@ export const OltChassisIcon: React.FC<OltChassisIconProps> = ({
     isTraced,
     Number(width) || 54,
     Number(height) || 28,
-    technology
+    technology,
   );
   return (
     <div
@@ -182,4 +186,3 @@ export const OltChassisIcon: React.FC<OltChassisIconProps> = ({
     />
   );
 };
-

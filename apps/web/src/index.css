@@ -1,11 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ------------------------------------------------------------------ */
 /* Design tokens                                                       */
 /* ------------------------------------------------------------------ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -27,11 +27,11 @@
     background: var(--color-slate-100);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: 'cv11', 'ss01';
   }
 
   button,
-  [role="button"] {
+  [role='button'] {
     cursor: pointer;
   }
 
@@ -94,7 +94,7 @@
   .ui-table tbody tr:hover td {
     background: var(--color-slate-50);
   }
-  .ui-table tbody tr[data-selected="true"] td {
+  .ui-table tbody tr[data-selected='true'] td {
     background: var(--color-blue-50);
   }
   .ui-table tbody tr:last-child td {
@@ -131,23 +131,47 @@
 /* Animations                                                          */
 /* ------------------------------------------------------------------ */
 @keyframes ui-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes ui-pop-in {
-  from { opacity: 0; transform: translateY(4px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes ui-slide-in-right {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
-.animate-fade-in { animation: ui-fade-in 120ms ease-out; }
-.animate-pop-in { animation: ui-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1); }
-.animate-slide-in-right { animation: ui-slide-in-right 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-fade-in {
+  animation: ui-fade-in 120ms ease-out;
+}
+.animate-pop-in {
+  animation: ui-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-slide-in-right {
+  animation: ui-slide-in-right 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
@@ -236,7 +260,9 @@
 
 /* Trace + fault line styling */
 @keyframes dash-flow {
-  to { stroke-dashoffset: -32; }
+  to {
+    stroke-dashoffset: -32;
+  }
 }
 .fiber-trace-active {
   stroke-dasharray: 10, 6;
@@ -248,7 +274,9 @@
 
 /* Equipment markers */
 .gis-equipment-marker {
-  transition: transform 120ms ease-out, filter 120ms ease-out;
+  transition:
+    transform 120ms ease-out,
+    filter 120ms ease-out;
   cursor: pointer;
 }
 .gis-equipment-marker:hover {

@@ -128,7 +128,14 @@ export interface SearchInputProps extends Omit<InputProps, 'onChange' | 'value'>
   onValueChange: (value: string) => void;
 }
 
-export function SearchInput({ value, onValueChange, className, placeholder = 'Search', controlSize = 'md', ...rest }: SearchInputProps) {
+export function SearchInput({
+  value,
+  onValueChange,
+  className,
+  placeholder = 'Search',
+  controlSize = 'md',
+  ...rest
+}: SearchInputProps) {
   return (
     <div className={cn('relative', className)}>
       <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -192,7 +199,13 @@ export function Switch({ checked, onChange, label, description, disabled, size =
   );
   if (!label) return <span className={className}>{button}</span>;
   return (
-    <label className={cn('flex cursor-pointer items-start justify-between gap-3', disabled && 'cursor-not-allowed', className)}>
+    <label
+      className={cn(
+        'flex cursor-pointer items-start justify-between gap-3',
+        disabled && 'cursor-not-allowed',
+        className,
+      )}
+    >
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-slate-800">{label}</span>
         {description && <span className="mt-0.5 block text-xs text-slate-500">{description}</span>}

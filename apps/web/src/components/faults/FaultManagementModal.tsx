@@ -1,18 +1,7 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { Fault, WorkOrder } from '../../types/network';
-import {
-  X,
-  AlertTriangle,
-  Wrench,
-  Users,
-  MapPin,
-  CheckCircle2,
-  Clock,
-  Send,
-  Plus,
-  ShieldAlert
-} from 'lucide-react';
+import { X, AlertTriangle, Wrench, Users, MapPin, CheckCircle2, Clock, Send, Plus, ShieldAlert } from 'lucide-react';
 
 export const FaultManagementModal: React.FC = () => {
   const {
@@ -27,7 +16,7 @@ export const FaultManagementModal: React.FC = () => {
     resolveExistingFault,
     updateWorkOrderStatus,
     flyToLocation,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'active_faults' | 'new_fault' | 'work_orders'>('active_faults');
@@ -42,7 +31,7 @@ export const FaultManagementModal: React.FC = () => {
 
   if (!isFaultModalOpen) return null;
 
-  const currentFault = faults.find(f => f.id === selectedFaultId) || faults[0];
+  const currentFault = faults.find((f) => f.id === selectedFaultId) || faults[0];
 
   const handleCreateFault = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +42,7 @@ export const FaultManagementModal: React.FC = () => {
       affectedCableId,
       description,
       affectedCustomerIds: ['CUST-001', 'CUST-002', 'CUST-003', 'CUST-004'],
-      affectedCores: [1, 2, 3, 4]
+      affectedCores: [1, 2, 3, 4],
     });
     setActiveTab('active_faults');
   };
@@ -69,7 +58,9 @@ export const FaultManagementModal: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-sm text-slate-900">Network Fault & Outage Management</h2>
-              <p className="text-[11px] text-slate-500">Incident response, downstream subscriber impact & technician dispatch</p>
+              <p className="text-[11px] text-slate-500">
+                Incident response, downstream subscriber impact & technician dispatch
+              </p>
             </div>
           </div>
           <button
@@ -86,10 +77,12 @@ export const FaultManagementModal: React.FC = () => {
             <button
               onClick={() => setActiveTab('active_faults')}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                activeTab === 'active_faults' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'active_faults'
+                  ? 'bg-white text-rose-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Active Outages ({faults.filter(f => f.status !== 'Resolved').length})
+              Active Outages ({faults.filter((f) => f.status !== 'Resolved').length})
             </button>
             <button
               onClick={() => setActiveTab('work_orders')}
@@ -117,8 +110,10 @@ export const FaultManagementModal: React.FC = () => {
             <div className="grid grid-cols-3 gap-5">
               {/* Faults List */}
               <div className="space-y-2 border-r border-slate-100 pr-4">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Reported Incidents</div>
-                {faults.map(f => (
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Reported Incidents
+                </div>
+                {faults.map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setSelectedFaultId(f.id)}
@@ -130,14 +125,18 @@ export const FaultManagementModal: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[10px] font-bold text-rose-700">{f.id}</span>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                        f.severity === 'Critical' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                          f.severity === 'Critical' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
                         {f.severity}
                       </span>
                     </div>
                     <div className="font-bold text-xs text-slate-900 mt-1 truncate">{f.title}</div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">{f.type} &bull; {f.status}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {f.type} &bull; {f.status}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -155,7 +154,9 @@ export const FaultManagementModal: React.FC = () => {
                     <p className="text-slate-700 text-xs leading-relaxed">{currentFault.description}</p>
                     <div className="pt-2 border-t border-rose-200/60 flex items-center justify-between text-[11px] text-slate-600">
                       <span>Reported: {currentFault.reportedAt}</span>
-                      <span>Assigned: <strong className="text-slate-900">{currentFault.assignedTechnician}</strong></span>
+                      <span>
+                        Assigned: <strong className="text-slate-900">{currentFault.assignedTechnician}</strong>
+                      </span>
                     </div>
                   </div>
 
@@ -166,12 +167,14 @@ export const FaultManagementModal: React.FC = () => {
                       <span>Impacted Downstream Subscribers ({currentFault.affectedCustomerIds.length})</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto">
-                      {currentFault.affectedCustomerIds.map(cid => {
-                        const cust = customers.find(c => c.id === cid);
+                      {currentFault.affectedCustomerIds.map((cid) => {
+                        const cust = customers.find((c) => c.id === cid);
                         return (
                           <div key={cid} className="p-2 bg-white rounded-lg border border-slate-200 text-[11px]">
                             <div className="font-bold text-slate-800">{cust?.name || cid}</div>
-                            <div className="text-[10px] text-slate-400">{cust?.mobile} &bull; {cust?.plan}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {cust?.mobile} &bull; {cust?.plan}
+                            </div>
                           </div>
                         );
                       })}
@@ -213,7 +216,7 @@ export const FaultManagementModal: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Fault Type</label>
                   <select
                     value={faultType}
-                    onChange={e => setFaultType(e.target.value as any)}
+                    onChange={(e) => setFaultType(e.target.value as any)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
                   >
                     <option value="Fiber Cut">Fiber Cut (Physical Sever)</option>
@@ -227,7 +230,7 @@ export const FaultManagementModal: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">Severity Level</label>
                   <select
                     value={severity}
-                    onChange={e => setSeverity(e.target.value as any)}
+                    onChange={(e) => setSeverity(e.target.value as any)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
                   >
                     <option value="Critical">Critical (Complete Hub Cut)</option>
@@ -243,7 +246,7 @@ export const FaultManagementModal: React.FC = () => {
                 <input
                   type="text"
                   value={faultTitle}
-                  onChange={e => setFaultTitle(e.target.value)}
+                  onChange={(e) => setFaultTitle(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
                 />
               </div>
@@ -252,19 +255,25 @@ export const FaultManagementModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Affected Cable</label>
                 <select
                   value={affectedCableId}
-                  onChange={e => setAffectedCableId(e.target.value)}
+                  onChange={(e) => setAffectedCableId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
                 >
-                  {cables.map(c => <option key={c.id} value={c.id}>{c.name} ({c.id})</option>)}
+                  {cables.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.id})
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Description & Field Evidence</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Description & Field Evidence
+                </label>
                 <textarea
                   rows={3}
                   value={description}
-                  onChange={e => setDescription(e.target.value)}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs"
                 />
               </div>
@@ -285,15 +294,19 @@ export const FaultManagementModal: React.FC = () => {
             <div className="space-y-3">
               <div className="font-bold text-xs text-slate-800">Technician Assigned Work Orders</div>
               <div className="space-y-2">
-                {workOrders.map(wo => (
-                  <div key={wo.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                {workOrders.map((wo) => (
+                  <div
+                    key={wo.id}
+                    className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between"
+                  >
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[10px] font-bold text-blue-600">{wo.id}</span>
                         <span className="font-bold text-xs text-slate-800">{wo.title}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-1">
-                        Technician: <strong className="text-slate-800">{wo.technicianName}</strong> ({wo.technicianPhone}) &bull; Scheduled: {wo.scheduledDate}
+                        Technician: <strong className="text-slate-800">{wo.technicianName}</strong> (
+                        {wo.technicianPhone}) &bull; Scheduled: {wo.scheduledDate}
                       </div>
                       <div className="text-[11px] text-slate-600 mt-0.5">{wo.notes}</div>
                     </div>
@@ -301,7 +314,7 @@ export const FaultManagementModal: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <select
                         value={wo.status}
-                        onChange={e => updateWorkOrderStatus(wo.id, e.target.value as any)}
+                        onChange={(e) => updateWorkOrderStatus(wo.id, e.target.value as any)}
                         className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 outline-none"
                       >
                         <option value="Pending">Pending</option>

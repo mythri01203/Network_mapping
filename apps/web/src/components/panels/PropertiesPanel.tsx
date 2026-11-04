@@ -31,7 +31,7 @@ import {
   Check,
   TrendingUp,
   Radio,
-  BookOpen
+  BookOpen,
 } from 'lucide-react';
 
 export const PropertiesPanel: React.FC = () => {
@@ -59,7 +59,7 @@ export const PropertiesPanel: React.FC = () => {
     setActiveDrawingPoints,
     setActiveTool,
     setSelectedEquipmentTypeToAdd,
-    uiMode
+    uiMode,
   } = useNetwork();
 
   const [selectedPonIndex, setSelectedPonIndex] = useState(0);
@@ -89,7 +89,8 @@ export const PropertiesPanel: React.FC = () => {
         </div>
         <div className="font-semibold text-xs text-slate-700 mb-1">No Object Selected</div>
         <p className="text-[11px] leading-relaxed max-w-xs">
-          Click any equipment marker, cable route, customer pin, or fault hazard on the map to inspect properties and fiber connections.
+          Click any equipment marker, cable route, customer pin, or fault hazard on the map to inspect properties and
+          fiber connections.
         </p>
       </div>
     );
@@ -106,7 +107,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '🏢',
             badge: 'Central Hub',
             desc: 'Main station sending high-speed fiber internet to the whole city.',
-            signalLevel: '98% (Excellent Master Signal)'
+            signalLevel: '98% (Excellent Master Signal)',
           };
         case 'FAT':
           return {
@@ -114,7 +115,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '📦',
             badge: 'Neighborhood Box',
             desc: 'Box on pole or wall where customer home wires plug in.',
-            signalLevel: '95% (Strong Local Signal)'
+            signalLevel: '95% (Strong Local Signal)',
           };
         case 'FDT':
           return {
@@ -122,7 +123,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '📦',
             badge: 'Area Distribution',
             desc: 'Connects main feeder cables into local street cables.',
-            signalLevel: '96% (Strong Distribution Signal)'
+            signalLevel: '96% (Strong Distribution Signal)',
           };
         case 'FDMS':
           return {
@@ -130,7 +131,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '🏢',
             badge: 'Street Cabinet',
             desc: 'Primary street cabinet splitting fiber routes.',
-            signalLevel: '97% (Strong Feeder Signal)'
+            signalLevel: '97% (Strong Feeder Signal)',
           };
         case 'Fiber Splitter':
           return {
@@ -138,7 +139,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '🔀',
             badge: 'Signal Splitter',
             desc: 'Splits 1 incoming fiber line to 8 or 16 customer houses.',
-            signalLevel: '94% (Good Optical Level)'
+            signalLevel: '94% (Good Optical Level)',
           };
         case 'Fiber Joint Closure':
           return {
@@ -146,7 +147,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '🧰',
             badge: 'Splice Enclosure',
             desc: 'Weatherproof box where fiber wires are joined together.',
-            signalLevel: '95% (Normal Connection)'
+            signalLevel: '95% (Normal Connection)',
           };
         case 'Telecom Pole':
         case 'Electric Pole':
@@ -155,7 +156,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '⚡',
             badge: 'Aerial Pole',
             desc: 'Carries overhead fiber wires along roads.',
-            signalLevel: 'Aerial Route Support'
+            signalLevel: 'Aerial Route Support',
           };
         case 'Manhole':
         case 'Handhole':
@@ -164,7 +165,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '🕳️',
             badge: 'Underground Manhole',
             desc: 'Protects underground fiber cables under the road.',
-            signalLevel: 'Subsurface Cable Route'
+            signalLevel: 'Subsurface Cable Route',
           };
         default:
           return {
@@ -172,7 +173,7 @@ export const PropertiesPanel: React.FC = () => {
             emoji: '📦',
             badge: data.type,
             desc: data.category || 'Network Equipment',
-            signalLevel: 'Normal'
+            signalLevel: 'Normal',
           };
       }
     }
@@ -251,22 +252,34 @@ export const PropertiesPanel: React.FC = () => {
             <span className="font-mono text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200/60">
               {data.id}
             </span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-              data.status === 'Active' || data.status === 'Resolved'
-                ? 'bg-emerald-100 text-emerald-700'
-                : data.status === 'Faulty' || data.status === 'Critical'
-                ? 'bg-rose-100 text-rose-700 animate-pulse'
-                : 'bg-amber-100 text-amber-700'
-            }`}>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                data.status === 'Active' || data.status === 'Resolved'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : data.status === 'Faulty' || data.status === 'Critical'
+                    ? 'bg-rose-100 text-rose-700 animate-pulse'
+                    : 'bg-amber-100 text-amber-700'
+              }`}
+            >
               {uiMode === 'simple'
-                ? (data.status === 'Active' ? '🟢 Working Great' : data.status === 'Faulty' ? '🔴 Needs Repair' : `🟡 ${data.status || 'Active'}`)
-                : (data.status || 'Active')}
+                ? data.status === 'Active'
+                  ? '🟢 Working Great'
+                  : data.status === 'Faulty'
+                    ? '🔴 Needs Repair'
+                    : `🟡 ${data.status || 'Active'}`
+                : data.status || 'Active'}
             </span>
           </div>
           <h3 className="font-bold text-sm text-slate-900 leading-snug">
-            {uiMode === 'simple' && type === 'equipment' ? `${friendly.title} (${data.name || data.id})` : (data.name || data.title)}
+            {uiMode === 'simple' && type === 'equipment'
+              ? `${friendly.title} (${data.name || data.id})`
+              : data.name || data.title}
           </h3>
-          {data.area && <p className="text-[11px] text-slate-500">{data.street}, {data.area}</p>}
+          {data.area && (
+            <p className="text-[11px] text-slate-500">
+              {data.street}, {data.area}
+            </p>
+          )}
         </div>
 
         {/* EQUIPMENT DETAILS */}
@@ -304,7 +317,13 @@ export const PropertiesPanel: React.FC = () => {
                 {data.type === 'OLT' && (
                   <>
                     <div className="bg-slate-900/95 p-3 rounded-xl border border-slate-800 flex flex-col items-center justify-center gap-1.5 shadow-inner">
-                      <OltChassisIcon width={160} height={82} status={data.status} isSelected={true} technology={data.technology || 'GPON'} />
+                      <OltChassisIcon
+                        width={160}
+                        height={82}
+                        status={data.status}
+                        isSelected={true}
+                        technology={data.technology || 'GPON'}
+                      />
                       <span className="text-[10px] text-slate-400 font-mono tracking-wider">
                         {data.model || 'Huawei SmartAX MA5800-X7 OLT'}
                       </span>
@@ -314,11 +333,13 @@ export const PropertiesPanel: React.FC = () => {
                     <div className="bg-white rounded-xl p-2.5 border border-blue-200/80 space-y-2">
                       <div className="flex items-center justify-between text-xs font-bold text-slate-800">
                         <span>PON Technology Standard:</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                          (data.technology || 'GPON') === 'EPON'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                            (data.technology || 'GPON') === 'EPON'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
                           {data.technology || 'GPON'}
                         </span>
                       </div>
@@ -367,7 +388,11 @@ export const PropertiesPanel: React.FC = () => {
                             setSelectedCableTypeToDraw('Main Feeder Fiber');
                             setActiveDrawingPoints([[data.lat, data.lng]]);
                             setActiveTool('draw_cable');
-                            showToast('info', 'Drawing Feeder Wire', `Started wire from ${data.name}. Click along the street or poles!`);
+                            showToast(
+                              'info',
+                              'Drawing Feeder Wire',
+                              `Started wire from ${data.name}. Click along the street or poles!`,
+                            );
                           }}
                           className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98"
                         >
@@ -380,7 +405,11 @@ export const PropertiesPanel: React.FC = () => {
                             onClick={() => {
                               setSelectedEquipmentTypeToAdd('Telecom Pole');
                               setActiveTool('add_equipment');
-                              showToast('info', 'Place Utility Pole', 'Click on the map near the road to place a utility pole.');
+                              showToast(
+                                'info',
+                                'Place Utility Pole',
+                                'Click on the map near the road to place a utility pole.',
+                              );
                             }}
                             className="py-2 px-2 bg-white hover:bg-amber-50 text-slate-800 hover:text-amber-900 border border-slate-200 hover:border-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
                           >
@@ -392,7 +421,11 @@ export const PropertiesPanel: React.FC = () => {
                             onClick={() => {
                               setSelectedEquipmentTypeToAdd('FAT');
                               setActiveTool('add_equipment');
-                              showToast('info', 'Place Street Box (FAT)', 'Click on the map to place a customer distribution box.');
+                              showToast(
+                                'info',
+                                'Place Street Box (FAT)',
+                                'Click on the map to place a customer distribution box.',
+                              );
                             }}
                             className="py-2 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
                           >
@@ -435,7 +468,9 @@ export const PropertiesPanel: React.FC = () => {
                         <span className="flex items-center gap-1.5">
                           <Grid className="w-3.5 h-3.5 text-blue-600" /> Plug Sockets (Ports)
                         </span>
-                        <span className="text-blue-600 font-mono text-[11px]">{used} / {total} Plugged In</span>
+                        <span className="text-blue-600 font-mono text-[11px]">
+                          {used} / {total} Plugged In
+                        </span>
                       </div>
 
                       {/* Visual Port Blocks */}
@@ -443,9 +478,15 @@ export const PropertiesPanel: React.FC = () => {
                         {Array.from({ length: total }).map((_, idx) => (
                           <div
                             key={idx}
-                            title={idx < used ? `Plug #${idx + 1}: In Use by Home` : `Plug #${idx + 1}: Free to connect new home`}
+                            title={
+                              idx < used
+                                ? `Plug #${idx + 1}: In Use by Home`
+                                : `Plug #${idx + 1}: Free to connect new home`
+                            }
                             className={`w-4 h-4 rounded-md flex items-center justify-center text-[9px] font-bold ${
-                              idx < used ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700 border border-blue-300'
+                              idx < used
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-blue-100 text-blue-700 border border-blue-300'
                             }`}
                           >
                             {idx + 1}
@@ -463,7 +504,8 @@ export const PropertiesPanel: React.FC = () => {
                           <span className="font-bold text-blue-700">{free} Free</span>
                         </div>
                         <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-100 font-normal">
-                          👉 You can plug <strong className="text-slate-800">{free} more customer homes</strong> into this box right now.
+                          👉 You can plug <strong className="text-slate-800">{free} more customer homes</strong> into
+                          this box right now.
                         </div>
                       </div>
                     </div>
@@ -523,17 +565,35 @@ export const PropertiesPanel: React.FC = () => {
                   {showAdvancedSpecs && (
                     <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1 text-xs">
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
-                        <div className="flex justify-between"><span className="text-slate-500">Hardware:</span> <span className="font-semibold">{data.manufacturer} {data.model}</span></div>
-                        {data.ipAddress && <div className="flex justify-between"><span className="text-slate-500">IP Address:</span> <span className="font-mono text-blue-600 font-bold">{data.ipAddress}</span></div>}
-                        <div className="flex justify-between"><span className="text-slate-500">Category:</span> <span>{data.category}</span></div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Hardware:</span>{' '}
+                          <span className="font-semibold">
+                            {data.manufacturer} {data.model}
+                          </span>
+                        </div>
+                        {data.ipAddress && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">IP Address:</span>{' '}
+                            <span className="font-mono text-blue-600 font-bold">{data.ipAddress}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Category:</span> <span>{data.category}</span>
+                        </div>
                       </div>
 
                       {data.type === 'OLT' && (
                         <div className="bg-slate-900 text-white p-3 rounded-lg space-y-2">
                           <div className="text-[10px] text-amber-400 uppercase font-bold">Simulated Optical Power</div>
                           <div className="grid grid-cols-2 gap-2 text-center">
-                            <div className="bg-slate-800 p-1.5 rounded"><span className="text-[10px] text-slate-400 block">Tx Power</span><span className="font-mono font-bold text-sky-400">+3.2 dBm</span></div>
-                            <div className="bg-slate-800 p-1.5 rounded"><span className="text-[10px] text-slate-400 block">Rx Power</span><span className="font-mono font-bold text-emerald-400">-18.6 dBm</span></div>
+                            <div className="bg-slate-800 p-1.5 rounded">
+                              <span className="text-[10px] text-slate-400 block">Tx Power</span>
+                              <span className="font-mono font-bold text-sky-400">+3.2 dBm</span>
+                            </div>
+                            <div className="bg-slate-800 p-1.5 rounded">
+                              <span className="text-[10px] text-slate-400 block">Rx Power</span>
+                              <span className="font-mono font-bold text-emerald-400">-18.6 dBm</span>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -566,7 +626,9 @@ export const PropertiesPanel: React.FC = () => {
                   {data.manufacturer && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Hardware:</span>
-                      <span className="font-semibold text-slate-800">{data.manufacturer} {data.model}</span>
+                      <span className="font-semibold text-slate-800">
+                        {data.manufacturer} {data.model}
+                      </span>
                     </div>
                   )}
                   {data.ipAddress && (
@@ -579,10 +641,16 @@ export const PropertiesPanel: React.FC = () => {
                     <div>
                       <div className="flex justify-between mb-1 text-[11px]">
                         <span className="text-slate-500">Port Utilization:</span>
-                        <span className="font-bold text-slate-700">{data.usedPorts || 0} / {data.totalPorts} Used ({Math.round(((data.usedPorts || 0)/data.totalPorts)*100)}%)</span>
+                        <span className="font-bold text-slate-700">
+                          {data.usedPorts || 0} / {data.totalPorts} Used (
+                          {Math.round(((data.usedPorts || 0) / data.totalPorts) * 100)}%)
+                        </span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden flex">
-                        <div className="bg-blue-600 h-full" style={{ width: `${((data.usedPorts || 0)/data.totalPorts)*100}%` }}></div>
+                        <div
+                          className="bg-blue-600 h-full"
+                          style={{ width: `${((data.usedPorts || 0) / data.totalPorts) * 100}%` }}
+                        ></div>
                       </div>
                     </div>
                   )}
@@ -693,12 +761,12 @@ export const PropertiesPanel: React.FC = () => {
 
                           <div className="flex items-center justify-between text-[11px] bg-slate-800/80 p-2 rounded-lg border border-slate-700/60">
                             <div className="flex items-center gap-1.5">
-                              <span className={`w-2.5 h-2.5 rounded-full ${statusBg} ${isCritical ? 'animate-ping' : ''}`} />
+                              <span
+                                className={`w-2.5 h-2.5 rounded-full ${statusBg} ${isCritical ? 'animate-ping' : ''}`}
+                              />
                               <span className="font-semibold">{statusLabel} Power Level</span>
                             </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {optical.lastUpdated}
-                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">{optical.lastUpdated}</span>
                           </div>
 
                           <div className="grid grid-cols-2 gap-2 text-center">
@@ -709,7 +777,9 @@ export const PropertiesPanel: React.FC = () => {
                             </div>
                             <div className="p-2.5 bg-slate-800 rounded-lg border border-slate-700">
                               <span className="text-[10px] text-slate-400 uppercase font-semibold block">Rx Power</span>
-                              <span className={`font-mono text-sm font-bold ${isCritical ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'}`}>
+                              <span
+                                className={`font-mono text-sm font-bold ${isCritical ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'}`}
+                              >
                                 {rxVal.toFixed(1)} dBm
                               </span>
                               <span className="text-[9px] text-slate-400 block mt-0.5">Warn: -24 | Crit: -27</span>
@@ -718,21 +788,57 @@ export const PropertiesPanel: React.FC = () => {
 
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                              <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3 text-emerald-400" /> 12-Hour Power Trend</span>
+                              <span className="flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3 text-emerald-400" /> 12-Hour Power Trend
+                              </span>
                               <span className="text-[9px] text-slate-500">Hourly Samples</span>
                             </div>
                             <div className="h-16 bg-slate-950 rounded-lg p-1.5 relative border border-slate-800/80 flex items-center justify-center">
                               <svg className="w-full h-full" viewBox="0 0 240 50">
-                                <line x1="0" y1="36" x2="240" y2="36" stroke="#f59e0b" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
-                                <line x1="0" y1="44" x2="240" y2="44" stroke="#ef4444" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
-                                <polyline fill="none" stroke="#10b981" strokeWidth="2" points="0,24 20,22 40,26 60,24 80,25 100,23 120,28 140,25 160,26 180,24 200,25 220,23 240,24" />
-                                <polyline fill="none" stroke="#38bdf8" strokeWidth="1.5" points="0,10 20,11 40,9 60,10 80,11 100,9 120,10 140,11 160,10 180,9 200,10 220,11 240,10" />
+                                <line
+                                  x1="0"
+                                  y1="36"
+                                  x2="240"
+                                  y2="36"
+                                  stroke="#f59e0b"
+                                  strokeWidth="1"
+                                  strokeDasharray="3,3"
+                                  opacity="0.6"
+                                />
+                                <line
+                                  x1="0"
+                                  y1="44"
+                                  x2="240"
+                                  y2="44"
+                                  stroke="#ef4444"
+                                  strokeWidth="1"
+                                  strokeDasharray="3,3"
+                                  opacity="0.6"
+                                />
+                                <polyline
+                                  fill="none"
+                                  stroke="#10b981"
+                                  strokeWidth="2"
+                                  points="0,24 20,22 40,26 60,24 80,25 100,23 120,28 140,25 160,26 180,24 200,25 220,23 240,24"
+                                />
+                                <polyline
+                                  fill="none"
+                                  stroke="#38bdf8"
+                                  strokeWidth="1.5"
+                                  points="0,10 20,11 40,9 60,10 80,11 100,9 120,10 140,11 160,10 180,9 200,10 220,11 240,10"
+                                />
                               </svg>
                             </div>
                             <div className="flex items-center justify-between text-[9px] text-slate-400 px-1">
-                              <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-sky-400" /> Tx Signal (+3.2)</span>
-                              <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-emerald-400" /> Rx Signal (-18.6)</span>
-                              <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-amber-400" /> Threshold</span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-0.5 bg-sky-400" /> Tx Signal (+3.2)
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-0.5 bg-emerald-400" /> Rx Signal (-18.6)
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-0.5 bg-amber-400" /> Threshold
+                              </span>
                             </div>
                           </div>
 
@@ -740,7 +846,9 @@ export const PropertiesPanel: React.FC = () => {
                           <div>
                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                               <span>Select PON Port</span>
-                              <span className="text-[10px] text-sky-400 font-mono">Port {activePon?.id || 'PON-01'}</span>
+                              <span className="text-[10px] text-sky-400 font-mono">
+                                Port {activePon?.id || 'PON-01'}
+                              </span>
                             </div>
                             <div className="grid grid-cols-4 gap-1">
                               {data.ponPorts?.map((pon: any, idx: number) => {
@@ -837,7 +945,13 @@ export const PropertiesPanel: React.FC = () => {
 
                 {/* Actions for All Equipment */}
                 <div className="pt-2 border-t border-slate-100 space-y-2">
-                  {(data.totalPorts || data.ponPorts?.length || data.type === 'OLT' || data.type === 'ODF' || data.type === 'FDMS' || data.type === 'FDT' || data.type === 'FAT') && (
+                  {(data.totalPorts ||
+                    data.ponPorts?.length ||
+                    data.type === 'OLT' ||
+                    data.type === 'ODF' ||
+                    data.type === 'FDMS' ||
+                    data.type === 'FDT' ||
+                    data.type === 'FAT') && (
                     <button
                       onClick={() => setIsPortManagerOpen(true)}
                       className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
@@ -890,7 +1004,8 @@ export const PropertiesPanel: React.FC = () => {
                   <div>
                     <div className="font-bold text-[12px]">Fiber Optic Cable Wire</div>
                     <p className="text-[11px] text-cyan-800 leading-relaxed mt-0.5">
-                      Contains {data.fiberCount} individual glass fiber cores transmitting internet signals under or above the road.
+                      Contains {data.fiberCount} individual glass fiber cores transmitting internet signals under or
+                      above the road.
                     </p>
                   </div>
                 </div>
@@ -899,7 +1014,9 @@ export const PropertiesPanel: React.FC = () => {
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Cable Road Length:</span>
-                    <span className="font-bold text-slate-900">{data.lengthMeters} meters ({(data.lengthMeters / 1000).toFixed(2)} km)</span>
+                    <span className="font-bold text-slate-900">
+                      {data.lengthMeters} meters ({(data.lengthMeters / 1000).toFixed(2)} km)
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Installation Type:</span>
@@ -920,7 +1037,9 @@ export const PropertiesPanel: React.FC = () => {
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
                       <div className="flex items-center justify-between text-xs font-bold text-slate-800">
                         <span>Wire Capacity</span>
-                        <span className="text-blue-600 font-mono text-[11px]">{usedCount} / {data.fiberCount} Connected</span>
+                        <span className="text-blue-600 font-mono text-[11px]">
+                          {usedCount} / {data.fiberCount} Connected
+                        </span>
                       </div>
 
                       <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden flex border border-slate-300">
@@ -990,7 +1109,9 @@ export const PropertiesPanel: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Calculated Length:</span>
-                    <span className="font-semibold text-slate-800">{data.lengthMeters} meters ({(data.lengthMeters / 1000).toFixed(2)} km)</span>
+                    <span className="font-semibold text-slate-800">
+                      {data.lengthMeters} meters ({(data.lengthMeters / 1000).toFixed(2)} km)
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Installation:</span>
@@ -1014,31 +1135,47 @@ export const PropertiesPanel: React.FC = () => {
                     <div
                       className="bg-blue-600 h-full"
                       title="In Use"
-                      style={{ width: `${((data.cores?.filter((c: any) => c.status === 'In Use').length || 0)/data.fiberCount)*100}%` }}
+                      style={{
+                        width: `${((data.cores?.filter((c: any) => c.status === 'In Use').length || 0) / data.fiberCount) * 100}%`,
+                      }}
                     />
                     <div
                       className="bg-amber-500 h-full"
                       title="Reserved"
-                      style={{ width: `${((data.cores?.filter((c: any) => c.status === 'Reserved').length || 0)/data.fiberCount)*100}%` }}
+                      style={{
+                        width: `${((data.cores?.filter((c: any) => c.status === 'Reserved').length || 0) / data.fiberCount) * 100}%`,
+                      }}
                     />
                     <div
                       className="bg-rose-500 h-full"
                       title="Damaged"
-                      style={{ width: `${((data.cores?.filter((c: any) => c.status === 'Damaged').length || 0)/data.fiberCount)*100}%` }}
+                      style={{
+                        width: `${((data.cores?.filter((c: any) => c.status === 'Damaged').length || 0) / data.fiberCount) * 100}%`,
+                      }}
                     />
                     <div
                       className="bg-emerald-500 h-full"
                       title="Available"
-                      style={{ width: `${((data.cores?.filter((c: any) => c.status === 'Available').length || 0)/data.fiberCount)*100}%` }}
+                      style={{
+                        width: `${((data.cores?.filter((c: any) => c.status === 'Available').length || 0) / data.fiberCount) * 100}%`,
+                      }}
                     />
                   </div>
 
                   {/* Legend */}
                   <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600"></span> In Use</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Available</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Reserved</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> Damaged</span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-600"></span> In Use
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Available
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span> Reserved
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-rose-500"></span> Damaged
+                    </span>
                   </div>
                 </div>
 
@@ -1082,7 +1219,9 @@ export const PropertiesPanel: React.FC = () => {
                   <span className="text-xl shrink-0 mt-0.5">🏠</span>
                   <div>
                     <div className="font-bold text-xs text-emerald-900">{data.name}</div>
-                    <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">🟢 Connected & Working Great</div>
+                    <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                      🟢 Connected & Working Great
+                    </div>
                   </div>
                 </div>
 
@@ -1101,7 +1240,9 @@ export const PropertiesPanel: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Plugged into:</span>
-                    <span className="font-semibold text-slate-800">Box {data.terminalBoxId} (Port #{data.splitterOutputPort})</span>
+                    <span className="font-semibold text-slate-800">
+                      Box {data.terminalBoxId} (Port #{data.splitterOutputPort})
+                    </span>
                   </div>
                 </div>
 
@@ -1138,7 +1279,9 @@ export const PropertiesPanel: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Rx Optical Signal:</span>
-                    <span className={`font-bold ${data.rxOpticalPowerDbm < -24 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    <span
+                      className={`font-bold ${data.rxOpticalPowerDbm < -24 ? 'text-rose-600' : 'text-emerald-600'}`}
+                    >
                       {data.rxOpticalPowerDbm} dBm (Optimal)
                     </span>
                   </div>
@@ -1146,7 +1289,9 @@ export const PropertiesPanel: React.FC = () => {
 
                 {/* Logical Upstream Path Breadcrumbs */}
                 <div className="space-y-1.5">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Upstream Network Path</div>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Upstream Network Path
+                  </div>
                   <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200 text-[11px] space-y-1 text-slate-700">
                     <div className="flex items-center gap-1 font-semibold text-blue-700">
                       <span>OLT Hub: {data.oltId}</span>
@@ -1161,7 +1306,9 @@ export const PropertiesPanel: React.FC = () => {
                     <div className="flex items-center gap-1 font-semibold text-emerald-700">
                       <span>Terminal: {data.terminalBoxId}</span>
                       <ArrowRight className="w-3 h-3 text-slate-400" />
-                      <span>Splitter: {data.splitterId} (Port {data.splitterOutputPort})</span>
+                      <span>
+                        Splitter: {data.splitterId} (Port {data.splitterOutputPort})
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1207,7 +1354,9 @@ export const PropertiesPanel: React.FC = () => {
 
                 <div className="bg-rose-100/80 p-2.5 rounded-xl text-xs font-bold text-rose-900 flex items-center justify-between">
                   <span>Houses Without Internet:</span>
-                  <span className="bg-rose-600 text-white text-[11px] px-2 py-0.5 rounded-full">{data.affectedCustomerIds.length} Offline</span>
+                  <span className="bg-rose-600 text-white text-[11px] px-2 py-0.5 rounded-full">
+                    {data.affectedCustomerIds.length} Offline
+                  </span>
                 </div>
 
                 <div className="space-y-2 pt-1">
@@ -1253,7 +1402,9 @@ export const PropertiesPanel: React.FC = () => {
                 </div>
 
                 <div>
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Impact Analysis</div>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Impact Analysis
+                  </div>
                   <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                     {data.description}
                   </p>

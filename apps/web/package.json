@@ -8,7 +8,8 @@
     "server": "node server.js",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "jspdf": "^2.5.2",

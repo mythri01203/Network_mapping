@@ -12,7 +12,14 @@ export interface PopoverProps {
 }
 
 /** Click-to-open floating panel that closes on outside click and Escape. */
-export function Popover({ trigger, children, align = 'end', side = 'bottom', className, panelClassName }: PopoverProps) {
+export function Popover({
+  trigger,
+  children,
+  align = 'end',
+  side = 'bottom',
+  className,
+  panelClassName,
+}: PopoverProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -78,7 +85,13 @@ export function MenuItem({ icon: Icon, label, hint, onClick, active, danger, dis
         active && 'font-medium text-blue-700',
       )}
     >
-      {Icon && <Icon size={15} strokeWidth={1.9} className={cn('shrink-0', danger ? 'text-red-500' : active ? 'text-blue-600' : 'text-slate-400')} />}
+      {Icon && (
+        <Icon
+          size={15}
+          strokeWidth={1.9}
+          className={cn('shrink-0', danger ? 'text-red-500' : active ? 'text-blue-600' : 'text-slate-400')}
+        />
+      )}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {hint && <span className="shrink-0 text-[11px] text-slate-400">{hint}</span>}
     </button>
@@ -86,7 +99,9 @@ export function MenuItem({ icon: Icon, label, hint, onClick, active, danger, dis
 }
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
-  return <div className="px-3 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{children}</div>;
+  return (
+    <div className="px-3 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{children}</div>
+  );
 }
 
 export function MenuSeparator() {

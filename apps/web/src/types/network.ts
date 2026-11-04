@@ -1,9 +1,4 @@
-export type UserRole =
-  | 'Administrator'
-  | 'Network Engineer'
-  | 'Network Operator'
-  | 'Field Technician'
-  | 'Supervisor';
+export type UserRole = 'Administrator' | 'Network Engineer' | 'Network Operator' | 'Field Technician' | 'Supervisor';
 
 export type MainView =
   | 'map'
@@ -100,13 +95,7 @@ export type EquipmentType =
 
 export type EquipmentStatus = 'Active' | 'Warning' | 'Faulty' | 'Maintenance' | 'Planned';
 
-export type PonTechnology =
-  | 'GPON'
-  | 'EPON'
-  | 'Combo PON'
-  | 'XG-PON'
-  | 'XGS-PON'
-  | '10G-EPON';
+export type PonTechnology = 'GPON' | 'EPON' | 'Combo PON' | 'XG-PON' | 'XGS-PON' | '10G-EPON';
 
 export type RouteStatus = 'Proposed' | 'Under Construction' | 'Active' | 'Maintenance' | 'Planned';
 
@@ -256,13 +245,7 @@ export type CableType =
 
 export type CableStatus = 'Active' | 'Maintenance' | 'Damaged' | 'Planned';
 
-export type CoreStatus =
-  | 'Available'
-  | 'In Use'
-  | 'Reserved'
-  | 'Damaged'
-  | 'Under Maintenance'
-  | 'Unverified';
+export type CoreStatus = 'Available' | 'In Use' | 'Reserved' | 'Damaged' | 'Under Maintenance' | 'Unverified';
 
 export interface FiberCore {
   coreNumber: number;
@@ -445,7 +428,8 @@ export interface AuditLog {
   action: string;
   details: string;
   assetId: string;
-  assetType: 'Equipment' | 'Cable' | 'Core' | 'Customer' | 'Fault' | 'WorkOrder' | 'Zone' | 'Document' | 'Closure' | 'System';
+  assetType:
+    'Equipment' | 'Cable' | 'Core' | 'Customer' | 'Fault' | 'WorkOrder' | 'Zone' | 'Document' | 'Closure' | 'System';
 }
 
 export interface TracePathNode {

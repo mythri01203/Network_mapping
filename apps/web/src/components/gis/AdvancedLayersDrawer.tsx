@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Users,
   Box,
-  Server
+  Server,
 } from 'lucide-react';
 
 export const AdvancedLayersDrawer: React.FC = () => {
@@ -26,7 +26,7 @@ export const AdvancedLayersDrawer: React.FC = () => {
     isLayersDrawerOpen,
     setIsLayersDrawerOpen,
     mapTileProvider,
-    setMapTileProvider
+    setMapTileProvider,
   } = useNetwork();
 
   if (!isLayersDrawerOpen) return null;
@@ -38,15 +38,15 @@ export const AdvancedLayersDrawer: React.FC = () => {
         { key: 'feederCable', label: 'Feeder Cables (96F Trunk)', color: '#2563eb', defaultOpacity: 1.0 },
         { key: 'distributionCable', label: 'Distribution Cables (24F ADSS)', color: '#0d9488', defaultOpacity: 1.0 },
         { key: 'dropCable', label: 'Drop FTTH Cables (1F/2F)', color: '#f59e0b', defaultOpacity: 1.0 },
-        { key: 'coaxialCable', label: 'Cable TV Coaxial RG-11/RG-6', color: '#ea580c', defaultOpacity: 1.0 }
-      ]
+        { key: 'coaxialCable', label: 'Cable TV Coaxial RG-11/RG-6', color: '#ea580c', defaultOpacity: 1.0 },
+      ],
     },
     {
       name: 'Physical Route Types',
       layers: [
         { key: 'undergroundCable', label: 'Underground Duct & Buried Routes', color: '#64748b', defaultOpacity: 0.9 },
-        { key: 'aerialCable', label: 'Aerial Pole-Suspended Routes', color: '#0284c7', defaultOpacity: 0.9 }
-      ]
+        { key: 'aerialCable', label: 'Aerial Pole-Suspended Routes', color: '#0284c7', defaultOpacity: 0.9 },
+      ],
     },
     {
       name: 'Optical Network Equipment',
@@ -57,24 +57,24 @@ export const AdvancedLayersDrawer: React.FC = () => {
         { key: 'fdt', label: 'FDT Branch Terminals', color: '#0f766e', defaultOpacity: 1.0 },
         { key: 'fat', label: 'FAT Access Terminal Boxes', color: '#d97706', defaultOpacity: 1.0 },
         { key: 'splitters', label: 'PLC Splitters (1:8 / 1:16)', color: '#8b5cf6', defaultOpacity: 1.0 },
-        { key: 'cableTv', label: 'Cable TV Nodes & RF Amplifiers', color: '#c2410c', defaultOpacity: 1.0 }
-      ]
+        { key: 'cableTv', label: 'Cable TV Nodes & RF Amplifiers', color: '#c2410c', defaultOpacity: 1.0 },
+      ],
     },
     {
       name: 'Supporting Civil Infrastructure',
       layers: [
         { key: 'poles', label: 'Telecom & Electric Poles', color: '#475569', defaultOpacity: 0.85 },
-        { key: 'manholes', label: 'Manholes & Underground Chambers', color: '#334155', defaultOpacity: 0.85 }
-      ]
+        { key: 'manholes', label: 'Manholes & Underground Chambers', color: '#334155', defaultOpacity: 0.85 },
+      ],
     },
     {
       name: 'Subscribers & Outages',
       layers: [
         { key: 'customers', label: 'Customer Subscribers (ONTs)', color: '#16a34a', defaultOpacity: 1.0 },
         { key: 'faults', label: 'Active Outages & Fiber Cuts', color: '#dc2626', defaultOpacity: 1.0 },
-        { key: 'labels', label: 'Map Labels & Equipment Tags', color: '#1e293b', defaultOpacity: 1.0 }
-      ]
-    }
+        { key: 'labels', label: 'Map Labels & Equipment Tags', color: '#1e293b', defaultOpacity: 1.0 },
+      ],
+    },
   ];
 
   return (
@@ -95,13 +95,15 @@ export const AdvancedLayersDrawer: React.FC = () => {
 
       {/* Base Map Selector */}
       <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Geographical Base Map</span>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+          Geographical Base Map
+        </span>
         <div className="grid grid-cols-3 gap-2">
           {[
             { id: 'google_streets', label: 'Google Maps' },
             { id: 'google_satellite', label: 'Google Satellite' },
-            { id: 'osm', label: 'OpenStreetMap' }
-          ].map(tile => (
+            { id: 'osm', label: 'OpenStreetMap' },
+          ].map((tile) => (
             <button
               key={tile.id}
               onClick={() => setMapTileProvider(tile.id as any)}
@@ -119,11 +121,11 @@ export const AdvancedLayersDrawer: React.FC = () => {
 
       {/* Layer Groups with Visibility & Opacity Sliders */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {layerCategories.map(cat => (
+        {layerCategories.map((cat) => (
           <div key={cat.name} className="space-y-2">
             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{cat.name}</h4>
             <div className="space-y-2.5">
-              {cat.layers.map(layer => {
+              {cat.layers.map((layer) => {
                 const isVisible = activeLayers[layer.key] ?? true;
                 const opacity = layerOpacity[layer.key] ?? layer.defaultOpacity;
 
@@ -163,7 +165,7 @@ export const AdvancedLayersDrawer: React.FC = () => {
                           max="1.0"
                           step="0.05"
                           value={opacity}
-                          onChange={e => setLayerOpacity(layer.key, parseFloat(e.target.value))}
+                          onChange={(e) => setLayerOpacity(layer.key, parseFloat(e.target.value))}
                           className="w-28 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                         />
                       </div>

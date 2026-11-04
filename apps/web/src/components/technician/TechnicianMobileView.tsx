@@ -12,7 +12,7 @@ import {
   Wifi,
   Upload,
   Layers,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
 
 export const TechnicianMobileView: React.FC = () => {
@@ -24,7 +24,7 @@ export const TechnicianMobileView: React.FC = () => {
     equipments,
     splitters,
     uploadEquipmentPhoto,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'orders' | 'box_checker' | 'photo_capture'>('orders');
@@ -32,15 +32,15 @@ export const TechnicianMobileView: React.FC = () => {
 
   if (!isTechnicianMobileOpen) return null;
 
-  const currentBox = equipments.find(e => e.id === selectedBoxId) || equipments[0];
-  const boxSplitter = splitters.find(s => s.terminalBoxId === currentBox.id);
+  const currentBox = equipments.find((e) => e.id === selectedBoxId) || equipments[0];
+  const boxSplitter = splitters.find((s) => s.terminalBoxId === currentBox.id);
 
   const handleCapturePhoto = () => {
     uploadEquipmentPhoto(currentBox.id, {
       name: `Field-Inspection-${Date.now().toString().slice(-4)}.jpg`,
       category: 'Maintenance',
       description: 'Captured via Mobile Technician Field Interface',
-      uploadedBy: 'Arun Varma (Lead Splicer)'
+      uploadedBy: 'Arun Varma (Lead Splicer)',
     });
     showToast('success', 'Photo Uploaded', `Synced photograph for ${currentBox.id}`);
   };
@@ -105,13 +105,17 @@ export const TechnicianMobileView: React.FC = () => {
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
                 Assigned Jobs ({workOrders.length})
               </div>
-              {workOrders.map(wo => (
+              {workOrders.map((wo) => (
                 <div key={wo.id} className="p-3 bg-slate-800 rounded-2xl border border-slate-700/80 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[10px] font-bold text-blue-400">{wo.id}</span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                      wo.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300'
-                    }`}>
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                        wo.status === 'Completed'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-amber-500/20 text-amber-300'
+                      }`}
+                    >
                       {wo.status}
                     </span>
                   </div>
@@ -142,29 +146,42 @@ export const TechnicianMobileView: React.FC = () => {
           {activeTab === 'box_checker' && (
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select FAT / FDT Box:</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Select FAT / FDT Box:
+                </label>
                 <select
                   value={selectedBoxId}
-                  onChange={e => setSelectedBoxId(e.target.value)}
+                  onChange={(e) => setSelectedBoxId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
                 >
-                  {equipments.filter(e => e.type === 'FAT' || e.type.includes('Terminal Box')).map(e => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.id})</option>
-                  ))}
+                  {equipments
+                    .filter((e) => e.type === 'FAT' || e.type.includes('Terminal Box'))
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} ({e.id})
+                      </option>
+                    ))}
                 </select>
               </div>
 
               <div className="p-3 bg-slate-800 rounded-2xl border border-slate-700 space-y-1">
                 <div className="font-bold text-xs text-white">{currentBox.name}</div>
-                <div className="text-[11px] text-slate-400">{currentBox.street}, {currentBox.area}</div>
-                <div className="text-[10px] text-blue-400">Pole: {currentBox.poleNumber || 'Wall'} &bull; GPS: {currentBox.lat.toFixed(4)}, {currentBox.lng.toFixed(4)}</div>
+                <div className="text-[11px] text-slate-400">
+                  {currentBox.street}, {currentBox.area}
+                </div>
+                <div className="text-[10px] text-blue-400">
+                  Pole: {currentBox.poleNumber || 'Wall'} &bull; GPS: {currentBox.lat.toFixed(4)},{' '}
+                  {currentBox.lng.toFixed(4)}
+                </div>
               </div>
 
               {boxSplitter && (
                 <div className="space-y-1.5">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Available Ports ({boxSplitter.ratio})</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">
+                    Available Ports ({boxSplitter.ratio})
+                  </div>
                   <div className="grid grid-cols-4 gap-1.5">
-                    {boxSplitter.outputPorts.map(p => {
+                    {boxSplitter.outputPorts.map((p) => {
                       const isFree = p.status === 'Available';
                       return (
                         <div

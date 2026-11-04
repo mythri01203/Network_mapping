@@ -15,7 +15,7 @@ import {
   HelpCircle,
   TrendingUp,
   Table,
-  Grid
+  Grid,
 } from 'lucide-react';
 
 export const PortManagerModal: React.FC = () => {
@@ -28,7 +28,7 @@ export const PortManagerModal: React.FC = () => {
     splitters,
     customers,
     showToast,
-    openKnowledgeForEquipment
+    openKnowledgeForEquipment,
   } = useNetwork();
 
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export const PortManagerModal: React.FC = () => {
       }
 
       // Check connected feeder cable
-      const feeder = cables.find(c => c.type === 'Main Feeder Fiber');
+      const feeder = cables.find((c) => c.type === 'Main Feeder Fiber');
       const feederName = feeder?.name || 'Trunk Feeder Cable 01';
 
       // Connected splitter
@@ -65,8 +65,10 @@ export const PortManagerModal: React.FC = () => {
       const splitterName = splitter ? `${splitter.name} (${splitter.ratio})` : 'PLC 1:8 Splitter Cassette';
 
       // Connected ONTs / Subscribers
-      const portCusts = customers.filter(c => c.oltId === equipment.id && c.ponPort === `PON-${(idx + 1).toString().padStart(2, '0')}`);
-      const connectedOnts = port.status === 'Used' ? (portCusts.length || 24 + (idx % 12)) : 0;
+      const portCusts = customers.filter(
+        (c) => c.oltId === equipment.id && c.ponPort === `PON-${(idx + 1).toString().padStart(2, '0')}`,
+      );
+      const connectedOnts = port.status === 'Used' ? portCusts.length || 24 + (idx % 12) : 0;
 
       // Optical Power
       const txPowerDbm = +(3.2 + (idx % 4) * 0.2).toFixed(2);
@@ -84,7 +86,7 @@ export const PortManagerModal: React.FC = () => {
         txPowerDbm,
         rxPowerDbm,
         opticalStatus,
-        lastUpdated: 'Live Telemetry (Just Now)'
+        lastUpdated: 'Live Telemetry (Just Now)',
       };
     });
   }, [equipment, rawPorts, cables, splitters, customers]);
@@ -93,20 +95,29 @@ export const PortManagerModal: React.FC = () => {
 
   const filteredPorts = useMemo(() => {
     if (filterTech === 'All') return enrichedPorts;
-    return enrichedPorts.filter(p => p.technology === filterTech);
+    return enrichedPorts.filter((p) => p.technology === filterTech);
   }, [enrichedPorts, filterTech]);
 
-  const selected = enrichedPorts.find(p => p.id === selectedPortId) || filteredPorts[0] || enrichedPorts[0];
+  const selected = enrichedPorts.find((p) => p.id === selectedPortId) || filteredPorts[0] || enrichedPorts[0];
 
   if (!isPortManagerOpen || !equipment) return null;
 
   const changeStatus = (status: LogicalPortStatus) => {
     if (!selected) return;
     if (selected.status === 'Used' && status !== 'Used') {
-      if (!window.confirm(`Port ${selected.slotCardPort || selected.portNumber} is currently in use. Changing status may disrupt subscriber connections. Continue?`)) return;
+      if (
+        !window.confirm(
+          `Port ${selected.slotCardPort || selected.portNumber} is currently in use. Changing status may disrupt subscriber connections. Continue?`,
+        )
+      )
+        return;
     }
     updateEquipmentPort(equipment.id, selected.id, { status });
-    showToast('info', 'Port Updated', `Port ${selected.slotCardPort || selected.portNumber} status changed to ${status}`);
+    showToast(
+      'info',
+      'Port Updated',
+      `Port ${selected.slotCardPort || selected.portNumber} status changed to ${status}`,
+    );
   };
 
   const isOlt = equipment.type === 'OLT';
@@ -210,12 +221,14 @@ export const PortManagerModal: React.FC = () => {
           {isOlt && (
             <div className="flex items-center gap-1.5 text-xs font-semibold">
               <span className="text-slate-500">Filter Standard:</span>
-              {(['All', 'GPON', 'EPON'] as const).map(tech => (
+              {(['All', 'GPON', 'EPON'] as const).map((tech) => (
                 <button
                   key={tech}
                   onClick={() => setFilterTech(tech)}
                   className={`px-2.5 py-0.5 rounded-lg text-xs transition-colors ${
-                    filterTech === tech ? 'bg-blue-600 text-white font-bold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    filterTech === tech
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {tech}
@@ -246,7 +259,7 @@ export const PortManagerModal: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {filteredPorts.map(port => {
+                      {filteredPorts.map((port) => {
                         const isSelected = selected?.id === port.id;
                         const statusStyle = PORT_STATUS_STYLE[port.status];
 
@@ -263,18 +276,22 @@ export const PortManagerModal: React.FC = () => {
                               <span>{port.slotCardPort}</span>
                             </td>
                             <td className="px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                port.technology === 'GPON'
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                  : port.technology === 'EPON'
-                                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                  : 'bg-purple-100 text-purple-800 border border-purple-200'
-                              }`}>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  port.technology === 'GPON'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : port.technology === 'EPON'
+                                      ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                      : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                }`}
+                              >
                                 {port.technology}
                               </span>
                             </td>
                             <td className="px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${statusStyle.text}`}>
+                              <span
+                                className={`px-2 py-0.5 rounded border text-[10px] font-semibold ${statusStyle.text}`}
+                              >
                                 {port.status}
                               </span>
                             </td>
@@ -313,7 +330,7 @@ export const PortManagerModal: React.FC = () => {
                   <span>CLICK PORT FOR DETAILED DIAGNOSTICS</span>
                 </div>
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {filteredPorts.map(port => {
+                  {filteredPorts.map((port) => {
                     const isSelected = selected?.id === port.id;
                     const style = PORT_STATUS_STYLE[port.status];
                     return (
@@ -350,15 +367,23 @@ export const PortManagerModal: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-1">
                     <div className="font-bold text-blue-900">ITU-T G.984 GPON Standard</div>
-                    <div className="text-[11px] text-slate-700">&bull; Downstream: 2.488 Gbps / Upstream: 1.244 Gbps</div>
+                    <div className="text-[11px] text-slate-700">
+                      &bull; Downstream: 2.488 Gbps / Upstream: 1.244 Gbps
+                    </div>
                     <div className="text-[11px] text-slate-700">&bull; Max Split: 1:128 (Typically 1:64 deployed)</div>
-                    <div className="text-[11px] text-slate-700">&bull; Framing: GEM (GPON Encapsulation Method, 93% efficient)</div>
+                    <div className="text-[11px] text-slate-700">
+                      &bull; Framing: GEM (GPON Encapsulation Method, 93% efficient)
+                    </div>
                   </div>
                   <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl space-y-1">
                     <div className="font-bold text-indigo-900">IEEE 802.3ah EPON Standard</div>
-                    <div className="text-[11px] text-slate-700">&bull; Downstream: 1.25 Gbps / Upstream: 1.25 Gbps (Symmetric)</div>
+                    <div className="text-[11px] text-slate-700">
+                      &bull; Downstream: 1.25 Gbps / Upstream: 1.25 Gbps (Symmetric)
+                    </div>
                     <div className="text-[11px] text-slate-700">&bull; Max Split: 1:64 (Typically 1:32 deployed)</div>
-                    <div className="text-[11px] text-slate-700">&bull; Framing: Native Ethernet 802.3 Frames (MPCP protocol)</div>
+                    <div className="text-[11px] text-slate-700">
+                      &bull; Framing: Native Ethernet 802.3 Frames (MPCP protocol)
+                    </div>
                   </div>
                 </div>
               </div>
@@ -370,14 +395,14 @@ export const PortManagerModal: React.FC = () => {
             <div className="p-5 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Port Details
-                  </div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Port Details</div>
                   <h3 className="text-base font-black text-slate-900 font-mono">
                     Port {selected.slotCardPort || selected.portNumber}
                   </h3>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${PORT_STATUS_STYLE[selected.status].text}`}>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold border ${PORT_STATUS_STYLE[selected.status].text}`}
+                >
                   {selected.status}
                 </span>
               </div>
@@ -408,9 +433,7 @@ export const PortManagerModal: React.FC = () => {
                   <span className="flex items-center gap-1 font-bold text-sky-400">
                     <Radio className="w-3.5 h-3.5" /> Optical Power Telemetry
                   </span>
-                  <span className="text-[10px] font-mono text-emerald-400">
-                    {selected.opticalStatus}
-                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">{selected.opticalStatus}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center pt-1">
                   <div className="bg-slate-800 p-2 rounded-lg border border-slate-700">
@@ -422,16 +445,14 @@ export const PortManagerModal: React.FC = () => {
                     <span className="font-mono text-sm font-bold text-emerald-400">{selected.rxPowerDbm} dBm</span>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono text-center">
-                  {selected.lastUpdated}
-                </div>
+                <div className="text-[10px] text-slate-400 font-mono text-center">{selected.lastUpdated}</div>
               </div>
 
               {/* Status Action Buttons */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100">
                 <div className="text-[11px] font-bold text-slate-700 mb-1">Update Port Status:</div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['Available', 'Used', 'Reserved', 'Damaged'] as LogicalPortStatus[]).map(st => (
+                  {(['Available', 'Used', 'Reserved', 'Damaged'] as LogicalPortStatus[]).map((st) => (
                     <button
                       key={st}
                       onClick={() => changeStatus(st)}

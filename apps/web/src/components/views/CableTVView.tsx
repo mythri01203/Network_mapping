@@ -14,20 +14,12 @@ import {
   CheckCircle2,
   ExternalLink,
   Search,
-  Hash
+  Hash,
 } from 'lucide-react';
 
 export const CableTVView: React.FC = () => {
-  const {
-    equipments,
-    cables,
-    customers,
-    faults,
-    setActiveMainView,
-    flyToLocation,
-    setSelectedObject,
-    toggleLayer
-  } = useNetwork();
+  const { equipments, cables, customers, faults, setActiveMainView, flyToLocation, setSelectedObject, toggleLayer } =
+    useNetwork();
 
   const [activeTab, setActiveTab] = useState<'schematic' | 'spectrum' | 'subscribers'>('schematic');
   const [selectedNode, setSelectedNode] = useState<{
@@ -41,15 +33,16 @@ export const CableTVView: React.FC = () => {
   } | null>(null);
 
   // CATV infrastructure from equipments
-  const catvEquipment = equipments.filter(e =>
-    e.category === 'Cable TV Infrastructure' ||
-    e.type.includes('CATV') ||
-    e.type.includes('Headend') ||
-    e.type.includes('Optical Transmitter')
+  const catvEquipment = equipments.filter(
+    (e) =>
+      e.category === 'Cable TV Infrastructure' ||
+      e.type.includes('CATV') ||
+      e.type.includes('Headend') ||
+      e.type.includes('Optical Transmitter'),
   );
 
-  const catvCables = cables.filter(c => c.cableCategory === 'Coaxial' || c.type === 'Coaxial Cable');
-  const catvCustomers = customers.filter(c => c.serviceType === 'Cable TV' || c.serviceType === 'Triple Play');
+  const catvCables = cables.filter((c) => c.cableCategory === 'Coaxial' || c.type === 'Coaxial Cable');
+  const catvCustomers = customers.filter((c) => c.serviceType === 'Cable TV' || c.serviceType === 'Triple Play');
 
   const handleLocateOnMap = (lat?: number, lng?: number) => {
     if (lat && lng) {
@@ -75,7 +68,9 @@ export const CableTVView: React.FC = () => {
                 HFC 862 MHz / DOCSIS 3.1
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Hybrid Fiber-Coaxial RF distribution from Master Headend to Customer Set-Top Boxes</p>
+            <p className="text-[11px] text-slate-400">
+              Hybrid Fiber-Coaxial RF distribution from Master Headend to Customer Set-Top Boxes
+            </p>
           </div>
         </div>
 
@@ -122,13 +117,15 @@ export const CableTVView: React.FC = () => {
                     Stage 1: Master Headend & Optical Transmitters
                   </div>
                   <div
-                    onClick={() => setSelectedNode({
-                      id: 'HEADEND-01',
-                      name: 'Central Cable TV Master Headend',
-                      type: 'Headend & Optical TX',
-                      rfLevel: 'RF Input: 82 dBµV | Optical Tx: +10.5 dBm @ 1550nm',
-                      details: 'QAM Modulators, 250+ HD Channels, Dual EDFA +22 dBm Booster Amplifiers'
-                    })}
+                    onClick={() =>
+                      setSelectedNode({
+                        id: 'HEADEND-01',
+                        name: 'Central Cable TV Master Headend',
+                        type: 'Headend & Optical TX',
+                        rfLevel: 'RF Input: 82 dBµV | Optical Tx: +10.5 dBm @ 1550nm',
+                        details: 'QAM Modulators, 250+ HD Channels, Dual EDFA +22 dBm Booster Amplifiers',
+                      })
+                    }
                     className="p-4 bg-slate-950 border-2 border-orange-500/40 hover:border-orange-500 rounded-2xl shadow-xl w-80 text-center cursor-pointer transition-all"
                   >
                     <div className="text-xs font-bold text-white">Central Headend & 1550nm EDFA</div>
@@ -156,21 +153,47 @@ export const CableTVView: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
                     {[
-                      { id: 'NODE-01', name: 'Optical Node Sector 01', area: 'Koramangala 4th Block', rfOut: '104 dBµV', opticalIn: '-1.5 dBm', lat: 12.9370, lng: 77.6280 },
-                      { id: 'NODE-02', name: 'Optical Node Sector 02', area: 'Koramangala 5th Block', rfOut: '102 dBµV', opticalIn: '-1.8 dBm', lat: 12.9390, lng: 77.6295 },
-                      { id: 'NODE-03', name: 'Optical Node Sector 03', area: 'Indiranagar Hub', rfOut: '104 dBµV', opticalIn: '-1.2 dBm', lat: 12.9420, lng: 77.6250 }
-                    ].map(node => (
+                      {
+                        id: 'NODE-01',
+                        name: 'Optical Node Sector 01',
+                        area: 'Koramangala 4th Block',
+                        rfOut: '104 dBµV',
+                        opticalIn: '-1.5 dBm',
+                        lat: 12.937,
+                        lng: 77.628,
+                      },
+                      {
+                        id: 'NODE-02',
+                        name: 'Optical Node Sector 02',
+                        area: 'Koramangala 5th Block',
+                        rfOut: '102 dBµV',
+                        opticalIn: '-1.8 dBm',
+                        lat: 12.939,
+                        lng: 77.6295,
+                      },
+                      {
+                        id: 'NODE-03',
+                        name: 'Optical Node Sector 03',
+                        area: 'Indiranagar Hub',
+                        rfOut: '104 dBµV',
+                        opticalIn: '-1.2 dBm',
+                        lat: 12.942,
+                        lng: 77.625,
+                      },
+                    ].map((node) => (
                       <div
                         key={node.id}
-                        onClick={() => setSelectedNode({
-                          id: node.id,
-                          name: node.name,
-                          type: 'CATV Optical Node',
-                          rfLevel: `Optical In: ${node.opticalIn} | RF Output: ${node.rfOut}`,
-                          details: `Area: ${node.area} | Forward Path: 47-862 MHz | Reverse: 5-65 MHz`,
-                          lat: node.lat,
-                          lng: node.lng
-                        })}
+                        onClick={() =>
+                          setSelectedNode({
+                            id: node.id,
+                            name: node.name,
+                            type: 'CATV Optical Node',
+                            rfLevel: `Optical In: ${node.opticalIn} | RF Output: ${node.rfOut}`,
+                            details: `Area: ${node.area} | Forward Path: 47-862 MHz | Reverse: 5-65 MHz`,
+                            lat: node.lat,
+                            lng: node.lng,
+                          })
+                        }
                         className="p-3.5 bg-slate-950 border border-slate-800 hover:border-sky-500 rounded-xl cursor-pointer transition-all shadow-sm"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -204,21 +227,47 @@ export const CableTVView: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
                     {[
-                      { id: 'AMP-01', name: 'Trunk Amplifier T-01', gain: '+30 dB', input: '68 dBµV', output: '98 dBµV', lat: 12.9375, lng: 77.6285 },
-                      { id: 'AMP-02', name: 'Line Extender LE-02', gain: '+26 dB', input: '72 dBµV', output: '98 dBµV', lat: 12.9385, lng: 77.6290 },
-                      { id: 'AMP-03', name: 'Trunk Amplifier T-03', gain: '+30 dB', input: '70 dBµV', output: '100 dBµV', lat: 12.9410, lng: 77.6260 }
-                    ].map(amp => (
+                      {
+                        id: 'AMP-01',
+                        name: 'Trunk Amplifier T-01',
+                        gain: '+30 dB',
+                        input: '68 dBµV',
+                        output: '98 dBµV',
+                        lat: 12.9375,
+                        lng: 77.6285,
+                      },
+                      {
+                        id: 'AMP-02',
+                        name: 'Line Extender LE-02',
+                        gain: '+26 dB',
+                        input: '72 dBµV',
+                        output: '98 dBµV',
+                        lat: 12.9385,
+                        lng: 77.629,
+                      },
+                      {
+                        id: 'AMP-03',
+                        name: 'Trunk Amplifier T-03',
+                        gain: '+30 dB',
+                        input: '70 dBµV',
+                        output: '100 dBµV',
+                        lat: 12.941,
+                        lng: 77.626,
+                      },
+                    ].map((amp) => (
                       <div
                         key={amp.id}
-                        onClick={() => setSelectedNode({
-                          id: amp.id,
-                          name: amp.name,
-                          type: 'CATV RF Amplifier',
-                          rfLevel: `Input: ${amp.input} | Gain: ${amp.gain} | Output: ${amp.output}`,
-                          details: 'Line Extender with built-in slope & tilt equalizer (60V AC Power Injected)',
-                          lat: amp.lat,
-                          lng: amp.lng
-                        })}
+                        onClick={() =>
+                          setSelectedNode({
+                            id: amp.id,
+                            name: amp.name,
+                            type: 'CATV RF Amplifier',
+                            rfLevel: `Input: ${amp.input} | Gain: ${amp.gain} | Output: ${amp.output}`,
+                            details: 'Line Extender with built-in slope & tilt equalizer (60V AC Power Injected)',
+                            lat: amp.lat,
+                            lng: amp.lng,
+                          })
+                        }
                         className="p-3 bg-slate-950 border border-slate-800 hover:border-amber-500 rounded-xl cursor-pointer transition-all shadow-sm"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -255,8 +304,8 @@ export const CableTVView: React.FC = () => {
                       { port: 'Tap 1 (8-Way)', tapLoss: '17 dB', signal: '72 dBµV', stbs: 6 },
                       { port: 'Tap 2 (4-Way)', tapLoss: '14 dB', signal: '74 dBµV', stbs: 4 },
                       { port: 'Tap 3 (8-Way)', tapLoss: '20 dB', signal: '68 dBµV', stbs: 7 },
-                      { port: 'Tap 4 (4-Way)', tapLoss: '11 dB', signal: '70 dBµV', stbs: 4 }
-                    ].map(tap => (
+                      { port: 'Tap 4 (4-Way)', tapLoss: '11 dB', signal: '70 dBµV', stbs: 4 },
+                    ].map((tap) => (
                       <div key={tap.port} className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center">
                         <div className="text-[11px] font-bold text-white">{tap.port}</div>
                         <div className="text-[10px] text-slate-400">Tap Loss: {tap.tapLoss}</div>
@@ -295,7 +344,9 @@ export const CableTVView: React.FC = () => {
                     </div>
 
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">RF Signal Level / Telemetry</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        RF Signal Level / Telemetry
+                      </span>
                       <div className="mt-1 bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-emerald-400 font-mono text-[11px]">
                         {selectedNode.rfLevel}
                       </div>
@@ -332,7 +383,9 @@ export const CableTVView: React.FC = () => {
             <div className="max-w-4xl mx-auto space-y-6">
               <div>
                 <h3 className="text-base font-bold text-white">RF Frequency Spectrum Allocation (5 - 862 MHz)</h3>
-                <p className="text-xs text-slate-400">Standard PAL-D/K and NTSC Frequency Plans with DOCSIS 3.1 EuroDOCSIS Plan</p>
+                <p className="text-xs text-slate-400">
+                  Standard PAL-D/K and NTSC Frequency Plans with DOCSIS 3.1 EuroDOCSIS Plan
+                </p>
               </div>
 
               <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
@@ -409,11 +462,13 @@ export const CableTVView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {catvCustomers.map(cust => (
+                    {catvCustomers.map((cust) => (
                       <tr key={cust.id} className="hover:bg-slate-900/60">
                         <td className="py-2.5 px-4">
                           <div className="font-bold text-white">{cust.name}</div>
-                          <div className="text-[10px] text-slate-400">{cust.id} &bull; {cust.area}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {cust.id} &bull; {cust.area}
+                          </div>
                         </td>
                         <td className="py-2.5 px-4">
                           <span className="font-semibold text-orange-400">{cust.plan}</span>
@@ -421,12 +476,8 @@ export const CableTVView: React.FC = () => {
                         <td className="py-2.5 px-4 font-mono text-slate-300">
                           {cust.ontSerialNumber.replace('ONT', 'STB')}
                         </td>
-                        <td className="py-2.5 px-4 text-slate-300">
-                          {cust.terminalBoxId}
-                        </td>
-                        <td className="py-2.5 px-4 font-mono text-emerald-400 font-bold">
-                          66.4 dBµV
-                        </td>
+                        <td className="py-2.5 px-4 text-slate-300">{cust.terminalBoxId}</td>
+                        <td className="py-2.5 px-4 font-mono text-emerald-400 font-bold">66.4 dBµV</td>
                         <td className="py-2.5 px-4">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
                             {cust.status}

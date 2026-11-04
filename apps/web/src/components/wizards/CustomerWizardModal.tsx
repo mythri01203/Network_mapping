@@ -1,11 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { estimateRxForSplitter, budgetStatusFor } from '../../lib/trace';
-import {
-  X,
-  Users,
-  Check
-} from 'lucide-react';
+import { X, Users, Check } from 'lucide-react';
 
 const isCustomerTerminalType = (type: string) =>
   type === 'FAT' || type.includes('Terminal Box') || type === 'Distribution Point';
@@ -25,7 +21,7 @@ export const CustomerWizardModal: React.FC = () => {
     selectedObject,
     connectCustomerToPort,
     flyToLocation,
-    showToast
+    showToast,
   } = useNetwork();
 
   // Form Fields
@@ -38,13 +34,15 @@ export const CustomerWizardModal: React.FC = () => {
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
 
-  const [serviceType, setServiceType] = useState<'Fiber Broadband' | 'Triple Play' | 'Enterprise Fiber' | 'Cable TV'>('Fiber Broadband');
+  const [serviceType, setServiceType] = useState<'Fiber Broadband' | 'Triple Play' | 'Enterprise Fiber' | 'Cable TV'>(
+    'Fiber Broadband',
+  );
   const [plan, setPlan] = useState('FTTH Ultra 300 Mbps');
 
   // Only terminals that actually host a splitter can serve a subscriber.
   const availableTerminals = useMemo(
-    () => equipments.filter(e => isCustomerTerminalType(e.type) && splitters.some(s => s.terminalBoxId === e.id)),
-    [equipments, splitters]
+    () => equipments.filter((e) => isCustomerTerminalType(e.type) && splitters.some((s) => s.terminalBoxId === e.id)),
+    [equipments, splitters],
   );
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
@@ -53,18 +51,18 @@ export const CustomerWizardModal: React.FC = () => {
   const [ontSerial, setOntSerial] = useState(newOntSerial);
   const [routerModel, setRouterModel] = useState('Huawei OptiXstar Wi-Fi 6');
 
-  const selectedTerminal = equipments.find(e => e.id === selectedTerminalId);
-  const terminalSplitters = splitters.filter(s => s.terminalBoxId === selectedTerminalId);
-  const activeSplitter = terminalSplitters.find(s => s.id === selectedSplitterId);
+  const selectedTerminal = equipments.find((e) => e.id === selectedTerminalId);
+  const terminalSplitters = splitters.filter((s) => s.terminalBoxId === selectedTerminalId);
+  const activeSplitter = terminalSplitters.find((s) => s.id === selectedSplitterId);
 
   const firstFreePort = (splitterId: string) =>
-    splitters.find(s => s.id === splitterId)?.outputPorts.find(p => p.status === 'Available')?.portNumber ?? null;
+    splitters.find((s) => s.id === splitterId)?.outputPorts.find((p) => p.status === 'Available')?.portNumber ?? null;
 
   const selectTerminal = (termId: string) => {
     setSelectedTerminalId(termId);
-    const term = equipments.find(e => e.id === termId);
-    const termSplitters = splitters.filter(s => s.terminalBoxId === termId);
-    const sp = termSplitters.find(s => s.outputPorts.some(p => p.status === 'Available')) || termSplitters[0];
+    const term = equipments.find((e) => e.id === termId);
+    const termSplitters = splitters.filter((s) => s.terminalBoxId === termId);
+    const sp = termSplitters.find((s) => s.outputPorts.some((p) => p.status === 'Available')) || termSplitters[0];
     setSelectedSplitterId(sp?.id || '');
     setSelectedPortNumber(sp ? firstFreePort(sp.id) : null);
     if (term) {
@@ -85,8 +83,10 @@ export const CustomerWizardModal: React.FC = () => {
     setOntSerial(newOntSerial());
     const selectedId = selectedObject?.type === 'equipment' ? selectedObject.data?.id : undefined;
     const preferred =
-      availableTerminals.find(t => t.id === selectedId) ||
-      availableTerminals.find(t => splitters.some(s => s.terminalBoxId === t.id && s.outputPorts.some(p => p.status === 'Available'))) ||
+      availableTerminals.find((t) => t.id === selectedId) ||
+      availableTerminals.find((t) =>
+        splitters.some((s) => s.terminalBoxId === t.id && s.outputPorts.some((p) => p.status === 'Available')),
+      ) ||
       availableTerminals[0];
     if (preferred) selectTerminal(preferred.id);
     else {
@@ -101,10 +101,21 @@ export const CustomerWizardModal: React.FC = () => {
     if (!selectedTerminal || !activeSplitter) return null;
     const custLat = parseFloat(lat);
     const custLng = parseFloat(lng);
-    const dropLen = Number.isFinite(custLat) && Number.isFinite(custLng)
-      ? Math.round(Math.hypot((custLat - selectedTerminal.lat) * 111320, (custLng - selectedTerminal.lng) * 111320 * Math.cos(custLat * Math.PI / 180)))
-      : 30;
-    return estimateRxForSplitter(selectedTerminal, activeSplitter, { equipments, cables, splitters, closures, customers, faults }, dropLen);
+    const dropLen =
+      Number.isFinite(custLat) && Number.isFinite(custLng)
+        ? Math.round(
+            Math.hypot(
+              (custLat - selectedTerminal.lat) * 111320,
+              (custLng - selectedTerminal.lng) * 111320 * Math.cos((custLat * Math.PI) / 180),
+            ),
+          )
+        : 30;
+    return estimateRxForSplitter(
+      selectedTerminal,
+      activeSplitter,
+      { equipments, cables, splitters, closures, customers, faults },
+      dropLen,
+    );
   }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults]);
 
   if (!isCustomerWizardOpen) return null;
@@ -142,7 +153,7 @@ export const CustomerWizardModal: React.FC = () => {
       splitterId: activeSplitter.id,
       splitterOutputPort: selectedPortNumber,
       ontSerialNumber: ontSerial.trim(),
-      routerModel
+      routerModel,
     });
 
     if (connected) {
@@ -188,7 +199,7 @@ export const CustomerWizardModal: React.FC = () => {
                   required
                   placeholder="e.g. Ramesh Chandra"
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500"
                 />
               </div>
@@ -198,7 +209,7 @@ export const CustomerWizardModal: React.FC = () => {
                   type="text"
                   placeholder="+91 98450 12345"
                   value={mobile}
-                  onChange={e => setMobile(e.target.value)}
+                  onChange={(e) => setMobile(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500"
                 />
               </div>
@@ -209,7 +220,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Service Type</label>
                 <select
                   value={serviceType}
-                  onChange={e => setServiceType(e.target.value as any)}
+                  onChange={(e) => setServiceType(e.target.value as any)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
                   <option value="Fiber Broadband">Fiber Broadband</option>
@@ -223,7 +234,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={plan}
-                  onChange={e => setPlan(e.target.value)}
+                  onChange={(e) => setPlan(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 />
               </div>
@@ -235,7 +246,7 @@ export const CustomerWizardModal: React.FC = () => {
                 type="text"
                 placeholder="Apartment #, Building, Street"
                 value={address}
-                onChange={e => setAddress(e.target.value)}
+                onChange={(e) => setAddress(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
               />
             </div>
@@ -249,12 +260,14 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Access Terminal (FAT)</label>
                 <select
                   value={selectedTerminalId}
-                  onChange={e => selectTerminal(e.target.value)}
+                  onChange={(e) => selectTerminal(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
                   {availableTerminals.length === 0 && <option value="">No terminal with a splitter</option>}
-                  {availableTerminals.map(term => (
-                    <option key={term.id} value={term.id}>{term.name} ({term.id})</option>
+                  {availableTerminals.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.name} ({term.id})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -263,14 +276,16 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Splitter Module</label>
                 <select
                   value={selectedSplitterId}
-                  onChange={e => {
+                  onChange={(e) => {
                     setSelectedSplitterId(e.target.value);
                     setSelectedPortNumber(firstFreePort(e.target.value));
                   }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
-                  {terminalSplitters.map(sp => (
-                    <option key={sp.id} value={sp.id}>{sp.name} ({sp.ratio})</option>
+                  {terminalSplitters.map((sp) => (
+                    <option key={sp.id} value={sp.id}>
+                      {sp.name} ({sp.ratio})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -283,7 +298,7 @@ export const CustomerWizardModal: React.FC = () => {
                   Select Available Output Port ({activeSplitter.ratio}):
                 </label>
                 <div className="grid grid-cols-8 gap-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
-                  {activeSplitter.outputPorts.map(port => {
+                  {activeSplitter.outputPorts.map((port) => {
                     const isOccupied = port.status === 'Occupied';
                     const isFaulty = port.status === 'Faulty';
                     const isReserved = port.status === 'Reserved';
@@ -299,21 +314,21 @@ export const CustomerWizardModal: React.FC = () => {
                           isOccupied
                             ? `Occupied by ${port.connectedCustomerName || port.connectedCustomerId}`
                             : isFaulty
-                            ? `Port ${port.portNumber}: Faulty`
-                            : isReserved
-                            ? `Port ${port.portNumber}: Reserved`
-                            : `Port ${port.portNumber}: Free`
+                              ? `Port ${port.portNumber}: Faulty`
+                              : isReserved
+                                ? `Port ${port.portNumber}: Reserved`
+                                : `Port ${port.portNumber}: Free`
                         }
                         className={`p-2 rounded-lg text-center font-bold text-xs transition-all ${
                           isSelected
                             ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-400'
                             : isFaulty
-                            ? 'bg-red-100 text-red-400 cursor-not-allowed line-through'
-                            : isOccupied
-                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed line-through'
-                            : isReserved
-                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                            : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              ? 'bg-red-100 text-red-400 cursor-not-allowed line-through'
+                              : isOccupied
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed line-through'
+                                : isReserved
+                                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                         }`}
                       >
                         {port.portNumber}
@@ -322,29 +337,50 @@ export const CustomerWizardModal: React.FC = () => {
                   })}
                 </div>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1 px-1">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Free Port</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span> Reserved</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Occupied</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300"></span> Faulty</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-600"></span> Selected</span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Free Port
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span> Reserved
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-slate-300"></span> Occupied
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-red-300"></span> Faulty
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-600"></span> Selected
+                  </span>
                 </div>
               </div>
             )}
             {estimate && (
-              <div className={`rounded-xl border px-3 py-2 text-[11px] ${
-                rxStatus === 'Fail' ? 'border-red-200 bg-red-50 text-red-700'
-                  : rxStatus === 'Warning' ? 'border-amber-200 bg-amber-50 text-amber-800'
-                  : rxStatus === 'Pass' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-slate-200 bg-slate-50 text-slate-600'
-              }`}>
+              <div
+                className={`rounded-xl border px-3 py-2 text-[11px] ${
+                  rxStatus === 'Fail'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : rxStatus === 'Warning'
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : rxStatus === 'Pass'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+              >
                 <div className="font-bold">Upstream path</div>
                 <div>
-                  {estimate.olt ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ''}` : 'No OLT reachable'}
-                  {estimate.hops.length > 0 && ` ? ${estimate.hops.map(h => h.cable.id).join(' ? ')}`}
+                  {estimate.olt
+                    ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ''}`
+                    : 'No OLT reachable'}
+                  {estimate.hops.length > 0 && ` ? ${estimate.hops.map((h) => h.cable.id).join(' ? ')}`}
                   {` ? ${selectedTerminalId} / ${activeSplitter?.id}`}
                 </div>
                 <div>
-                  Estimated Rx: <span className="font-mono font-bold">{estimate.rxDbm !== undefined ? `${estimate.rxDbm} dBm` : 'n/a'}</span> ({rxStatus})
+                  Estimated Rx:{' '}
+                  <span className="font-mono font-bold">
+                    {estimate.rxDbm !== undefined ? `${estimate.rxDbm} dBm` : 'n/a'}
+                  </span>{' '}
+                  ({rxStatus})
                 </div>
               </div>
             )}
@@ -360,7 +396,7 @@ export const CustomerWizardModal: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={lat}
-                  onChange={e => setLat(e.target.value)}
+                  onChange={(e) => setLat(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
                 />
               </div>
@@ -370,7 +406,7 @@ export const CustomerWizardModal: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={lng}
-                  onChange={e => setLng(e.target.value)}
+                  onChange={(e) => setLng(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
                 />
               </div>
@@ -381,7 +417,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={area}
-                  onChange={e => setArea(e.target.value)}
+                  onChange={(e) => setArea(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 />
               </div>
@@ -390,7 +426,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={building}
-                  onChange={e => setBuilding(e.target.value)}
+                  onChange={(e) => setBuilding(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 />
               </div>
@@ -399,12 +435,14 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={flatNumber}
-                  onChange={e => setFlatNumber(e.target.value)}
+                  onChange={(e) => setFlatNumber(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500">Defaults next to the selected terminal; a drop cable is drawn from the terminal to this point.</p>
+            <p className="text-[10px] text-slate-500">
+              Defaults next to the selected terminal; a drop cable is drawn from the terminal to this point.
+            </p>
           </div>
 
           {/* CPE Hardware */}
@@ -416,7 +454,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={ontSerial}
-                  onChange={e => setOntSerial(e.target.value)}
+                  onChange={(e) => setOntSerial(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono"
                 />
               </div>
@@ -425,7 +463,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <input
                   type="text"
                   value={routerModel}
-                  onChange={e => setRouterModel(e.target.value)}
+                  onChange={(e) => setRouterModel(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
                 />
               </div>
@@ -435,9 +473,14 @@ export const CustomerWizardModal: React.FC = () => {
           {/* Submit Button */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <div className="text-[11px] text-slate-500">
-              {selectedPortNumber !== null
-                ? <>Assigned to Port <span className="font-bold text-slate-800">{selectedPortNumber}</span> on {selectedTerminalId}</>
-                : <span className="text-red-600 font-semibold">No free port on the selected splitter</span>}
+              {selectedPortNumber !== null ? (
+                <>
+                  Assigned to Port <span className="font-bold text-slate-800">{selectedPortNumber}</span> on{' '}
+                  {selectedTerminalId}
+                </>
+              ) : (
+                <span className="text-red-600 font-semibold">No free port on the selected splitter</span>
+              )}
             </div>
             <button
               type="submit"

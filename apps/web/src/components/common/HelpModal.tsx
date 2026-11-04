@@ -1,17 +1,7 @@
 import React from 'react';
 import { useNetwork } from '../../context/NetworkContext';
 import { STANDARD_12_COLORS } from '../../constants/colorStandards';
-import {
-  X,
-  HelpCircle,
-  BookOpen,
-  Map,
-  Cable,
-  CheckCircle2,
-  ShieldCheck,
-  Split,
-  Camera
-} from 'lucide-react';
+import { X, HelpCircle, BookOpen, Map, Cable, CheckCircle2, ShieldCheck, Split, Camera } from 'lucide-react';
 
 export const HelpModal: React.FC = () => {
   const { isHelpModalOpen, setIsHelpModalOpen } = useNetwork();
@@ -29,7 +19,9 @@ export const HelpModal: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-sm text-slate-900">FIBER-GIS Platform Guide & Quick Reference</h2>
-              <p className="text-[11px] text-slate-500">Telecom engineering best practices, keyboard shortcuts & optical standards</p>
+              <p className="text-[11px] text-slate-500">
+                Telecom engineering best practices, keyboard shortcuts & optical standards
+              </p>
             </div>
           </div>
           <button
@@ -49,25 +41,44 @@ export const HelpModal: React.FC = () => {
               <span>5-Step Beginner Workflow to Map a Network</span>
             </div>
             <ol className="list-decimal pl-5 space-y-1 text-blue-900 text-[11px] leading-relaxed">
-              <li><strong>Select or Place Equipment:</strong> Drag an OLT, FDMS, or FAT from the left Component Library onto the GIS map or click to place.</li>
-              <li><strong>Draw Cable Route:</strong> Click "Draw Cable" or choose a cable type. Click waypoints on the map; it automatically snaps to poles and equipment.</li>
-              <li><strong>Upload & Annotate Photos:</strong> Select any FAT terminal box, click "Open Box & Photo Annotator" to mark individual ports non-destructively.</li>
-              <li><strong>Check Available Leads:</strong> Open the bottom Information Panel to review the 12-color fiber code and verify free leads.</li>
-              <li><strong>Connect Subscribers:</strong> Launch the "Connect Customer" wizard to allocate an available splitter port and provision the FTTH drop path.</li>
+              <li>
+                <strong>Select or Place Equipment:</strong> Drag an OLT, FDMS, or FAT from the left Component Library
+                onto the GIS map or click to place.
+              </li>
+              <li>
+                <strong>Draw Cable Route:</strong> Click "Draw Cable" or choose a cable type. Click waypoints on the
+                map; it automatically snaps to poles and equipment.
+              </li>
+              <li>
+                <strong>Upload & Annotate Photos:</strong> Select any FAT terminal box, click "Open Box & Photo
+                Annotator" to mark individual ports non-destructively.
+              </li>
+              <li>
+                <strong>Check Available Leads:</strong> Open the bottom Information Panel to review the 12-color fiber
+                code and verify free leads.
+              </li>
+              <li>
+                <strong>Connect Subscribers:</strong> Launch the "Connect Customer" wizard to allocate an available
+                splitter port and provision the FTTH drop path.
+              </li>
             </ol>
           </div>
 
           {/* Section 2: Standard 12-Color Fiber Sequence */}
           <div className="space-y-2">
-            <div className="font-bold text-xs text-slate-900">Standard 12-Color Optical Fiber Identification (TIA/EIA-598)</div>
+            <div className="font-bold text-xs text-slate-900">
+              Standard 12-Color Optical Fiber Identification (TIA/EIA-598)
+            </div>
             <div className="grid grid-cols-6 gap-2">
-              {STANDARD_12_COLORS.map(c => (
+              {STANDARD_12_COLORS.map((c) => (
                 <div key={c.number} className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-center">
                   <div
                     className="w-5 h-5 rounded-full mx-auto mb-1 border border-black/20 shadow-xs"
                     style={{ backgroundColor: c.hex }}
                   />
-                  <div className="font-mono font-bold text-[10px] text-slate-800">#{c.number.toString().padStart(2, '0')}</div>
+                  <div className="font-mono font-bold text-[10px] text-slate-800">
+                    #{c.number.toString().padStart(2, '0')}
+                  </div>
                   <div className="font-semibold text-[10px] text-slate-600 truncate">{c.name}</div>
                 </div>
               ))}
@@ -111,10 +122,21 @@ export const HelpModal: React.FC = () => {
               <span>Engineered Error Prevention & Validation Safeguards</span>
             </div>
             <ul className="list-disc pl-5 space-y-1 text-[11px] text-emerald-900 leading-normal">
-              <li><strong>Duplicate ID Block:</strong> Ensures every equipment and cable ID is strictly unique.</li>
-              <li><strong>Physical Port Double-Booking Prevention:</strong> Prevents two active drop connections from claiming the same splitter output port.</li>
-              <li><strong>Core Lead Protection:</strong> Automatically flags occupied cores and prevents duplicate core assignments.</li>
-              <li><strong>Non-Destructive Photos:</strong> Keeps field photographs pristine; all annotation pins and circles are stored separately as vector layers.</li>
+              <li>
+                <strong>Duplicate ID Block:</strong> Ensures every equipment and cable ID is strictly unique.
+              </li>
+              <li>
+                <strong>Physical Port Double-Booking Prevention:</strong> Prevents two active drop connections from
+                claiming the same splitter output port.
+              </li>
+              <li>
+                <strong>Core Lead Protection:</strong> Automatically flags occupied cores and prevents duplicate core
+                assignments.
+              </li>
+              <li>
+                <strong>Non-Destructive Photos:</strong> Keeps field photographs pristine; all annotation pins and
+                circles are stored separately as vector layers.
+              </li>
             </ul>
           </div>
         </div>

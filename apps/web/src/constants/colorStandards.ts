@@ -40,43 +40,43 @@ export const CORE_STATUS_COLORS = {
     dot: 'bg-emerald-500',
     border: '#10b981',
     hex: '#10b981',
-    label: 'Available'
+    label: 'Available',
   },
   'In Use': {
     bg: 'bg-blue-100 text-blue-800 border-blue-300',
     dot: 'bg-blue-600',
     border: '#2563eb',
     hex: '#2563eb',
-    label: 'In Use'
+    label: 'In Use',
   },
   Reserved: {
     bg: 'bg-amber-100 text-amber-800 border-amber-300',
     dot: 'bg-amber-500',
     border: '#f59e0b',
     hex: '#f59e0b',
-    label: 'Reserved'
+    label: 'Reserved',
   },
   Damaged: {
     bg: 'bg-rose-100 text-rose-800 border-rose-300',
     dot: 'bg-rose-600',
     border: '#e11d48',
     hex: '#e11d48',
-    label: 'Damaged'
+    label: 'Damaged',
   },
   'Under Maintenance': {
     bg: 'bg-purple-100 text-purple-800 border-purple-300',
     dot: 'bg-purple-600',
     border: '#9333ea',
     hex: '#9333ea',
-    label: 'Under Maintenance'
+    label: 'Under Maintenance',
   },
   Unverified: {
     bg: 'bg-slate-100 text-slate-700 border-slate-300',
     dot: 'bg-slate-400',
     border: '#94a3b8',
     hex: '#94a3b8',
-    label: 'Unverified'
-  }
+    label: 'Unverified',
+  },
 };
 
 export const CABLE_TYPE_COLORS: Record<string, { stroke: string; strokeWidth: number; dashArray?: string }> = {
@@ -86,5 +86,5 @@ export const CABLE_TYPE_COLORS: Record<string, { stroke: string; strokeWidth: nu
   'Aerial Fiber': { stroke: '#16a34a', strokeWidth: 3.5, dashArray: '6, 4' }, // Dashed Green
   'Underground Fiber': { stroke: '#9333ea', strokeWidth: 4, dashArray: '8, 5' }, // Dashed Purple
   'Coaxial Cable': { stroke: '#ea580c', strokeWidth: 3.5 }, // Orange
-  'Custom Cable': { stroke: '#475569', strokeWidth: 3 }
+  'Custom Cable': { stroke: '#475569', strokeWidth: 3 },
 };

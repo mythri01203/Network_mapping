@@ -31,7 +31,14 @@ export function Tabs<T extends string = string>({
 }: TabsProps<T>) {
   if (variant === 'segmented') {
     return (
-      <div role="tablist" className={cn('inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5', fullWidth && 'flex w-full', className)}>
+      <div
+        role="tablist"
+        className={cn(
+          'inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5',
+          fullWidth && 'flex w-full',
+          className,
+        )}
+      >
         {items.map((item) => {
           const active = item.id === value;
           const Icon = item.icon;
@@ -47,13 +54,17 @@ export function Tabs<T extends string = string>({
                 'inline-flex items-center justify-center gap-1.5 rounded-[5px] font-medium transition-colors disabled:opacity-40',
                 size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-3 text-xs',
                 fullWidth && 'flex-1',
-                active ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900',
+                active
+                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                  : 'text-slate-600 hover:text-slate-900',
               )}
             >
               {Icon && <Icon size={size === 'sm' ? 12 : 13} strokeWidth={2} />}
               {item.label}
               {item.count !== undefined && (
-                <span className={cn('tabular text-[10px]', active ? 'text-slate-500' : 'text-slate-400')}>{item.count}</span>
+                <span className={cn('tabular text-[10px]', active ? 'text-slate-500' : 'text-slate-400')}>
+                  {item.count}
+                </span>
               )}
             </button>
           );

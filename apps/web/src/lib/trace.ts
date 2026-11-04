@@ -1,12 +1,4 @@
-import {
-  Cable,
-  Customer,
-  Equipment,
-  Fault,
-  JointClosure,
-  Splitter,
-  TracePathNode
-} from '../types/network';
+import { Cable, Customer, Equipment, Fault, JointClosure, Splitter, TracePathNode } from '../types/network';
 import { polylineLengthMeters } from './ids';
 
 // Planning values for a GPON downstream (1490 nm) optical link budget.
@@ -99,9 +91,13 @@ const cableLength = (c: Cable) =>
  * Hops are returned OLT-first. An OLT is always treated as the signal source,
  * so inter-OLT backhaul links are never followed.
  */
-export function findUpstreamChain(startEquipmentId: string, data: TraceData, preferredCableIds: string[] = []): UpstreamHop[] {
+export function findUpstreamChain(
+  startEquipmentId: string,
+  data: TraceData,
+  preferredCableIds: string[] = [],
+): UpstreamHop[] {
   const hops: UpstreamHop[] = [];
-  const start = data.equipments.find(e => e.id === startEquipmentId);
+  const start = data.equipments.find((e) => e.id === startEquipmentId);
   if (!start || start.type === 'OLT') return hops;
 
   const visitedCables = new Set<string>();
@@ -110,12 +106,12 @@ export function findUpstreamChain(startEquipmentId: string, data: TraceData, pre
 
   for (let guard = 0; guard < 16 && currentId; guard++) {
     const candidates = data.cables.filter(
-      c => isTrunkCable(c) && c.endEquipmentId === currentId && !visitedCables.has(c.id)
+      (c) => isTrunkCable(c) && c.endEquipmentId === currentId && !visitedCables.has(c.id),
     );
     if (candidates.length === 0) break;
-    const cable = candidates.find(c => preferredCableIds.includes(c.id)) || candidates[0];
+    const cable = candidates.find((c) => preferredCableIds.includes(c.id)) || candidates[0];
     visitedCables.add(cable.id);
-    const from = cable.startEquipmentId ? data.equipments.find(e => e.id === cable.startEquipmentId) : undefined;
+    const from = cable.startEquipmentId ? data.equipments.find((e) => e.id === cable.startEquipmentId) : undefined;
     hops.unshift({ cable, from });
     if (!from || from.type === 'OLT' || visitedEquipment.has(from.id)) break;
     visitedEquipment.add(from.id);
@@ -126,7 +122,7 @@ export function findUpstreamChain(startEquipmentId: string, data: TraceData, pre
 
 /** Returns the OLT that ultimately feeds an equipment (or the equipment itself if it is an OLT). */
 export function findServingOlt(equipmentId: string, data: TraceData, preferredCableIds: string[] = []) {
-  const eq = data.equipments.find(e => e.id === equipmentId);
+  const eq = data.equipments.find((e) => e.id === equipmentId);
   if (eq?.type === 'OLT') return { olt: eq, hops: [] as UpstreamHop[] };
   const hops = findUpstreamChain(equipmentId, data, preferredCableIds);
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : undefined;
@@ -141,10 +137,10 @@ export function collectDownstream(equipmentId: string, data: TraceData) {
   while (queue.length) {
     const current = queue.shift()!;
     data.cables
-      .filter(c => c.startEquipmentId === current)
-      .forEach(c => {
+      .filter((c) => c.startEquipmentId === current)
+      .forEach((c) => {
         const next = c.endEquipmentId;
-        const nextEq = next ? data.equipments.find(e => e.id === next) : undefined;
+        const nextEq = next ? data.equipments.find((e) => e.id === next) : undefined;
         // Do not cross into another OLT's serving area via backhaul links.
         if (nextEq?.type === 'OLT') return;
         if (cableIds.has(c.id)) return;
@@ -155,23 +151,29 @@ export function collectDownstream(equipmentId: string, data: TraceData) {
         }
       });
   }
-  const customers = data.customers.filter(cu => equipmentIds.has(cu.terminalBoxId));
-  customers.forEach(cu => {
-    if (cu.dropCableId && data.cables.some(c => c.id === cu.dropCableId)) cableIds.add(cu.dropCableId);
+  const customers = data.customers.filter((cu) => equipmentIds.has(cu.terminalBoxId));
+  customers.forEach((cu) => {
+    if (cu.dropCableId && data.cables.some((c) => c.id === cu.dropCableId)) cableIds.add(cu.dropCableId);
   });
   return { cableIds: [...cableIds], equipmentIds: [...equipmentIds], customers };
 }
 
 const findPatchOdf = (olt: Equipment, data: TraceData) =>
   data.equipments
-    .filter(e => e.type === 'ODF')
-    .map(e => ({ e, d: polylineLengthMeters([[olt.lat, olt.lng], [e.lat, e.lng]]) }))
-    .filter(x => x.d <= 250)
+    .filter((e) => e.type === 'ODF')
+    .map((e) => ({
+      e,
+      d: polylineLengthMeters([
+        [olt.lat, olt.lng],
+        [e.lat, e.lng],
+      ]),
+    }))
+    .filter((x) => x.d <= 250)
     .sort((a, b) => a.d - b.d)[0]?.e;
 
 const findPon = (olt: Equipment, feederCableId?: string, ponPortId?: string) =>
-  olt.ponPorts?.find(p => !!feederCableId && p.connectedFeederCableId === feederCableId) ||
-  olt.ponPorts?.find(p => !!ponPortId && p.id === ponPortId);
+  olt.ponPorts?.find((p) => !!feederCableId && p.connectedFeederCableId === feederCableId) ||
+  olt.ponPorts?.find((p) => !!ponPortId && p.id === ponPortId);
 
 const cableRole = (cable: Cable, isFirstFromOlt: boolean): { type: TracePathNode['type']; label: string } => {
   if (cable.type === 'Drop Fiber') return { type: 'Drop', label: 'Drop Cable' };
@@ -193,7 +195,7 @@ class PathBuilder {
   constructor(private data: TraceData) {}
 
   planCables(ids: (string | undefined)[]) {
-    ids.forEach(id => id && this.plannedCableIds.add(id));
+    ids.forEach((id) => id && this.plannedCableIds.add(id));
   }
 
   add(node: TracePathNode, lossDb = 0) {
@@ -204,8 +206,16 @@ class PathBuilder {
   addEquipment(eq: Equipment, details: string, connectorLoss = CONNECTOR_LOSS_DB) {
     this.equipmentIds.push(eq.id);
     this.add(
-      { type: equipmentNodeType(eq), id: eq.id, name: eq.name, details, status: equipmentStatus(eq), lat: eq.lat, lng: eq.lng },
-      connectorLoss
+      {
+        type: equipmentNodeType(eq),
+        id: eq.id,
+        name: eq.name,
+        details,
+        status: equipmentStatus(eq),
+        lat: eq.lat,
+        lng: eq.lng,
+      },
+      connectorLoss,
     );
   }
 
@@ -218,9 +228,9 @@ class PathBuilder {
         details: `Ratio ${sp.ratio} | ${details} | Insertion loss ${sp.insertionLossDb} dB`,
         status: sp.status === 'Faulty' || portFaulty ? 'Faulty' : sp.status === 'Maintenance' ? 'Warning' : 'Normal',
         lat: at?.lat,
-        lng: at?.lng
+        lng: at?.lng,
       },
-      sp.insertionLossDb
+      sp.insertionLossDb,
     );
   }
 
@@ -230,7 +240,7 @@ class PathBuilder {
     this.cableIds.push(cable.id);
     this.plannedCableIds.add(cable.id);
     let status = cableStatus(cable);
-    const core = coreNumber ? cable.cores.find(c => c.coreNumber === coreNumber) : undefined;
+    const core = coreNumber ? cable.cores.find((c) => c.coreNumber === coreNumber) : undefined;
     if (core && (core.status === 'Damaged' || core.status === 'Under Maintenance')) {
       status = core.status === 'Damaged' ? 'Faulty' : 'Warning';
       this.warnings.push(`Core ${coreNumber} on ${cable.id} is ${core.status}.`);
@@ -247,9 +257,9 @@ class PathBuilder {
         status,
         lat: mid?.[0],
         lng: mid?.[1],
-        lengthMeters: length
+        lengthMeters: length,
       },
-      (length / 1000) * FIBER_ATTENUATION_DB_PER_KM
+      (length / 1000) * FIBER_ATTENUATION_DB_PER_KM,
     );
     this.addClosuresOn(cable);
   }
@@ -257,17 +267,17 @@ class PathBuilder {
   /** Adds splice closures on a cable whose other leg (if any) is also part of this route. */
   private addClosuresOn(cable: Cable) {
     this.data.closures
-      .filter(cl => cl.cableAId === cable.id || cl.cableBId === cable.id)
-      .filter(cl => !this.closureIds.has(cl.id))
-      .forEach(cl => {
+      .filter((cl) => cl.cableAId === cable.id || cl.cableBId === cable.id)
+      .filter((cl) => !this.closureIds.has(cl.id))
+      .forEach((cl) => {
         const otherCableId = cl.cableAId === cable.id ? cl.cableBId : cl.cableAId;
         if (otherCableId && !this.plannedCableIds.has(otherCableId)) return;
         this.closureIds.add(cl.id);
-        const splices = cl.splices.filter(s => s.inputCableId === cable.id || s.outputCableId === cable.id);
+        const splices = cl.splices.filter((s) => s.inputCableId === cable.id || s.outputCableId === cable.id);
         const avgLoss = splices.length
           ? splices.reduce((sum, s) => sum + (s.spliceLossDb || 0), 0) / splices.length
           : DEFAULT_SPLICE_LOSS_DB;
-        const bad = splices.some(s => s.status === 'Failed' || s.status === 'Damaged');
+        const bad = splices.some((s) => s.status === 'Failed' || s.status === 'Damaged');
         if (bad) this.warnings.push(`Closure ${cl.id} has failed/damaged splice records.`);
         this.add(
           {
@@ -277,26 +287,26 @@ class PathBuilder {
             details: `${cl.closureType} | ${splices.length} splice record(s) | Avg splice loss ${round2(avgLoss)} dB`,
             status: bad ? 'Warning' : 'Normal',
             lat: cl.lat,
-            lng: cl.lng
+            lng: cl.lng,
           },
-          avgLoss
+          avgLoss,
         );
       });
   }
 
   applyFaults(customerId?: string) {
-    const active = this.data.faults.filter(f => f.status !== 'Resolved');
-    this.nodes.forEach(n => {
+    const active = this.data.faults.filter((f) => f.status !== 'Resolved');
+    this.nodes.forEach((n) => {
       const fault = active.find(
-        f =>
+        (f) =>
           (!!f.affectedCableId && f.affectedCableId === n.id) ||
           (!!f.affectedEquipmentId && f.affectedEquipmentId === n.id) ||
-          (n.type === 'Customer' && !!customerId && f.affectedCustomerIds.includes(customerId))
+          (n.type === 'Customer' && !!customerId && f.affectedCustomerIds.includes(customerId)),
       );
       if (!fault) return;
       n.status = 'Faulty';
       n.details += ` [ACTIVE FAULT ${fault.id}: ${fault.type}]`;
-      if (!this.warnings.some(w => w.includes(fault.id))) {
+      if (!this.warnings.some((w) => w.includes(fault.id))) {
         this.warnings.push(`Active fault ${fault.id} (${fault.type}) on ${n.id}.`);
       }
     });
@@ -305,7 +315,7 @@ class PathBuilder {
   finalize(
     summary: Omit<TraceSummary, 'totalLengthMeters' | 'totalLossDb' | 'estimatedRxDbm' | 'budgetStatus' | 'warnings'>,
     extraCableIds: string[] = [],
-    extraEquipmentIds: string[] = []
+    extraEquipmentIds: string[] = [],
   ): TraceResult {
     const estimatedRxDbm = summary.txPowerDbm !== undefined ? round1(summary.txPowerDbm - this.lossDb) : undefined;
     return {
@@ -318,8 +328,8 @@ class PathBuilder {
         totalLossDb: round2(this.lossDb),
         estimatedRxDbm,
         budgetStatus: budgetStatusFor(summary.measuredRxDbm ?? estimatedRxDbm),
-        warnings: this.warnings
-      }
+        warnings: this.warnings,
+      },
     };
   }
 }
@@ -333,10 +343,10 @@ function buildTrunk(
   hops: UpstreamHop[],
   endEquipment: Equipment,
   data: TraceData,
-  opts: { ponPortId?: string; firstCableId?: string; lastCore?: number } = {}
+  opts: { ponPortId?: string; firstCableId?: string; lastCore?: number } = {},
 ): number | undefined {
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : endEquipment.type === 'OLT' ? endEquipment : undefined;
-  builder.planCables(hops.map(h => h.cable.id));
+  builder.planCables(hops.map((h) => h.cable.id));
   let txPowerDbm: number | undefined;
 
   if (!olt) {
@@ -354,10 +364,12 @@ function buildTrunk(
         id: `${olt.id}/${pon.id}`,
         name: `PON Port ${pon.id}${pon.slotCardPort ? ` (${pon.slotCardPort})` : ''}`,
         details: `Tx ${txPowerDbm >= 0 ? '+' : ''}${txPowerDbm} dBm | ${pon.connectedCustomersCount} customer(s) | ${pon.status}`,
-        status: pon.status === 'Faulty' ? 'Faulty' : pon.status === 'Active' ? 'Normal' : 'Warning'
+        status: pon.status === 'Faulty' ? 'Faulty' : pon.status === 'Active' ? 'Normal' : 'Warning',
       });
     } else if (feederId) {
-      builder.warnings.push(`No PON port on ${olt.id} is mapped to ${feederId}; assumed Tx +${DEFAULT_TX_POWER_DBM} dBm.`);
+      builder.warnings.push(
+        `No PON port on ${olt.id} is mapped to ${feederId}; assumed Tx +${DEFAULT_TX_POWER_DBM} dBm.`,
+      );
     }
     if (feederId) {
       const odf = findPatchOdf(olt, data);
@@ -372,7 +384,7 @@ function buildTrunk(
       const prevCableId = hops[idx - 1].cable.id;
       const cabinet = hop.from;
       const primary = data.splitters.find(
-        sp => sp.terminalBoxId === cabinet.id && sp.inputPort.connectedCableId === prevCableId
+        (sp) => sp.terminalBoxId === cabinet.id && sp.inputPort.connectedCableId === prevCableId,
       );
       if (primary) builder.addSplitter(primary, `Primary split stage in ${cabinet.id}`, cabinet);
     }
@@ -385,35 +397,49 @@ function buildTrunk(
 
 export function traceCustomer(customer: Customer, data: TraceData): TraceResult {
   const builder = new PathBuilder(data);
-  const fat = data.equipments.find(e => e.id === customer.terminalBoxId);
-  const splitter = data.splitters.find(s => s.id === customer.splitterId);
+  const fat = data.equipments.find((e) => e.id === customer.terminalBoxId);
+  const splitter = data.splitters.find((s) => s.id === customer.splitterId);
   let txPowerDbm: number | undefined;
 
   if (!fat) {
     builder.warnings.push(`Terminal box ${customer.terminalBoxId} no longer exists.`);
   } else {
-    const preferred = [customer.feederCableId, customer.distributionCableId, splitter?.inputPort.connectedCableId || ''];
+    const preferred = [
+      customer.feederCableId,
+      customer.distributionCableId,
+      splitter?.inputPort.connectedCableId || '',
+    ];
     const hops = findUpstreamChain(fat.id, data, preferred);
     builder.planCables([customer.dropCableId]);
     txPowerDbm = buildTrunk(builder, hops, fat, data, {
       ponPortId: customer.ponPort,
-      lastCore: splitter?.inputPort.connectedCore
+      lastCore: splitter?.inputPort.connectedCore,
     });
-    builder.addEquipment(fat, [fat.type, fat.poleNumber ? `Pole ${fat.poleNumber}` : '', fat.street].filter(Boolean).join(' | '));
+    builder.addEquipment(
+      fat,
+      [fat.type, fat.poleNumber ? `Pole ${fat.poleNumber}` : '', fat.street].filter(Boolean).join(' | '),
+    );
     if (splitter) {
-      const port = splitter.outputPorts.find(p => p.portNumber === customer.splitterOutputPort);
+      const port = splitter.outputPorts.find((p) => p.portNumber === customer.splitterOutputPort);
       builder.addSplitter(splitter, `Output port ${customer.splitterOutputPort}`, fat, port?.status === 'Faulty');
     } else {
       builder.warnings.push(`Splitter ${customer.splitterId} not found.`);
     }
   }
 
-  const drop = data.cables.find(c => c.id === customer.dropCableId);
+  const drop = data.cables.find((c) => c.id === customer.dropCableId);
   if (drop) {
     builder.addCable(drop, 'Drop', 'Drop Cable', customer.fiberCore);
   } else {
     // Unmapped drop: estimate route length as 1.2× the straight-line distance.
-    const estimated = fat ? Math.round(polylineLengthMeters([[fat.lat, fat.lng], [customer.lat, customer.lng]]) * 1.2) : 0;
+    const estimated = fat
+      ? Math.round(
+          polylineLengthMeters([
+            [fat.lat, fat.lng],
+            [customer.lat, customer.lng],
+          ]) * 1.2,
+        )
+      : 0;
     builder.lengthMeters += estimated;
     builder.add(
       {
@@ -422,9 +448,9 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
         name: `Drop Cable${customer.dropCableId ? ` (${customer.dropCableId})` : ''}`,
         details: `Not mapped on GIS | estimated ${estimated} m`,
         status: 'Warning',
-        lengthMeters: estimated
+        lengthMeters: estimated,
       },
-      (estimated / 1000) * FIBER_ATTENUATION_DB_PER_KM
+      (estimated / 1000) * FIBER_ATTENUATION_DB_PER_KM,
     );
     builder.warnings.push('Drop cable is not mapped on GIS; its length was estimated.');
   }
@@ -438,9 +464,9 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
       details: `${customer.routerModel} | Measured Rx ${customer.rxOpticalPowerDbm} dBm`,
       status: measured === 'Fail' ? 'Faulty' : measured === 'Warning' ? 'Warning' : 'Normal',
       lat: customer.lat,
-      lng: customer.lng
+      lng: customer.lng,
     },
-    CONNECTOR_LOSS_DB
+    CONNECTOR_LOSS_DB,
   );
   builder.add({
     type: 'Customer',
@@ -449,7 +475,7 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
     details: `${customer.serviceType} | ${customer.plan} | IP ${customer.ipAddress} | ${customer.status}`,
     status: customer.status === 'Active' ? 'Normal' : 'Warning',
     lat: customer.lat,
-    lng: customer.lng
+    lng: customer.lng,
   });
   builder.applyFaults(customer.id);
 
@@ -459,7 +485,7 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
     kind: 'customer',
     txPowerDbm,
     measuredRxDbm: customer.rxOpticalPowerDbm,
-    downstreamCustomerCount: 1
+    downstreamCustomerCount: 1,
   });
 }
 
@@ -469,9 +495,15 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
   let txPowerDbm: number | undefined;
 
   if (eq.type === 'OLT') {
-    builder.addEquipment(eq, `${eq.technology || 'PON'} OLT | ${downstream.customers.length} downstream customer(s)`, 0);
-    (eq.ponPorts || []).forEach(pon => {
-      const feeder = pon.connectedFeederCableId ? data.cables.find(c => c.id === pon.connectedFeederCableId) : undefined;
+    builder.addEquipment(
+      eq,
+      `${eq.technology || 'PON'} OLT | ${downstream.customers.length} downstream customer(s)`,
+      0,
+    );
+    (eq.ponPorts || []).forEach((pon) => {
+      const feeder = pon.connectedFeederCableId
+        ? data.cables.find((c) => c.id === pon.connectedFeederCableId)
+        : undefined;
       if (pon.connectedFeederCableId && !feeder) {
         builder.warnings.push(`${eq.id} ${pon.id} references missing cable ${pon.connectedFeederCableId}.`);
       }
@@ -482,7 +514,7 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
         details: feeder
           ? `${pon.status} | Feeds ${feeder.id} → ${feeder.endEquipmentId || 'unterminated'} | ${pon.connectedCustomersCount} customer(s)`
           : `${pon.status} | No feeder mapped`,
-        status: pon.status === 'Faulty' ? 'Faulty' : pon.connectedFeederCableId && !feeder ? 'Warning' : 'Normal'
+        status: pon.status === 'Faulty' ? 'Faulty' : pon.connectedFeederCableId && !feeder ? 'Warning' : 'Normal',
       });
     });
   } else {
@@ -490,7 +522,7 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
     txPowerDbm = buildTrunk(builder, hops, eq, data);
     builder.addEquipment(
       eq,
-      `${eq.type} | ${downstream.equipmentIds.length - 1} downstream node(s) | ${downstream.customers.length} customer(s) served`
+      `${eq.type} | ${downstream.equipmentIds.length - 1} downstream node(s) | ${downstream.customers.length} customer(s) served`,
     );
   }
   builder.applyFaults();
@@ -501,17 +533,17 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
       targetLabel: `${eq.name} (${eq.id})`,
       kind: 'equipment',
       txPowerDbm,
-      downstreamCustomerCount: downstream.customers.length
+      downstreamCustomerCount: downstream.customers.length,
     },
     downstream.cableIds,
-    downstream.equipmentIds
+    downstream.equipmentIds,
   );
 }
 
 export function traceCable(cable: Cable, data: TraceData): TraceResult {
   const builder = new PathBuilder(data);
-  const start = cable.startEquipmentId ? data.equipments.find(e => e.id === cable.startEquipmentId) : undefined;
-  const end = cable.endEquipmentId ? data.equipments.find(e => e.id === cable.endEquipmentId) : undefined;
+  const start = cable.startEquipmentId ? data.equipments.find((e) => e.id === cable.startEquipmentId) : undefined;
+  const end = cable.endEquipmentId ? data.equipments.find((e) => e.id === cable.endEquipmentId) : undefined;
   const isCoax = cable.cableCategory === 'Coaxial';
   let txPowerDbm: number | undefined;
 
@@ -531,17 +563,18 @@ export function traceCable(cable: Cable, data: TraceData): TraceResult {
   else builder.warnings.push(`${cable.id} has no end equipment mapped.`);
   builder.applyFaults();
 
-  const downstream = end && end.type !== 'OLT' ? collectDownstream(end.id, data) : { cableIds: [], equipmentIds: [], customers: [] };
+  const downstream =
+    end && end.type !== 'OLT' ? collectDownstream(end.id, data) : { cableIds: [], equipmentIds: [], customers: [] };
   return builder.finalize(
     {
       targetId: cable.id,
       targetLabel: `${cable.name} (${cable.id})`,
       kind: 'cable',
       txPowerDbm: isCoax ? undefined : txPowerDbm,
-      downstreamCustomerCount: downstream.customers.length
+      downstreamCustomerCount: downstream.customers.length,
     },
     downstream.cableIds,
-    downstream.equipmentIds
+    downstream.equipmentIds,
   );
 }
 
@@ -559,6 +592,6 @@ export function estimateRxForSplitter(fat: Equipment, splitter: Splitter, data: 
     olt,
     pon,
     hops,
-    rxDbm: tx !== undefined ? round1(tx - builder.lossDb - dropLoss) : undefined
+    rxDbm: tx !== undefined ? round1(tx - builder.lossDb - dropLoss) : undefined,
   };
 }

@@ -12,7 +12,7 @@ import {
   FileCheck,
   ExternalLink,
   Layers,
-  X
+  X,
 } from 'lucide-react';
 
 export const DocumentManagerModal: React.FC = () => {
@@ -24,7 +24,7 @@ export const DocumentManagerModal: React.FC = () => {
     setIsDocumentModalOpen,
     equipments,
     cables,
-    showToast
+    showToast,
   } = useNetwork();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,10 +44,10 @@ export const DocumentManagerModal: React.FC = () => {
     'OTDR Trace',
     'Inspection Report',
     'As-Built CAD',
-    'Lease Agreement'
+    'Lease Agreement',
   ];
 
-  const filteredDocs = documents.filter(d => {
+  const filteredDocs = documents.filter((d) => {
     const matchesSearch =
       searchQuery === '' ||
       d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -70,7 +70,7 @@ export const DocumentManagerModal: React.FC = () => {
       title: newTitle,
       category: newCategory,
       equipmentId: newAssetId.startsWith('OLT') || newAssetId.startsWith('FAT') ? newAssetId : undefined,
-      cableId: newAssetId.startsWith('CBL') ? newAssetId : undefined
+      cableId: newAssetId.startsWith('CBL') ? newAssetId : undefined,
     });
 
     setIsUploadOpen(false);
@@ -89,7 +89,9 @@ export const DocumentManagerModal: React.FC = () => {
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-800">Network Technical Documentation & Datasheets</h3>
-              <p className="text-[11px] text-slate-500">Repository for OTDR traces, equipment datasheets, as-built CADs, and lease deeds</p>
+              <p className="text-[11px] text-slate-500">
+                Repository for OTDR traces, equipment datasheets, as-built CADs, and lease deeds
+              </p>
             </div>
           </div>
 
@@ -112,7 +114,10 @@ export const DocumentManagerModal: React.FC = () => {
 
         {/* Upload Form Accordion */}
         {isUploadOpen && (
-          <form onSubmit={handleUploadSubmit} className="p-4 bg-blue-50/50 border-b border-blue-100 space-y-3 text-xs animate-in slide-in-from-top-2">
+          <form
+            onSubmit={handleUploadSubmit}
+            className="p-4 bg-blue-50/50 border-b border-blue-100 space-y-3 text-xs animate-in slide-in-from-top-2"
+          >
             <div className="font-bold text-xs text-blue-900">Upload New Technical Document</div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -122,7 +127,7 @@ export const DocumentManagerModal: React.FC = () => {
                   required
                   placeholder="e.g. OTDR Trace Feeder Cable 01 - 1310nm"
                   value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
+                  onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 />
               </div>
@@ -131,7 +136,7 @@ export const DocumentManagerModal: React.FC = () => {
                 <label className="block text-[10px] font-bold text-slate-600 mb-1">Category</label>
                 <select
                   value={newCategory}
-                  onChange={e => setNewCategory(e.target.value as any)}
+                  onChange={(e) => setNewCategory(e.target.value as any)}
                   className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 >
                   <option value="Datasheet">Datasheet</option>
@@ -148,7 +153,7 @@ export const DocumentManagerModal: React.FC = () => {
                   type="text"
                   placeholder="e.g. CBL-FEEDER-01 or OLT-01"
                   value={newAssetId}
-                  onChange={e => setNewAssetId(e.target.value)}
+                  onChange={(e) => setNewAssetId(e.target.value)}
                   className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 />
               </div>
@@ -181,25 +186,25 @@ export const DocumentManagerModal: React.FC = () => {
                 type="text"
                 placeholder="Search documents by title or asset ID..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
               />
             </div>
 
             <select
               value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
+              onChange={(e) => setSelectedCategory(e.target.value)}
               className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
             >
-              {categories.map(c => (
-                <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c === 'All' ? 'All Categories' : c}
+                </option>
               ))}
             </select>
           </div>
 
-          <span className="text-xs text-slate-400 font-medium">
-            {filteredDocs.length} Documents Available
-          </span>
+          <span className="text-xs text-slate-400 font-medium">{filteredDocs.length} Documents Available</span>
         </div>
 
         {/* Documents Table */}
@@ -218,7 +223,7 @@ export const DocumentManagerModal: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredDocs.map(doc => (
+                {filteredDocs.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-800 flex items-center gap-2">
                       <FileCheck className="w-4 h-4 text-blue-600 shrink-0" />

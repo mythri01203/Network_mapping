@@ -1,4 +1,5 @@
 # FiberGIS – Advanced Fiber Network Mapping and Management System
+
 ## Interactive Prototype for ISPs, Broadband Operators, and Cable TV Networks
 
 FiberGIS is an enterprise-grade Geographical Information System (GIS) network mapping and infrastructure management application tailored for Internet Service Providers (ISPs), FTTH broadband operators, and Cable TV (HFC) network operators.
@@ -10,6 +11,7 @@ The application allows network administrators, planning engineers, NOC operators
 ## 🌟 Key Functional Modules & Architecture
 
 ### 1. Main Application Layout & Responsive GIS Workspace
+
 - **Top Navigation Bar:** Simple, self-explanatory navigation items: **Map**, **Network**, **Equipment**, **Customers**, **Cables**, **Cable TV**, **Field Work**, **Faults**, **Reports**, **Settings**. Includes global search, GIS layer controller, technical docs repository, outage count badge, and Biker Mode toggle.
 - **Component Library Panel (Left):** Expandable/collapsible library with categories for Central Office (OLT, ODF, Switch, BNG, Optical Transmitter), Fiber Distribution (FDMS, FDT, FAT, Splitters, Closures), Infrastructure (Poles, Manholes, Chambers, Ducts), Customer Equipment (ONT, Wi-Fi 6 Router, Set-Top Box), and Cable TV. Includes a dedicated **Search Components** modal and click-to-place / drag-and-drop onto the map.
 - **Central GIS Map Workspace:** Interactive Leaflet GIS map with smart cursor snapping, geodesic distance measurement, base map switcher (**GIS Light**, **Satellite Imagery**, **Night/Dark Mode**), custom SVG equipment markers, and dynamic map canvas resizing (`map.invalidateSize()`) whenever panels open or close.
@@ -19,6 +21,7 @@ The application allows network administrators, planning engineers, NOC operators
 ---
 
 ### 2. OLT Equipment Inspector & Optical Power Monitoring
+
 - **OLT Details:** Name, ID, hardware manufacturer (Huawei SmartAX MA5800 / Nokia FX-4), management IP, rack/shelf/slot, uptime (4,280 hours), total & used PON ports, and connected customer count.
 - **Optical Power Parameters:**
   - Transmit Power (Tx Power) in dBm (+3.2 dBm; normal threshold: 1.5 to 5.0 dBm).
@@ -32,7 +35,9 @@ The application allows network administrators, planning engineers, NOC operators
 ---
 
 ### 3. TIA/EIA-598 Standard Fiber Color-Coding System
+
 Standard 12-color sequence displayed with visual color badges and text labels for accessibility:
+
 1. Blue (`#0066cc`)
 2. Orange (`#ff6600`)
 3. Green (`#009933`)
@@ -45,12 +50,14 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 10. Violet (`#7a0099`)
 11. Rose (`#e6007e`)
 12. Aqua (`#00bfff`)
+
 - Extended multi-tube grouping for 24F, 48F, 96F, 144F, and 288F cables.
 - Fiber color swatches are rendered in the core allocation table, splice manager, and route trace stepper.
 
 ---
 
 ### 4. Multiple Port Management (Used, Available, Reserved, Damaged, Unverified)
+
 - Dedicated **Port Manager** modal with high-density visual grid (16, 48, or 96 ports).
 - Color-coded status tiles:
   - **Green:** Used
@@ -65,6 +72,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 5. Terminal Box Image & Interactive Port Annotator
+
 - Dedicated FAT Terminal Box modal with multiple photo views:
   - Front View
   - Internal Splice Trays
@@ -78,6 +86,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 6. Splicing & Joint Closure Management
+
 - Dedicated fusion splicing matrix for underground dome closures and horizontal splice hubs.
 - Incoming and outgoing cable selection with core numbers and TIA-598 color swatches.
 - Endpoint validation: strictly prevents duplicate core endpoint assignments within the same closure, while allowing a continuous fiber core to participate in splices at different closures along its route.
@@ -87,6 +96,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 7. End-to-End Fiber Route Tracing
+
 - Complete connection tracing from Central Office to subscriber:
   `OLT → PON Port → Feeder Cable → Joint Closure → Distribution Cable → Splitter → FAT → Terminal Port → Drop Cable → ONT/ONU → Customer`
 - Search by Customer ID, ONT Serial, Cable ID, OLT, Splitter, or FAT.
@@ -96,6 +106,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 8. Biker Mode – Motorcycle Navigation for Field Technicians
+
 - Dedicated **Biker Mode** with motorcycle icon on Top Navigation, Floating Map Toolbar, Field Work view, and Equipment Inspector.
 - Designed specifically for field technicians traveling between network sites:
   - High-contrast orange dashed road navigation line with dark casing on the GIS map.
@@ -109,6 +120,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 9. Cable TV (CATV / HFC) Network Management
+
 - Dedicated Cable TV module with interactive HFC distribution schematic:
   `Master Headend → 1550nm Optical Transmitter → EDFA Optical Amplifier → Fiber Trunk → CATV Optical Receiver Node → Coaxial Trunk (RG-11) → RF Line Extender Amplifiers → 4-Way Tap-Off Boxes → RG-6 Coaxial Drop → Subscriber Set-Top Boxes`
 - Separate toggleable GIS map layer for coaxial cables and CATV nodes.
@@ -117,6 +129,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 10. Fault and Outage Incident Management
+
 - Incident reporting for fiber cuts, cable damage, high attenuation, and equipment failure.
 - GPS fault marker on the map with glowing red pulse animation.
 - Automated downstream subscriber blast radius calculation (identifies all disconnected customers).
@@ -125,6 +138,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ---
 
 ### 11. Reports & Data Export
+
 - **PDF Reports:** Clean executive summaries with equipment inventory and subscriber connectivity generated via `jsPDF`.
 - **CSV / Excel:** Tabular dumps for equipment inventory, cable cores, customer connections, and fault logs.
 - **GeoJSON Export:** Standard GIS FeatureCollection compatible with QGIS, ArcGIS, and PostGIS.
@@ -134,6 +148,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 ## 🧭 Complete User Journey Walkthrough
 
 To experience the full prototype workflow:
+
 1. **Add Equipment:** Open Component Library (or click **Search Components**), drag or click **FAT Terminal Box** onto the GIS map.
 2. **Draw Cable:** Click **Draw Cable** on the floating toolbar, click points on the map with smart snapping to equipment, and complete the 6-step cable wizard.
 3. **Assign Fiber Cores:** Click the cable, open the **Bottom Fiber Core Table**, and assign Core 1 (Blue) to a downstream terminal.

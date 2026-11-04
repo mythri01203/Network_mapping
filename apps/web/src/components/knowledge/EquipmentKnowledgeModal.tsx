@@ -3,7 +3,7 @@ import { useNetwork } from '../../context/NetworkContext';
 import {
   EQUIPMENT_KNOWLEDGE_BASE,
   EquipmentKnowledgeItem,
-  searchEquipmentKnowledge
+  searchEquipmentKnowledge,
 } from '../../data/equipmentKnowledgeBase';
 import {
   Search,
@@ -25,7 +25,7 @@ import {
   Cable,
   Box,
   Split,
-  Tv
+  Tv,
 } from 'lucide-react';
 
 interface EquipmentKnowledgeModalProps {
@@ -37,9 +37,10 @@ interface EquipmentKnowledgeModalProps {
 export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = ({
   isOpen,
   onClose,
-  initialEquipmentId
+  initialEquipmentId,
 }) => {
-  const { setActiveMainView, setSelectedEquipmentTypeToAdd, setActiveTool, showToast, equipments, flyToLocation } = useNetwork();
+  const { setActiveMainView, setSelectedEquipmentTypeToAdd, setActiveTool, showToast, equipments, flyToLocation } =
+    useNetwork();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -50,7 +51,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   React.useEffect(() => {
     if (initialEquipmentId) {
       const match = EQUIPMENT_KNOWLEDGE_BASE.find(
-        item => item.id === initialEquipmentId || item.id.toLowerCase() === initialEquipmentId.toLowerCase()
+        (item) => item.id === initialEquipmentId || item.id.toLowerCase() === initialEquipmentId.toLowerCase(),
       );
       if (match) {
         setActiveItemSlug(match.id);
@@ -68,14 +69,14 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
     { label: 'What is a joint closure?', query: 'What is a joint closure?' },
     { label: 'What is an optical receiver?', query: 'What is an optical receiver?' },
     { label: 'Difference between OLT and ONT', query: 'Difference between OLT and ONT' },
-    { label: 'Difference between GPON and EPON', query: 'Difference between GPON and EPON' }
+    { label: 'Difference between GPON and EPON', query: 'Difference between GPON and EPON' },
   ];
 
   // Filtered knowledge items
   const filteredItems = useMemo(() => {
     let list = searchEquipmentKnowledge(searchQuery);
     if (selectedCategory !== 'All') {
-      list = list.filter(item => item.category === selectedCategory);
+      list = list.filter((item) => item.category === selectedCategory);
     }
     return list;
   }, [searchQuery, selectedCategory]);
@@ -83,7 +84,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   // Active selected item
   const activeItem = useMemo(() => {
     return (
-      EQUIPMENT_KNOWLEDGE_BASE.find(item => item.id === activeItemSlug) ||
+      EQUIPMENT_KNOWLEDGE_BASE.find((item) => item.id === activeItemSlug) ||
       filteredItems[0] ||
       EQUIPMENT_KNOWLEDGE_BASE[0]
     );
@@ -100,7 +101,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
     { step: 5, id: 'telecom-pole', name: '5. Pole' },
     { step: 6, id: 'splitter', name: '6. Splitter' },
     { step: 7, id: 'fat', name: '7. FAT Box' },
-    { step: 8, id: 'ont', name: '8. ONT (Home)' }
+    { step: 8, id: 'ont', name: '8. ONT (Home)' },
   ];
 
   // Handle Place on Map
@@ -122,7 +123,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   };
 
   // Find existing equipment on map
-  const matchingPlacedEquipment = equipments.find(e => {
+  const matchingPlacedEquipment = equipments.find((e) => {
     if (activeItem.id === 'olt' || activeItem.id === 'gpon-olt' || activeItem.id === 'epon-olt') {
       return e.type === 'OLT';
     }
@@ -141,7 +142,11 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
       setActiveMainView('map');
       setTimeout(() => {
         flyToLocation(matchingPlacedEquipment.lat, matchingPlacedEquipment.lng, 18);
-        showToast('success', 'Located Asset', `Centered on ${matchingPlacedEquipment.name} (${matchingPlacedEquipment.area})`);
+        showToast(
+          'success',
+          'Located Asset',
+          `Centered on ${matchingPlacedEquipment.name} (${matchingPlacedEquipment.area})`,
+        );
       }, 150);
     }
   };
@@ -166,7 +171,8 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                   </span>
                 </div>
                 <p className="text-xs text-blue-200/80">
-                  Search what any network equipment is, how it functions, where it installs, and how FTTH connections work.
+                  Search what any network equipment is, how it functions, where it installs, and how FTTH connections
+                  work.
                 </p>
               </div>
             </div>
@@ -187,7 +193,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
             <input
               type="text"
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search equipment or ask a question (e.g. 'What is an FDMS?', 'What is a GPON OLT?', 'FAT box', 'Splitter')..."
               className="w-full pl-12 pr-10 py-3.5 bg-white text-slate-900 text-sm font-medium rounded-2xl shadow-lg border border-white/30 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-400/40 transition-all"
             />
@@ -224,7 +230,15 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
         <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
           {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-semibold">
-            {['All', 'Central Office', 'Fiber Distribution', 'Supporting Infrastructure', 'Customer Equipment', 'Cable TV', 'Comparison Guide'].map(cat => (
+            {[
+              'All',
+              'Central Office',
+              'Fiber Distribution',
+              'Supporting Infrastructure',
+              'Customer Equipment',
+              'Cable TV',
+              'Comparison Guide',
+            ].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
@@ -269,7 +283,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
               Found {filteredItems.length} Knowledge Topics
             </div>
-            {filteredItems.map(item => {
+            {filteredItems.map((item) => {
               const isSelected = activeItem.id === item.id;
               return (
                 <button
@@ -281,20 +295,34 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                       : 'bg-white/80 hover:bg-white border-slate-200/80 hover:border-slate-300'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-black text-xs ${
-                    item.category === 'Central Office' ? 'bg-blue-100 text-blue-800' :
-                    item.category === 'Fiber Distribution' ? 'bg-teal-100 text-teal-800' :
-                    item.category === 'Customer Equipment' ? 'bg-emerald-100 text-emerald-800' :
-                    item.category === 'Supporting Infrastructure' ? 'bg-amber-100 text-amber-800' :
-                    'bg-purple-100 text-purple-800'
-                  }`}>
-                    {item.id === 'olt' ? 'OLT' :
-                     item.id === 'odf' ? 'ODF' :
-                     item.id === 'fdms' ? 'FDM' :
-                     item.id === 'fat' ? 'FAT' :
-                     item.id === 'splitter' ? '1:N' :
-                     item.id === 'ont' ? 'ONT' :
-                     item.id.includes('pole') ? 'POLE' : 'INFO'}
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-black text-xs ${
+                      item.category === 'Central Office'
+                        ? 'bg-blue-100 text-blue-800'
+                        : item.category === 'Fiber Distribution'
+                          ? 'bg-teal-100 text-teal-800'
+                          : item.category === 'Customer Equipment'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : item.category === 'Supporting Infrastructure'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-purple-100 text-purple-800'
+                    }`}
+                  >
+                    {item.id === 'olt'
+                      ? 'OLT'
+                      : item.id === 'odf'
+                        ? 'ODF'
+                        : item.id === 'fdms'
+                          ? 'FDM'
+                          : item.id === 'fat'
+                            ? 'FAT'
+                            : item.id === 'splitter'
+                              ? '1:N'
+                              : item.id === 'ont'
+                                ? 'ONT'
+                                : item.id.includes('pole')
+                                  ? 'POLE'
+                                  : 'INFO'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
@@ -302,9 +330,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                         {item.name}
                       </h4>
                       {item.ftthStep > 0 && (
-                        <span className="text-[10px] font-semibold text-slate-400 shrink-0">
-                          Step {item.ftthStep}
-                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400 shrink-0">Step {item.ftthStep}</span>
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 leading-snug">
@@ -377,7 +403,10 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
               </div>
               <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs font-bold">
                 {ftthFlow.map((node, index) => {
-                  const isCurrent = activeItem.id === node.id || (activeItem.id.includes('olt') && node.id === 'olt') || (activeItem.id.includes('pole') && node.id === 'telecom-pole');
+                  const isCurrent =
+                    activeItem.id === node.id ||
+                    (activeItem.id.includes('olt') && node.id === 'olt') ||
+                    (activeItem.id.includes('pole') && node.id === 'telecom-pole');
                   return (
                     <React.Fragment key={node.id}>
                       <button
@@ -410,9 +439,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                     <Sparkles className="w-4 h-4 text-amber-500" />
                     <span>Simple Explanation: What is this equipment?</span>
                   </div>
-                  <p className="text-sm text-slate-800 leading-relaxed font-medium">
-                    {activeItem.beginnerSummary}
-                  </p>
+                  <p className="text-sm text-slate-800 leading-relaxed font-medium">{activeItem.beginnerSummary}</p>
                 </div>
 
                 {/* 2. Main Purpose & What It Is Used For */}
@@ -423,7 +450,10 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {activeItem.whatItIsUsedFor.map((item, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-700 flex items-start gap-2">
+                      <div
+                        key={idx}
+                        className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-700 flex items-start gap-2"
+                      >
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-1.5 shrink-0" />
                         <span>{item}</span>
                       </div>
@@ -436,9 +466,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                   <MapPin className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-xs font-bold text-amber-900">Where is it installed in the real world?</h4>
-                    <p className="text-xs text-amber-950 mt-1 leading-relaxed">
-                      {activeItem.whereInstalled}
-                    </p>
+                    <p className="text-xs text-amber-950 mt-1 leading-relaxed">{activeItem.whereInstalled}</p>
                   </div>
                 </div>
               </div>
@@ -451,12 +479,8 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                     <Cpu className="w-4 h-4 text-blue-400" />
                     <span>Engineering Operation & Physical Layer Architecture</span>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed font-mono">
-                    {activeItem.engineerSummary}
-                  </p>
-                  <p className="text-xs text-slate-400 leading-relaxed mt-2.5">
-                    {activeItem.howItWorks}
-                  </p>
+                  <p className="text-xs text-slate-300 leading-relaxed font-mono">{activeItem.engineerSummary}</p>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-2.5">{activeItem.howItWorks}</p>
                 </div>
 
                 {/* Port & Optical Specifications */}
@@ -468,21 +492,29 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                     <div className="p-3 space-y-2">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Port Capacity:</span>
-                        <span className="font-semibold text-slate-900">{activeItem.portSpecifications.totalTypicalPorts}</span>
+                        <span className="font-semibold text-slate-900">
+                          {activeItem.portSpecifications.totalTypicalPorts}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Connector Interface:</span>
-                        <span className="font-semibold text-slate-900">{activeItem.portSpecifications.connectorTypes}</span>
+                        <span className="font-semibold text-slate-900">
+                          {activeItem.portSpecifications.connectorTypes}
+                        </span>
                       </div>
                     </div>
                     <div className="p-3 space-y-2">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Standards:</span>
-                        <span className="font-semibold text-slate-900">{activeItem.portSpecifications.protocolStandards}</span>
+                        <span className="font-semibold text-slate-900">
+                          {activeItem.portSpecifications.protocolStandards}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Wavelengths:</span>
-                        <span className="font-semibold text-slate-900">{activeItem.portSpecifications.wavelengths}</span>
+                        <span className="font-semibold text-slate-900">
+                          {activeItem.portSpecifications.wavelengths}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -585,7 +617,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                 Related Equipment & Next Steps
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {activeItem.relatedEquipment.map(rel => (
+                {activeItem.relatedEquipment.map((rel) => (
                   <button
                     key={rel.id}
                     onClick={() => setActiveItemSlug(rel.id)}
@@ -612,7 +644,10 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
                 </h3>
                 <div className="space-y-2">
                   {activeItem.faq.map((f, idx) => (
-                    <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1">
+                    <div
+                      key={idx}
+                      className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1"
+                    >
                       <div className="font-bold text-slate-900">Q: {f.question}</div>
                       <div className="text-slate-600 font-normal">A: {f.answer}</div>
                     </div>
@@ -640,4 +675,3 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
     </div>
   );
 };
-

@@ -14,7 +14,7 @@ import {
   ChevronRight,
   GripVertical,
   Plus,
-  BookOpen
+  BookOpen,
 } from 'lucide-react';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';
@@ -30,48 +30,250 @@ interface ComponentItem {
 
 const COMPONENTS: ComponentItem[] = [
   // Central Office
-  { type: 'OLT', category: 'Central Office', name: 'Optical Line Terminal (OLT)', description: 'Main GPON/XGS-PON central chassis', defaultPorts: 16, iconBg: 'bg-blue-600' },
-  { type: 'ODF', category: 'Central Office', name: 'Optical Distribution Frame', description: 'Central high-density patch bay', defaultPorts: 144, iconBg: 'bg-indigo-600' },
-  { type: 'Core Switch', category: 'Central Office', name: '100G Core Switch', description: 'Metro IP backhaul aggregation', defaultPorts: 48, iconBg: 'bg-slate-700' },
-  { type: 'Router', category: 'Central Office', name: 'BNG Core Router', description: 'Broadband Network Gateway', defaultPorts: 24, iconBg: 'bg-slate-800' },
-  { type: 'Optical Transmitter', category: 'Central Office', name: '1550nm Transmitter', description: 'Cable TV optical laser headend', iconBg: 'bg-orange-600' },
+  {
+    type: 'OLT',
+    category: 'Central Office',
+    name: 'Optical Line Terminal (OLT)',
+    description: 'Main GPON/XGS-PON central chassis',
+    defaultPorts: 16,
+    iconBg: 'bg-blue-600',
+  },
+  {
+    type: 'ODF',
+    category: 'Central Office',
+    name: 'Optical Distribution Frame',
+    description: 'Central high-density patch bay',
+    defaultPorts: 144,
+    iconBg: 'bg-indigo-600',
+  },
+  {
+    type: 'Core Switch',
+    category: 'Central Office',
+    name: '100G Core Switch',
+    description: 'Metro IP backhaul aggregation',
+    defaultPorts: 48,
+    iconBg: 'bg-slate-700',
+  },
+  {
+    type: 'Router',
+    category: 'Central Office',
+    name: 'BNG Core Router',
+    description: 'Broadband Network Gateway',
+    defaultPorts: 24,
+    iconBg: 'bg-slate-800',
+  },
+  {
+    type: 'Optical Transmitter',
+    category: 'Central Office',
+    name: '1550nm Transmitter',
+    description: 'Cable TV optical laser headend',
+    iconBg: 'bg-orange-600',
+  },
 
   // Fiber Distribution
-  { type: 'FDMS', category: 'Fiber Distribution', name: 'FDMS Street Cabinet', description: 'Primary fiber distribution cabinet', defaultPorts: 96, iconBg: 'bg-teal-600' },
-  { type: 'FDT', category: 'Fiber Distribution', name: 'Fiber Distribution Terminal', description: 'Secondary feeder/branch termination', defaultPorts: 48, iconBg: 'bg-cyan-600' },
-  { type: 'FAT', category: 'Fiber Distribution', name: 'Fiber Access Terminal (FAT)', description: 'Customer drop termination box', defaultPorts: 8, iconBg: 'bg-emerald-600' },
-  { type: 'Pole-Mounted Terminal Box', category: 'Fiber Distribution', name: 'Pole-Mounted FAT', description: 'Weatherproof aerial drop enclosure', defaultPorts: 8, iconBg: 'bg-emerald-700' },
-  { type: 'Wall-Mounted Terminal Box', category: 'Fiber Distribution', name: 'Building Wall Box', description: 'Basement/riser distribution box', defaultPorts: 16, iconBg: 'bg-emerald-800' },
-  { type: 'Fiber Splitter', category: 'Fiber Distribution', name: 'PLC Splitter (1:8 / 1:16)', description: 'Passive optical beam splitter', defaultPorts: 8, iconBg: 'bg-purple-600' },
-  { type: 'Fiber Joint Closure', category: 'Fiber Distribution', name: 'Joint Closure (Dome)', description: 'Underground/aerial splice enclosure', iconBg: 'bg-amber-600' },
+  {
+    type: 'FDMS',
+    category: 'Fiber Distribution',
+    name: 'FDMS Street Cabinet',
+    description: 'Primary fiber distribution cabinet',
+    defaultPorts: 96,
+    iconBg: 'bg-teal-600',
+  },
+  {
+    type: 'FDT',
+    category: 'Fiber Distribution',
+    name: 'Fiber Distribution Terminal',
+    description: 'Secondary feeder/branch termination',
+    defaultPorts: 48,
+    iconBg: 'bg-cyan-600',
+  },
+  {
+    type: 'FAT',
+    category: 'Fiber Distribution',
+    name: 'Fiber Access Terminal (FAT)',
+    description: 'Customer drop termination box',
+    defaultPorts: 8,
+    iconBg: 'bg-emerald-600',
+  },
+  {
+    type: 'Pole-Mounted Terminal Box',
+    category: 'Fiber Distribution',
+    name: 'Pole-Mounted FAT',
+    description: 'Weatherproof aerial drop enclosure',
+    defaultPorts: 8,
+    iconBg: 'bg-emerald-700',
+  },
+  {
+    type: 'Wall-Mounted Terminal Box',
+    category: 'Fiber Distribution',
+    name: 'Building Wall Box',
+    description: 'Basement/riser distribution box',
+    defaultPorts: 16,
+    iconBg: 'bg-emerald-800',
+  },
+  {
+    type: 'Fiber Splitter',
+    category: 'Fiber Distribution',
+    name: 'PLC Splitter (1:8 / 1:16)',
+    description: 'Passive optical beam splitter',
+    defaultPorts: 8,
+    iconBg: 'bg-purple-600',
+  },
+  {
+    type: 'Fiber Joint Closure',
+    category: 'Fiber Distribution',
+    name: 'Joint Closure (Dome)',
+    description: 'Underground/aerial splice enclosure',
+    iconBg: 'bg-amber-600',
+  },
 
   // Supporting Infrastructure
-  { type: 'Telecom Pole', category: 'Supporting Infrastructure', name: 'Telecom Utility Pole', description: 'Aerial cable suspension pole', iconBg: 'bg-slate-600' },
-  { type: 'Electric Pole', category: 'Supporting Infrastructure', name: 'Shared Electric Pole', description: 'Shared aerial distribution pole', iconBg: 'bg-slate-500' },
-  { type: 'Manhole', category: 'Supporting Infrastructure', name: 'Underground Manhole', description: 'Subsurface duct entry chamber', iconBg: 'bg-stone-700' },
-  { type: 'Handhole', category: 'Supporting Infrastructure', name: 'Sidewalk Handhole', description: 'Pavement access pull box', iconBg: 'bg-stone-600' },
-  { type: 'Duct', category: 'Supporting Infrastructure', name: 'Telecom Duct Bank', description: 'Multi-way conduit infrastructure', iconBg: 'bg-zinc-700' },
+  {
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    name: 'Telecom Utility Pole',
+    description: 'Aerial cable suspension pole',
+    iconBg: 'bg-slate-600',
+  },
+  {
+    type: 'Electric Pole',
+    category: 'Supporting Infrastructure',
+    name: 'Shared Electric Pole',
+    description: 'Shared aerial distribution pole',
+    iconBg: 'bg-slate-500',
+  },
+  {
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    name: 'Underground Manhole',
+    description: 'Subsurface duct entry chamber',
+    iconBg: 'bg-stone-700',
+  },
+  {
+    type: 'Handhole',
+    category: 'Supporting Infrastructure',
+    name: 'Sidewalk Handhole',
+    description: 'Pavement access pull box',
+    iconBg: 'bg-stone-600',
+  },
+  {
+    type: 'Duct',
+    category: 'Supporting Infrastructure',
+    name: 'Telecom Duct Bank',
+    description: 'Multi-way conduit infrastructure',
+    iconBg: 'bg-zinc-700',
+  },
 
   // Customer Equipment
-  { type: 'ONT', category: 'Customer Equipment', name: 'Optical Network Terminal', description: 'Subscriber gigabit fiber modem', iconBg: 'bg-blue-500' },
-  { type: 'Wi-Fi Router', category: 'Customer Equipment', name: 'Dual-Band Wi-Fi 6 Router', description: 'Customer premises wireless router', iconBg: 'bg-sky-600' },
-  { type: 'Set-Top Box', category: 'Customer Equipment', name: 'IPTV / DVB-C Set-Top Box', description: 'Digital television receiver', iconBg: 'bg-amber-500' },
+  {
+    type: 'ONT',
+    category: 'Customer Equipment',
+    name: 'Optical Network Terminal',
+    description: 'Subscriber gigabit fiber modem',
+    iconBg: 'bg-blue-500',
+  },
+  {
+    type: 'Wi-Fi Router',
+    category: 'Customer Equipment',
+    name: 'Dual-Band Wi-Fi 6 Router',
+    description: 'Customer premises wireless router',
+    iconBg: 'bg-sky-600',
+  },
+  {
+    type: 'Set-Top Box',
+    category: 'Customer Equipment',
+    name: 'IPTV / DVB-C Set-Top Box',
+    description: 'Digital television receiver',
+    iconBg: 'bg-amber-500',
+  },
 
   // Cable TV
-  { type: 'CATV Optical Node', category: 'Cable TV', name: 'CATV Optical Node', description: 'Fiber-to-Coaxial RF converter', iconBg: 'bg-orange-500' },
-  { type: 'CATV RF Amplifier', category: 'Cable TV', name: 'RF Trunk / Line Extender', description: 'Coaxial signal RF booster amp', iconBg: 'bg-orange-600' },
-  { type: 'CATV Tap-Off Box', category: 'Cable TV', name: '4-Way Tap-Off Box', description: 'Subscriber coaxial drop coupler', iconBg: 'bg-amber-600' }
+  {
+    type: 'CATV Optical Node',
+    category: 'Cable TV',
+    name: 'CATV Optical Node',
+    description: 'Fiber-to-Coaxial RF converter',
+    iconBg: 'bg-orange-500',
+  },
+  {
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV',
+    name: 'RF Trunk / Line Extender',
+    description: 'Coaxial signal RF booster amp',
+    iconBg: 'bg-orange-600',
+  },
+  {
+    type: 'CATV Tap-Off Box',
+    category: 'Cable TV',
+    name: '4-Way Tap-Off Box',
+    description: 'Subscriber coaxial drop coupler',
+    iconBg: 'bg-amber-600',
+  },
 ];
 
-const SIMPLE_COMPONENTS: Array<{ type: EquipmentType; name: string; description: string; emoji: string; iconBg: string }> = [
-  { type: 'OLT', name: 'Central Internet Hub (OLT)', description: 'Main building where internet originates', emoji: '🏢', iconBg: 'bg-blue-600' },
-  { type: 'FAT', name: 'Street Customer Box (FAT)', description: 'Box on pole/wall where home wires plug in', emoji: '📦', iconBg: 'bg-emerald-600' },
-  { type: 'FDT', name: 'Area Distribution Box (FDT)', description: 'Branch box sending cables down streets', emoji: '📦', iconBg: 'bg-cyan-600' },
-  { type: 'Fiber Joint Closure', name: 'Cable Joint Box (Splice)', description: 'Enclosure joining multiple fiber wires', emoji: '🧰', iconBg: 'bg-amber-600' },
-  { type: 'Telecom Pole', name: 'Utility Pole', description: 'Carries overhead fiber wires along roads', emoji: '⚡', iconBg: 'bg-slate-600' },
-  { type: 'Manhole', name: 'Underground Manhole', description: 'Road chamber for underground cables', emoji: '🕳️', iconBg: 'bg-stone-700' },
-  { type: 'ONT', name: 'Customer Home Modem (ONT)', description: 'Subscriber house connected to internet', emoji: '🏠', iconBg: 'bg-blue-500' },
-  { type: 'Fiber Splitter', name: 'Signal Splitter', description: 'Splits 1 fiber line to 8 or 16 homes', emoji: '🔀', iconBg: 'bg-purple-600' }
+const SIMPLE_COMPONENTS: Array<{
+  type: EquipmentType;
+  name: string;
+  description: string;
+  emoji: string;
+  iconBg: string;
+}> = [
+  {
+    type: 'OLT',
+    name: 'Central Internet Hub (OLT)',
+    description: 'Main building where internet originates',
+    emoji: '🏢',
+    iconBg: 'bg-blue-600',
+  },
+  {
+    type: 'FAT',
+    name: 'Street Customer Box (FAT)',
+    description: 'Box on pole/wall where home wires plug in',
+    emoji: '📦',
+    iconBg: 'bg-emerald-600',
+  },
+  {
+    type: 'FDT',
+    name: 'Area Distribution Box (FDT)',
+    description: 'Branch box sending cables down streets',
+    emoji: '📦',
+    iconBg: 'bg-cyan-600',
+  },
+  {
+    type: 'Fiber Joint Closure',
+    name: 'Cable Joint Box (Splice)',
+    description: 'Enclosure joining multiple fiber wires',
+    emoji: '🧰',
+    iconBg: 'bg-amber-600',
+  },
+  {
+    type: 'Telecom Pole',
+    name: 'Utility Pole',
+    description: 'Carries overhead fiber wires along roads',
+    emoji: '⚡',
+    iconBg: 'bg-slate-600',
+  },
+  {
+    type: 'Manhole',
+    name: 'Underground Manhole',
+    description: 'Road chamber for underground cables',
+    emoji: '🕳️',
+    iconBg: 'bg-stone-700',
+  },
+  {
+    type: 'ONT',
+    name: 'Customer Home Modem (ONT)',
+    description: 'Subscriber house connected to internet',
+    emoji: '🏠',
+    iconBg: 'bg-blue-500',
+  },
+  {
+    type: 'Fiber Splitter',
+    name: 'Signal Splitter',
+    description: 'Splits 1 fiber line to 8 or 16 homes',
+    emoji: '🔀',
+    iconBg: 'bg-purple-600',
+  },
 ];
 
 export const ComponentLibrary: React.FC = () => {
@@ -86,19 +288,27 @@ export const ComponentLibrary: React.FC = () => {
     setIsComponentCatalogOpen,
     setIsKnowledgeModalOpen,
     showToast,
-    uiMode
+    uiMode,
   } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<string>('All');
   const [filterQuery, setFilterQuery] = useState('');
 
-  const categories = ['All', 'Central Office', 'Fiber Distribution', 'Supporting Infrastructure', 'Customer Equipment', 'Cable TV'];
+  const categories = [
+    'All',
+    'Central Office',
+    'Fiber Distribution',
+    'Supporting Infrastructure',
+    'Customer Equipment',
+    'Cable TV',
+  ];
 
-  const filteredComponents = COMPONENTS.filter(item => {
+  const filteredComponents = COMPONENTS.filter((item) => {
     const matchesTab = activeTab === 'All' || item.category === activeTab;
-    const matchesSearch = item.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
-                          item.description.toLowerCase().includes(filterQuery.toLowerCase()) ||
-                          item.type.toLowerCase().includes(filterQuery.toLowerCase());
+    const matchesSearch =
+      item.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
+      item.description.toLowerCase().includes(filterQuery.toLowerCase()) ||
+      item.type.toLowerCase().includes(filterQuery.toLowerCase());
     return matchesTab && matchesSearch;
   });
 
@@ -138,11 +348,7 @@ export const ComponentLibrary: React.FC = () => {
       {/* Header */}
       <div className="p-3 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {uiMode === 'simple' ? (
-            <span className="text-base">📦</span>
-          ) : (
-            <Box className="w-4 h-4 text-blue-600" />
-          )}
+          {uiMode === 'simple' ? <span className="text-base">📦</span> : <Box className="w-4 h-4 text-blue-600" />}
           <span className="font-bold text-xs text-slate-800">
             {uiMode === 'simple' ? 'Add Boxes & Cables' : 'Component Library'}
           </span>
@@ -178,9 +384,7 @@ export const ComponentLibrary: React.FC = () => {
 
           {/* Quick Draw Cable Section */}
           <div className="p-3 border-b border-slate-100 bg-slate-50/70 space-y-1.5">
-            <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
-              Draw Fiber Wire
-            </div>
+            <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Draw Fiber Wire</div>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 onClick={() => handleStartDrawCable('Main Feeder Fiber')}
@@ -234,12 +438,10 @@ export const ComponentLibrary: React.FC = () => {
                 <div
                   key={`${item.type}-${idx}`}
                   draggable
-                  onDragStart={e => handleDragStart(e, item.type)}
+                  onDragStart={(e) => handleDragStart(e, item.type)}
                   onClick={() => handleClickToPlace(item.type)}
                   className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                    isSelected
-                      ? 'bg-blue-50 border-blue-400 shadow-sm'
-                      : 'bg-white hover:bg-slate-50 border-slate-200'
+                    isSelected ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white hover:bg-slate-50 border-slate-200'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -280,14 +482,14 @@ export const ComponentLibrary: React.FC = () => {
                 type="text"
                 placeholder="Filter this list..."
                 value={filterQuery}
-                onChange={e => setFilterQuery(e.target.value)}
+                onChange={(e) => setFilterQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs outline-none focus:bg-white focus:border-blue-500 transition-all placeholder:text-slate-400"
               />
             </div>
 
             {/* Category Pills */}
             <div className="flex items-center gap-1 overflow-x-auto py-2 no-scrollbar">
-              {categories.map(cat => (
+              {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveTab(cat)}
@@ -356,7 +558,7 @@ export const ComponentLibrary: React.FC = () => {
                 <div
                   key={`${item.type}-${idx}`}
                   draggable
-                  onDragStart={e => handleDragStart(e, item.type)}
+                  onDragStart={(e) => handleDragStart(e, item.type)}
                   onClick={() => handleClickToPlace(item.type)}
                   className={`group p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
                     isSelectedForPlacement
@@ -370,7 +572,9 @@ export const ComponentLibrary: React.FC = () => {
                     ) : item.type.includes('Pole') ? (
                       <UtilityPoleIcon width={22} height={28} className="shrink-0" />
                     ) : (
-                      <div className={`w-8 h-8 rounded-lg ${item.iconBg} text-white flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs`}>
+                      <div
+                        className={`w-8 h-8 rounded-lg ${item.iconBg} text-white flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs`}
+                      >
                         {item.type.slice(0, 3)}
                       </div>
                     )}
@@ -378,9 +582,7 @@ export const ComponentLibrary: React.FC = () => {
                       <div className="font-semibold text-xs text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
                         {item.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 leading-normal line-clamp-1">
-                        {item.description}
-                      </div>
+                      <div className="text-[10px] text-slate-400 leading-normal line-clamp-1">{item.description}</div>
                     </div>
                   </div>
 

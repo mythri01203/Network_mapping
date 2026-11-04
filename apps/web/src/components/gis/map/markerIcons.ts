@@ -2,7 +2,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import L from 'leaflet';
 import { Bike, Flag, House, TriangleAlert, type LucideIcon } from 'lucide-react';
-import type { Customer, Equipment, EquipmentCategory, EquipmentStatus, EquipmentType, Fault } from '../../../types/network';
+import type {
+  Customer,
+  Equipment,
+  EquipmentCategory,
+  EquipmentStatus,
+  EquipmentType,
+  Fault,
+} from '../../../types/network';
 import { equipmentIcon } from '../../ui/icons';
 
 export function escapeHtml(value: unknown): string {
@@ -55,12 +62,24 @@ const SUPPORT_TYPES: EquipmentType[] = [
   'Microduct',
   'Cable Tray',
   'Building Entry Point',
-  'Junction Point'
+  'Junction Point',
 ];
-const CUSTOMER_TYPES: EquipmentType[] = ['ONT', 'ONU', 'Wi-Fi Router', 'Optical Modem', 'Customer Terminal', 'Set-Top Box'];
+const CUSTOMER_TYPES: EquipmentType[] = [
+  'ONT',
+  'ONU',
+  'Wi-Fi Router',
+  'Optical Modem',
+  'Customer Terminal',
+  'Set-Top Box',
+];
 
 export function categoryForType(type: EquipmentType): EquipmentCategory {
-  if (type.startsWith('CATV') || type === 'Cable TV Headend' || type === 'Optical Transmitter' || type === 'Headend Equipment') {
+  if (
+    type.startsWith('CATV') ||
+    type === 'Cable TV Headend' ||
+    type === 'Optical Transmitter' ||
+    type === 'Headend Equipment'
+  ) {
     return 'Cable TV Infrastructure';
   }
   if (CENTRAL_OFFICE_TYPES.includes(type)) return 'Central Office';
@@ -79,7 +98,7 @@ export const LAYER_COLORS: Record<EquipmentLayerKey, string> = {
   splitters: '#7c3aed',
   poles: '#475569',
   manholes: '#334155',
-  cableTv: '#c2410c'
+  cableTv: '#c2410c',
 };
 
 export const EPON_COLOR = '#6d28d9';
@@ -99,14 +118,14 @@ export const STATUS_COLORS: Record<EquipmentStatus, string> = {
   Warning: '#f59e0b',
   Faulty: '#dc2626',
   Maintenance: '#7c3aed',
-  Planned: '#64748b'
+  Planned: '#64748b',
 };
 
 export const CUSTOMER_STATUS_COLORS: Record<Customer['status'], string> = {
   Active: '#2563eb',
   Suspended: '#d97706',
   'Pending Installation': '#64748b',
-  Disconnected: '#dc2626'
+  Disconnected: '#dc2626',
 };
 
 /* ------------------------------------------------------------------ */
@@ -134,7 +153,7 @@ function stateClasses(state: MarkerState, status?: string): string {
     state.selected ? 'is-selected' : '',
     !state.selected && state.traced ? 'is-traced' : '',
     status === 'Faulty' ? 'is-faulty' : '',
-    status === 'Planned' ? 'is-planned' : ''
+    status === 'Planned' ? 'is-planned' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -146,7 +165,10 @@ export function equipmentMarkerSize(eq: Pick<Equipment, 'type' | 'category'>): n
   return layer === 'poles' || layer === 'manholes' ? 20 : 28;
 }
 
-export function equipmentMarkerIcon(eq: Pick<Equipment, 'type' | 'category' | 'status' | 'technology'>, state: MarkerState): L.DivIcon {
+export function equipmentMarkerIcon(
+  eq: Pick<Equipment, 'type' | 'category' | 'status' | 'technology'>,
+  state: MarkerState,
+): L.DivIcon {
   const layer = equipmentLayerKey(eq);
   const isMinor = layer === 'poles' || layer === 'manholes';
   const isOlt = eq.type === 'OLT';
@@ -167,7 +189,7 @@ export function equipmentMarkerIcon(eq: Pick<Equipment, 'type' | 'category' | 's
       className: 'gis-marker',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
-      tooltipAnchor: [0, -size / 2 - 2]
+      tooltipAnchor: [0, -size / 2 - 2],
     });
   });
 }
@@ -181,7 +203,7 @@ export function customerMarkerIcon(status: Customer['status'], state: MarkerStat
       className: 'gis-marker',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
-      tooltipAnchor: [0, -size / 2 - 2]
+      tooltipAnchor: [0, -size / 2 - 2],
     });
   });
 }
@@ -195,7 +217,7 @@ export function faultMarkerIcon(severity: Fault['severity'], selected: boolean):
       className: 'gis-marker',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
-      tooltipAnchor: [0, -size / 2 - 2]
+      tooltipAnchor: [0, -size / 2 - 2],
     });
   });
 }
@@ -207,8 +229,8 @@ export function projectStartIcon(): L.DivIcon {
       className: 'gis-marker',
       iconSize: [26, 26],
       iconAnchor: [13, 13],
-      tooltipAnchor: [0, -15]
-    })
+      tooltipAnchor: [0, -15],
+    }),
   );
 }
 
@@ -219,8 +241,8 @@ export function gpsIcon(): L.DivIcon {
       className: 'gis-marker',
       iconSize: [22, 22],
       iconAnchor: [11, 11],
-      tooltipAnchor: [0, -12]
-    })
+      tooltipAnchor: [0, -12],
+    }),
   );
 }
 
@@ -228,13 +250,15 @@ export function routeStopIcon(kind: 'origin' | 'stop' | 'destination', label?: s
   const color = kind === 'origin' ? '#ea580c' : kind === 'destination' ? '#16a34a' : '#0f172a';
   const size = kind === 'stop' ? 20 : 26;
   const content =
-    kind === 'stop' ? `<span class="gis-pin__text">${escapeHtml(label ?? '')}</span>` : iconSvg(kind === 'origin' ? Bike : Flag, 14, 2.25);
+    kind === 'stop'
+      ? `<span class="gis-pin__text">${escapeHtml(label ?? '')}</span>`
+      : iconSvg(kind === 'origin' ? Bike : Flag, 14, 2.25);
   return L.divIcon({
     html: `<div class="gis-pin" style="--pin-color:${color};background:${color};width:${size}px;height:${size}px">${content}</div>`,
     className: 'gis-marker',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    tooltipAnchor: [0, -size / 2 - 2]
+    tooltipAnchor: [0, -size / 2 - 2],
   });
 }
 
@@ -243,7 +267,7 @@ export function labelIcon(text: string, offset: number): L.DivIcon {
     html: `<span class="gis-label" style="top:${offset}px">${escapeHtml(text)}</span>`,
     className: 'gis-label-anchor',
     iconSize: [0, 0],
-    iconAnchor: [0, 0]
+    iconAnchor: [0, 0],
   });
 }
 
@@ -254,7 +278,7 @@ export function labelIcon(text: string, offset: number): L.DivIcon {
 export function tooltipHtml(title: string, lines: Array<string | null | undefined | false>): string {
   const body = lines
     .filter((line): line is string => typeof line === 'string' && line.length > 0)
-    .map(line => `<div class="gis-tip__meta">${escapeHtml(line)}</div>`)
+    .map((line) => `<div class="gis-tip__meta">${escapeHtml(line)}</div>`)
     .join('');
   return `<div class="gis-tip"><div class="gis-tip__title">${escapeHtml(title)}</div>${body}</div>`;
 }

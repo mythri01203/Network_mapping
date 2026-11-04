@@ -16,19 +16,11 @@ import {
   Filter,
   ArrowRight,
   ShieldAlert,
-  HardHat
+  HardHat,
 } from 'lucide-react';
 
 export const OperationsHubView: React.FC = () => {
-  const {
-    workOrders,
-    updateWorkOrderStatus,
-    addWorkOrder,
-    faults,
-    equipments,
-    cables,
-    showToast
-  } = useNetwork();
+  const { workOrders, updateWorkOrderStatus, addWorkOrder, faults, equipments, cables, showToast } = useNetwork();
 
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,7 +36,7 @@ export const OperationsHubView: React.FC = () => {
   const [newNotes, setNewNotes] = useState('');
 
   // Filtered orders
-  const filteredOrders = workOrders.filter(w => {
+  const filteredOrders = workOrders.filter((w) => {
     const matchesSearch =
       searchQuery === '' ||
       w.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -57,10 +49,30 @@ export const OperationsHubView: React.FC = () => {
   });
 
   const columns: Array<{ status: WorkOrder['status']; label: string; color: string; count: number }> = [
-    { status: 'Pending', label: 'Pending Dispatch', color: 'border-amber-400 bg-amber-50/40', count: workOrders.filter(w => w.status === 'Pending').length },
-    { status: 'Assigned', label: 'Assigned to Tech', color: 'border-blue-400 bg-blue-50/40', count: workOrders.filter(w => w.status === 'Assigned').length },
-    { status: 'In Progress', label: 'Work In Progress', color: 'border-purple-400 bg-purple-50/40', count: workOrders.filter(w => w.status === 'In Progress').length },
-    { status: 'Completed', label: 'Resolved / Closed', color: 'border-emerald-400 bg-emerald-50/40', count: workOrders.filter(w => w.status === 'Completed').length }
+    {
+      status: 'Pending',
+      label: 'Pending Dispatch',
+      color: 'border-amber-400 bg-amber-50/40',
+      count: workOrders.filter((w) => w.status === 'Pending').length,
+    },
+    {
+      status: 'Assigned',
+      label: 'Assigned to Tech',
+      color: 'border-blue-400 bg-blue-50/40',
+      count: workOrders.filter((w) => w.status === 'Assigned').length,
+    },
+    {
+      status: 'In Progress',
+      label: 'Work In Progress',
+      color: 'border-purple-400 bg-purple-50/40',
+      count: workOrders.filter((w) => w.status === 'In Progress').length,
+    },
+    {
+      status: 'Completed',
+      label: 'Resolved / Closed',
+      color: 'border-emerald-400 bg-emerald-50/40',
+      count: workOrders.filter((w) => w.status === 'Completed').length,
+    },
   ];
 
   const handleCreateOrder = (e: React.FormEvent) => {
@@ -77,7 +89,7 @@ export const OperationsHubView: React.FC = () => {
       status: newTechName.trim() ? 'Assigned' : 'Pending',
       technicianName: newTechName.trim(),
       technicianPhone: newTechPhone.trim(),
-      notes: newNotes.trim()
+      notes: newNotes.trim(),
     });
     setIsNewOrderModalOpen(false);
     setNewTitle('');
@@ -103,7 +115,9 @@ export const OperationsHubView: React.FC = () => {
       <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">Operations & Field Maintenance Hub</h2>
-          <p className="text-xs text-slate-500">Dispatch field technicians, manage splice verifications, and track outage resolution</p>
+          <p className="text-xs text-slate-500">
+            Dispatch field technicians, manage splice verifications, and track outage resolution
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -148,19 +162,19 @@ export const OperationsHubView: React.FC = () => {
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <div className="text-[11px] font-bold text-amber-600 uppercase">Pending Dispatch</div>
           <div className="text-xl font-extrabold text-amber-700 mt-0.5">
-            {workOrders.filter(w => w.status === 'Pending').length}
+            {workOrders.filter((w) => w.status === 'Pending').length}
           </div>
         </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <div className="text-[11px] font-bold text-purple-600 uppercase">In Progress</div>
           <div className="text-xl font-extrabold text-purple-700 mt-0.5">
-            {workOrders.filter(w => w.status === 'In Progress' || w.status === 'Assigned').length}
+            {workOrders.filter((w) => w.status === 'In Progress' || w.status === 'Assigned').length}
           </div>
         </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <div className="text-[11px] font-bold text-emerald-600 uppercase">Resolved This Month</div>
           <div className="text-xl font-extrabold text-emerald-700 mt-0.5">
-            {workOrders.filter(w => w.status === 'Completed').length}
+            {workOrders.filter((w) => w.status === 'Completed').length}
           </div>
         </div>
       </div>
@@ -174,14 +188,14 @@ export const OperationsHubView: React.FC = () => {
               type="text"
               placeholder="Filter work orders by title or technician..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
             />
           </div>
 
           <select
             value={selectedPriority}
-            onChange={e => setSelectedPriority(e.target.value)}
+            onChange={(e) => setSelectedPriority(e.target.value)}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Priorities</option>
@@ -197,11 +211,14 @@ export const OperationsHubView: React.FC = () => {
       <div className="flex-1 overflow-auto p-4">
         {viewMode === 'kanban' ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-full">
-            {columns.map(col => {
-              const ordersInCol = filteredOrders.filter(w => w.status === col.status);
+            {columns.map((col) => {
+              const ordersInCol = filteredOrders.filter((w) => w.status === col.status);
 
               return (
-                <div key={col.status} className="bg-slate-100/80 rounded-2xl p-3 border border-slate-200/90 flex flex-col h-full overflow-hidden">
+                <div
+                  key={col.status}
+                  className="bg-slate-100/80 rounded-2xl p-3 border border-slate-200/90 flex flex-col h-full overflow-hidden"
+                >
                   {/* Column Header */}
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
                     <span className="text-xs font-bold text-slate-700">{col.label}</span>
@@ -212,13 +229,15 @@ export const OperationsHubView: React.FC = () => {
 
                   {/* Cards List */}
                   <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-                    {ordersInCol.map(order => (
+                    {ordersInCol.map((order) => (
                       <div
                         key={order.id}
                         className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadge(order.priority)}`}>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadge(order.priority)}`}
+                          >
                             {order.priority}
                           </span>
                           <span className="font-mono text-[10px] text-slate-400">{order.id}</span>
@@ -240,7 +259,12 @@ export const OperationsHubView: React.FC = () => {
                           {col.status !== 'Pending' && (
                             <button
                               onClick={() => {
-                                const prev = col.status === 'Completed' ? 'In Progress' : col.status === 'In Progress' ? 'Assigned' : 'Pending';
+                                const prev =
+                                  col.status === 'Completed'
+                                    ? 'In Progress'
+                                    : col.status === 'In Progress'
+                                      ? 'Assigned'
+                                      : 'Pending';
                                 updateWorkOrderStatus(order.id, prev);
                               }}
                               className="text-[10px] text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
@@ -251,7 +275,12 @@ export const OperationsHubView: React.FC = () => {
                           {col.status !== 'Completed' && (
                             <button
                               onClick={() => {
-                                const next = col.status === 'Pending' ? 'Assigned' : col.status === 'Assigned' ? 'In Progress' : 'Completed';
+                                const next =
+                                  col.status === 'Pending'
+                                    ? 'Assigned'
+                                    : col.status === 'Assigned'
+                                      ? 'In Progress'
+                                      : 'Completed';
                                 updateWorkOrderStatus(order.id, next);
                               }}
                               className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50 ml-auto flex items-center gap-1"
@@ -282,7 +311,7 @@ export const OperationsHubView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredOrders.map(order => (
+                {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-900">{order.title}</div>
@@ -290,7 +319,9 @@ export const OperationsHubView: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-700">{order.type}</td>
                     <td className="py-3 px-4">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadge(order.priority)}`}>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getPriorityBadge(order.priority)}`}
+                      >
                         {order.priority}
                       </span>
                     </td>
@@ -346,7 +377,7 @@ export const OperationsHubView: React.FC = () => {
                   required
                   placeholder="e.g. Splicing inspection at Joint Closure JC-02"
                   value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
+                  onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 />
               </div>
@@ -356,7 +387,7 @@ export const OperationsHubView: React.FC = () => {
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Order Type</label>
                   <select
                     value={newType}
-                    onChange={e => setNewType(e.target.value as any)}
+                    onChange={(e) => setNewType(e.target.value as any)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                   >
                     <option value="Repair">Emergency Repair</option>
@@ -370,7 +401,7 @@ export const OperationsHubView: React.FC = () => {
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">Priority</label>
                   <select
                     value={newPriority}
-                    onChange={e => setNewPriority(e.target.value as any)}
+                    onChange={(e) => setNewPriority(e.target.value as any)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                   >
                     <option value="Critical">Critical (Outage)</option>
@@ -387,7 +418,7 @@ export const OperationsHubView: React.FC = () => {
                   type="text"
                   required
                   value={newTechName}
-                  onChange={e => setNewTechName(e.target.value)}
+                  onChange={(e) => setNewTechName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 />
               </div>
@@ -398,7 +429,7 @@ export const OperationsHubView: React.FC = () => {
                   rows={3}
                   placeholder="Specific OTDR distance or pole location instructions..."
                   value={newNotes}
-                  onChange={e => setNewNotes(e.target.value)}
+                  onChange={(e) => setNewNotes(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 resize-none"
                 />
               </div>

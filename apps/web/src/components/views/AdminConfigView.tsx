@@ -16,19 +16,11 @@ import {
   Users,
   Lock,
   Layers,
-  Sliders
+  Sliders,
 } from 'lucide-react';
 
 export const AdminConfigView: React.FC = () => {
-  const {
-    userRole,
-    setUserRole,
-    auditLogs,
-    backupSystem,
-    restoreSystem,
-    exportKML,
-    showToast
-  } = useNetwork();
+  const { userRole, setUserRole, auditLogs, backupSystem, restoreSystem, exportKML, showToast } = useNetwork();
 
   const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
@@ -42,11 +34,11 @@ export const AdminConfigView: React.FC = () => {
     { key: 'outage_mgmt', label: 'Log & Resolve Network Faults' },
     { key: 'photo_upload', label: 'Upload Field Photos & Port Markings' },
     { key: 'reports_export', label: 'Generate Reports (PDF, CSV, GeoJSON, KML)' },
-    { key: 'sys_admin', label: 'System Configuration & Database Backup/Restore' }
+    { key: 'sys_admin', label: 'System Configuration & Database Backup/Restore' },
   ];
 
   const rolePermissions: Record<UserRole, Record<string, boolean>> = {
-    'Administrator': {
+    Administrator: {
       view_gis: true,
       add_equipment: true,
       draw_cables: true,
@@ -55,7 +47,7 @@ export const AdminConfigView: React.FC = () => {
       outage_mgmt: true,
       photo_upload: true,
       reports_export: true,
-      sys_admin: true
+      sys_admin: true,
     },
     'Network Engineer': {
       view_gis: true,
@@ -66,7 +58,7 @@ export const AdminConfigView: React.FC = () => {
       outage_mgmt: true,
       photo_upload: true,
       reports_export: true,
-      sys_admin: false
+      sys_admin: false,
     },
     'Network Operator': {
       view_gis: true,
@@ -77,7 +69,7 @@ export const AdminConfigView: React.FC = () => {
       outage_mgmt: true,
       photo_upload: true,
       reports_export: true,
-      sys_admin: false
+      sys_admin: false,
     },
     'Field Technician': {
       view_gis: true,
@@ -88,9 +80,9 @@ export const AdminConfigView: React.FC = () => {
       outage_mgmt: true,
       photo_upload: true,
       reports_export: false,
-      sys_admin: false
+      sys_admin: false,
     },
-    'Supervisor': {
+    Supervisor: {
       view_gis: true,
       add_equipment: false,
       draw_cables: false,
@@ -99,23 +91,24 @@ export const AdminConfigView: React.FC = () => {
       outage_mgmt: false,
       photo_upload: false,
       reports_export: true,
-      sys_admin: false
-    }
+      sys_admin: false,
+    },
   };
 
-  const filteredLogs = auditLogs.filter(log =>
-    auditSearch === '' ||
-    log.action.toLowerCase().includes(auditSearch.toLowerCase()) ||
-    log.details.toLowerCase().includes(auditSearch.toLowerCase()) ||
-    log.assetId.toLowerCase().includes(auditSearch.toLowerCase()) ||
-    log.user.toLowerCase().includes(auditSearch.toLowerCase())
+  const filteredLogs = auditLogs.filter(
+    (log) =>
+      auditSearch === '' ||
+      log.action.toLowerCase().includes(auditSearch.toLowerCase()) ||
+      log.details.toLowerCase().includes(auditSearch.toLowerCase()) ||
+      log.assetId.toLowerCase().includes(auditSearch.toLowerCase()) ||
+      log.user.toLowerCase().includes(auditSearch.toLowerCase()),
   );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = event => {
+      reader.onload = (event) => {
         const content = event.target?.result as string;
         restoreSystem(content);
       };
@@ -129,7 +122,9 @@ export const AdminConfigView: React.FC = () => {
       <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">System Administration & Global Configuration</h2>
-          <p className="text-xs text-slate-500">RBAC role matrix, 12-fiber color code standards, audit logs, and database backup</p>
+          <p className="text-xs text-slate-500">
+            RBAC role matrix, 12-fiber color code standards, audit logs, and database backup
+          </p>
         </div>
 
         {/* Tab Switcher */}
@@ -145,7 +140,9 @@ export const AdminConfigView: React.FC = () => {
           <button
             onClick={() => setActiveTab('color_standards')}
             className={`px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === 'color_standards' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              activeTab === 'color_standards'
+                ? 'bg-white text-blue-700 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             12-Color Standards
@@ -177,7 +174,9 @@ export const AdminConfigView: React.FC = () => {
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Role-Based Access Control (RBAC) Matrix</h3>
-                <p className="text-xs text-slate-500">Configured permissions for telecom operators, field technicians, and engineers</p>
+                <p className="text-xs text-slate-500">
+                  Configured permissions for telecom operators, field technicians, and engineers
+                </p>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-500">Current Active Role:</span>
@@ -200,10 +199,18 @@ export const AdminConfigView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {permissionsList.map(perm => (
+                  {permissionsList.map((perm) => (
                     <tr key={perm.key} className="hover:bg-slate-50/60">
                       <td className="py-3 px-4 font-semibold text-slate-800">{perm.label}</td>
-                      {(['Administrator', 'Network Engineer', 'Network Operator', 'Field Technician', 'Supervisor'] as UserRole[]).map(r => {
+                      {(
+                        [
+                          'Administrator',
+                          'Network Engineer',
+                          'Network Operator',
+                          'Field Technician',
+                          'Supervisor',
+                        ] as UserRole[]
+                      ).map((r) => {
                         const allowed = rolePermissions[r][perm.key];
                         return (
                           <td key={r} className="py-3 px-3 text-center">
@@ -232,7 +239,9 @@ export const AdminConfigView: React.FC = () => {
           <div className="max-w-5xl mx-auto space-y-6">
             <div>
               <h3 className="text-sm font-bold text-slate-800">TIA-598-C Standard 12-Fiber Color Code Sequence</h3>
-              <p className="text-xs text-slate-500">Universal standard for optical fiber and buffer tube identification in FTTH and trunk cables</p>
+              <p className="text-xs text-slate-500">
+                Universal standard for optical fiber and buffer tube identification in FTTH and trunk cables
+              </p>
             </div>
 
             {/* 12 Color Cards Grid */}
@@ -246,7 +255,7 @@ export const AdminConfigView: React.FC = () => {
                     className="w-10 h-10 rounded-full border-2 border-white shadow-md mb-2 flex items-center justify-center text-xs font-bold font-mono"
                     style={{
                       backgroundColor: color.hex,
-                      color: color.name === 'White' || color.name === 'Yellow' ? '#1e293b' : '#ffffff'
+                      color: color.name === 'White' || color.name === 'Yellow' ? '#1e293b' : '#ffffff',
                     }}
                   >
                     #{color.number.toString().padStart(2, '0')}
@@ -261,7 +270,8 @@ export const AdminConfigView: React.FC = () => {
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
               <h4 className="font-bold text-xs text-slate-800 uppercase mb-2">Multi-Tube Fiber Core Formula</h4>
               <p className="text-xs text-slate-600 leading-relaxed">
-                In multi-tube cables (24F, 48F, 96F, 144F, 288F), buffer tubes follow the same 12-color sequence as individual fiber cores.
+                In multi-tube cables (24F, 48F, 96F, 144F, 288F), buffer tubes follow the same 12-color sequence as
+                individual fiber cores.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-xs font-mono">
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -287,7 +297,9 @@ export const AdminConfigView: React.FC = () => {
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">System Activity & Audit Trail</h3>
-                <p className="text-xs text-slate-500">Immutable ledger of equipment creation, splices, customer onboarding, and outages</p>
+                <p className="text-xs text-slate-500">
+                  Immutable ledger of equipment creation, splices, customer onboarding, and outages
+                </p>
               </div>
 
               <div className="relative w-64">
@@ -296,7 +308,7 @@ export const AdminConfigView: React.FC = () => {
                   type="text"
                   placeholder="Filter audit entries..."
                   value={auditSearch}
-                  onChange={e => setAuditSearch(e.target.value)}
+                  onChange={(e) => setAuditSearch(e.target.value)}
                   className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                 />
               </div>
@@ -314,7 +326,7 @@ export const AdminConfigView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredLogs.map(log => (
+                  {filteredLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50">
                       <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500">{log.timestamp}</td>
                       <td className="py-2.5 px-4">
@@ -337,7 +349,9 @@ export const AdminConfigView: React.FC = () => {
           <div className="max-w-3xl mx-auto space-y-6">
             <div>
               <h3 className="text-sm font-bold text-slate-800">Database Backup, Recovery & Geospatial Export</h3>
-              <p className="text-xs text-slate-500">Safely backup entire network topology or export to Google Earth KML</p>
+              <p className="text-xs text-slate-500">
+                Safely backup entire network topology or export to Google Earth KML
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -349,7 +363,8 @@ export const AdminConfigView: React.FC = () => {
                   </div>
                   <h4 className="font-bold text-sm text-slate-800">Export Complete JSON Backup</h4>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Downloads all equipment, fiber cables, splitters, joint closures, subscriber paths, faults, and zones in structured JSON.
+                    Downloads all equipment, fiber cables, splitters, joint closures, subscriber paths, faults, and
+                    zones in structured JSON.
                   </p>
                 </div>
                 <button
@@ -387,7 +402,8 @@ export const AdminConfigView: React.FC = () => {
                   </div>
                   <h4 className="font-bold text-sm text-slate-800">Export to Google Earth (.KML)</h4>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Generate standard OGC KML 2.2 vector file with all cable polylines, fiber route geometries, and equipment placemarks ready to open in Google Earth Pro or handheld GPS devices.
+                    Generate standard OGC KML 2.2 vector file with all cable polylines, fiber route geometries, and
+                    equipment placemarks ready to open in Google Earth Pro or handheld GPS devices.
                   </p>
                 </div>
                 <button

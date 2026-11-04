@@ -21,7 +21,17 @@ import {
 } from 'lucide-react';
 import { useNetwork } from '../../context/NetworkContext';
 import type { UserRole } from '../../types/network';
-import { IconButton, Popover, MenuItem, MenuLabel, MenuSeparator, cn, equipmentIcon, CableIcon, cableColor } from '../ui';
+import {
+  IconButton,
+  Popover,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  cn,
+  equipmentIcon,
+  CableIcon,
+  cableColor,
+} from '../ui';
 import { VIEW_META, ROLE_INITIALS } from '../sidebar/navigation';
 
 type ResultKind = 'equipment' | 'cable' | 'customer' | 'fault';
@@ -165,7 +175,11 @@ export const TopNavBar: React.FC = () => {
       }
       const target = e.target as HTMLElement | null;
       const editing =
-        !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+        !!target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
       if (editing) return;
       const h = historyRef.current;
       if (key === 'z' && !e.shiftKey && h.canUndo) {
@@ -282,7 +296,9 @@ export const TopNavBar: React.FC = () => {
         <div
           className={cn(
             'flex h-8 items-center gap-2 rounded-md border px-2.5 transition-colors',
-            open ? 'border-blue-500 bg-white text-slate-900' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600',
+            open
+              ? 'border-blue-500 bg-white text-slate-900'
+              : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600',
           )}
         >
           <Search size={15} strokeWidth={2} className={open ? 'text-slate-400' : 'text-slate-500'} />
@@ -300,7 +316,11 @@ export const TopNavBar: React.FC = () => {
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onSearchKeyDown}
-            placeholder={uiMode === 'simple' ? 'Search boxes, cables, customers…' : 'Search equipment, cables, customers, ONT serial or IP…'}
+            placeholder={
+              uiMode === 'simple'
+                ? 'Search boxes, cables, customers…'
+                : 'Search equipment, cables, customers, ONT serial or IP…'
+            }
             className={cn(
               'h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none',
               open ? 'placeholder:text-slate-400' : 'placeholder:text-slate-500',
@@ -360,7 +380,9 @@ export const TopNavBar: React.FC = () => {
                       <span
                         className={cn(
                           'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border',
-                          r.kind === 'fault' ? 'border-red-200 bg-red-50 text-red-600' : 'border-slate-200 bg-slate-50 text-slate-500',
+                          r.kind === 'fault'
+                            ? 'border-red-200 bg-red-50 text-red-600'
+                            : 'border-slate-200 bg-slate-50 text-slate-500',
                         )}
                         style={r.color ? { color: r.color } : undefined}
                       >
@@ -392,7 +414,11 @@ export const TopNavBar: React.FC = () => {
 
       {/* Right utilities */}
       <div className="flex shrink-0 items-center gap-1">
-        <div className="mr-1 hidden items-center rounded-md border border-slate-700 bg-slate-800 p-0.5 lg:flex" role="radiogroup" aria-label="Network layer mode">
+        <div
+          className="mr-1 hidden items-center rounded-md border border-slate-700 bg-slate-800 p-0.5 lg:flex"
+          role="radiogroup"
+          aria-label="Network layer mode"
+        >
           {NETWORK_MODES.map((m) => (
             <button
               key={m.id}
@@ -425,7 +451,12 @@ export const TopNavBar: React.FC = () => {
           badge={activeFaultsCount || null}
           onClick={() => setIsFaultModalOpen(true)}
         />
-        <IconButton icon={CircleHelp} label="Help and user guide" variant="dark" onClick={() => setIsHelpModalOpen(true)} />
+        <IconButton
+          icon={CircleHelp}
+          label="Help and user guide"
+          variant="dark"
+          onClick={() => setIsHelpModalOpen(true)}
+        />
 
         <Popover
           align="end"
@@ -489,15 +520,52 @@ export const TopNavBar: React.FC = () => {
               </div>
               <MenuSeparator />
               <MenuLabel>Data</MenuLabel>
-              <MenuItem icon={Download} label="Export backup" hint=".json" onClick={() => { backupSystem(); close(); }} />
-              <MenuItem icon={Upload} label="Restore from backup…" onClick={() => { restoreInputRef.current?.click(); close(); }} />
-              <MenuItem icon={Globe} label="Export to Google Earth" hint=".kml" onClick={() => { exportKML(); close(); }} />
+              <MenuItem
+                icon={Download}
+                label="Export backup"
+                hint=".json"
+                onClick={() => {
+                  backupSystem();
+                  close();
+                }}
+              />
+              <MenuItem
+                icon={Upload}
+                label="Restore from backup…"
+                onClick={() => {
+                  restoreInputRef.current?.click();
+                  close();
+                }}
+              />
+              <MenuItem
+                icon={Globe}
+                label="Export to Google Earth"
+                hint=".kml"
+                onClick={() => {
+                  exportKML();
+                  close();
+                }}
+              />
               <MenuSeparator />
-              <MenuItem icon={RotateCcw} label="Reset to sample data" danger onClick={() => { close(); handleReset(); }} />
+              <MenuItem
+                icon={RotateCcw}
+                label="Reset to sample data"
+                danger
+                onClick={() => {
+                  close();
+                  handleReset();
+                }}
+              />
             </>
           )}
         </Popover>
-        <input ref={restoreInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleRestoreFile} />
+        <input
+          ref={restoreInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={handleRestoreFile}
+        />
       </div>
     </header>
   );

@@ -15,10 +15,13 @@ const MAX_BODY_BYTES = 10 * 1024 * 1024;
 // Comma-separated list of origins allowed to call the API cross-origin.
 // Defaults to the local Vite dev server; same-origin requests never need CORS.
 const ALLOWED_ORIGINS = new Set(
-  (process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
+  (
+    process.env.CORS_ORIGINS ||
+    'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173'
+  )
     .split(',')
-    .map(o => o.trim())
-    .filter(Boolean)
+    .map((o) => o.trim())
+    .filter(Boolean),
 );
 
 // REST collection name -> db key, id prefix and server-stamped date field.
@@ -31,9 +34,9 @@ const COLLECTIONS = {
   faults: { key: 'faults', prefix: 'FLT', dateField: 'reportedAt', timestamp: true },
   'work-orders': { key: 'workOrders', prefix: 'WO', dateField: 'createdAt', timestamp: true },
   zones: { key: 'zones', prefix: 'ZONE' },
-  documents: { key: 'documents', prefix: 'DOC', dateField: 'uploadDate' }
+  documents: { key: 'documents', prefix: 'DOC', dateField: 'uploadDate' },
 };
-const COLLECTION_KEYS = Object.values(COLLECTIONS).map(c => c.key);
+const COLLECTION_KEYS = Object.values(COLLECTIONS).map((c) => c.key);
 
 let db = {
   equipment: [],
@@ -50,8 +53,8 @@ let db = {
     version: '2.1.0',
     mode: 'Combined FTTH & Cable TV HFC',
     status: 'Operational',
-    startedAt: new Date().toISOString()
-  }
+    startedAt: new Date().toISOString(),
+  },
 };
 
 if (fs.existsSync(DATA_FILE)) {
@@ -79,7 +82,7 @@ function saveDb() {
 const today = () => new Date().toISOString().split('T')[0];
 
 function nextId(list, prefix) {
-  const taken = new Set(list.map(item => item.id));
+  const taken = new Set(list.map((item) => item.id));
   let n = list.length + 1;
   let id;
   do {
@@ -89,7 +92,7 @@ function nextId(list, prefix) {
   return id;
 }
 
-const isPlainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -107,7 +110,7 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
-  '.woff2': 'font/woff2'
+  '.woff2': 'font/woff2',
 };
 
 // Resolves a URL path inside dist/, returning null for anything that escapes it.
@@ -165,11 +168,11 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(data));
   };
 
-  const readBody = callback => {
+  const readBody = (callback) => {
     const chunks = [];
     let size = 0;
     let aborted = false;
-    req.on('data', chunk => {
+    req.on('data', (chunk) => {
       if (aborted) return;
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
@@ -208,8 +211,8 @@ const server = http.createServer((req, res) => {
           customerCount: db.customers.length,
           faultCount: db.faults.length,
           workOrderCount: db.workOrders.length,
-          zoneCount: db.zones.length
-        }
+          zoneCount: db.zones.length,
+        },
       });
     }
 
@@ -220,10 +223,10 @@ const server = http.createServer((req, res) => {
           totalEquipment: db.equipment.length,
           totalCables: db.cables.length,
           totalCustomers: db.customers.length,
-          activeFaults: db.faults.filter(f => f.status !== 'Resolved').length,
-          activeWorkOrders: db.workOrders.filter(w => w.status !== 'Completed' && w.status !== 'Cancelled').length,
-          totalZones: db.zones.length
-        }
+          activeFaults: db.faults.filter((f) => f.status !== 'Resolved').length,
+          activeWorkOrders: db.workOrders.filter((w) => w.status !== 'Completed' && w.status !== 'Cancelled').length,
+          totalZones: db.zones.length,
+        },
       });
     }
 
@@ -232,15 +235,15 @@ const server = http.createServer((req, res) => {
     }
 
     if (pathname === '/api/restore' && req.method === 'POST') {
-      return readBody(imported => {
+      return readBody((imported) => {
         if (!isPlainObject(imported)) {
           return sendJson(400, { error: 'Backup payload must be a JSON object' });
         }
-        const invalid = COLLECTION_KEYS.filter(key => key in imported && !Array.isArray(imported[key]));
+        const invalid = COLLECTION_KEYS.filter((key) => key in imported && !Array.isArray(imported[key]));
         if (invalid.length > 0) {
           return sendJson(400, { error: `Expected arrays for: ${invalid.join(', ')}` });
         }
-        const restored = COLLECTION_KEYS.filter(key => Array.isArray(imported[key]));
+        const restored = COLLECTION_KEYS.filter((key) => Array.isArray(imported[key]));
         if (restored.length === 0) {
           return sendJson(400, { error: 'Backup payload contains no recognised collections' });
         }
@@ -267,10 +270,11 @@ const server = http.createServer((req, res) => {
       if (itemId === null) {
         if (req.method === 'GET') return sendJson(200, list);
         if (req.method === 'POST') {
-          return readBody(payload => {
+          return readBody((payload) => {
             if (!isPlainObject(payload)) return sendJson(400, { error: 'Payload must be a JSON object' });
-            const id = typeof payload.id === 'string' && payload.id.trim() ? payload.id.trim() : nextId(list, collection.prefix);
-            if (list.some(item => item.id === id)) {
+            const id =
+              typeof payload.id === 'string' && payload.id.trim() ? payload.id.trim() : nextId(list, collection.prefix);
+            if (list.some((item) => item.id === id)) {
               return sendJson(409, { error: `A record with id ${id} already exists` });
             }
             const record = { ...payload, id };
@@ -285,13 +289,13 @@ const server = http.createServer((req, res) => {
         return sendJson(405, { error: `Method ${req.method} not allowed` });
       }
 
-      const index = list.findIndex(item => item.id === itemId);
+      const index = list.findIndex((item) => item.id === itemId);
       if (req.method === 'GET') {
         return index === -1 ? sendJson(404, { error: `No record with id ${itemId}` }) : sendJson(200, list[index]);
       }
       if (req.method === 'PUT') {
         if (index === -1) return sendJson(404, { error: `No record with id ${itemId}` });
-        return readBody(payload => {
+        return readBody((payload) => {
           if (!isPlainObject(payload)) return sendJson(400, { error: 'Payload must be a JSON object' });
           const record = { ...list[index], ...payload, id: itemId };
           list[index] = record;

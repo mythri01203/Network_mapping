@@ -14,14 +14,14 @@ export function generateLogicalPorts(eq: Equipment): EquipmentPort[] {
   if (eq.logicalPorts && eq.logicalPorts.length > 0) return eq.logicalPorts;
 
   if (eq.type === 'OLT' && eq.ponPorts?.length) {
-    return eq.ponPorts.map(pon => ({
+    return eq.ponPorts.map((pon) => ({
       id: pon.id,
       portNumber: pon.portNumber,
       portType: 'PON',
       status: pon.status === 'Active' ? 'Used' : pon.status === 'Faulty' ? 'Damaged' : 'Available',
       connectedCableId: pon.connectedFeederCableId,
       remarks: `${pon.connectedCustomersCount} customers`,
-      assignedDate: pon.status === 'Active' ? eq.installedDate : undefined
+      assignedDate: pon.status === 'Active' ? eq.installedDate : undefined,
     }));
   }
 
@@ -44,19 +44,19 @@ export function generateLogicalPorts(eq: Equipment): EquipmentPort[] {
       portNumber: n,
       portType: portTypeForEquipment(eq.type),
       status,
-      assignedDate: status === 'Used' ? eq.installedDate : undefined
+      assignedDate: status === 'Used' ? eq.installedDate : undefined,
     };
   });
 }
 
 /** Marks the first matching port (by number, else first Available) as Used/Available and returns updated counts. */
 export function setPortUsage(eq: Equipment, portNumber: number | undefined, used: boolean, customerId?: string) {
-  const ports = generateLogicalPorts(eq).map(p => ({ ...p }));
-  let target = portNumber !== undefined ? ports.find(p => p.portNumber === portNumber) : undefined;
+  const ports = generateLogicalPorts(eq).map((p) => ({ ...p }));
+  let target = portNumber !== undefined ? ports.find((p) => p.portNumber === portNumber) : undefined;
   if (used && (!target || target.status === 'Used' || target.status === 'Damaged')) {
-    target = ports.find(p => p.status === 'Available') || ports.find(p => p.status === 'Reserved');
+    target = ports.find((p) => p.status === 'Available') || ports.find((p) => p.status === 'Reserved');
   }
-  if (!used && !target && customerId) target = ports.find(p => p.customerId === customerId);
+  if (!used && !target && customerId) target = ports.find((p) => p.customerId === customerId);
   if (target) {
     target.status = used ? 'Used' : 'Available';
     target.customerId = used ? customerId : undefined;
@@ -68,17 +68,17 @@ export function setPortUsage(eq: Equipment, portNumber: number | undefined, used
     logicalPorts: ports,
     totalPorts: summary.total,
     usedPorts: summary.used,
-    availablePorts: summary.available
+    availablePorts: summary.available,
   };
 }
 
 export function summarizePorts(ports: EquipmentPort[]) {
   const total = ports.length;
-  const used = ports.filter(p => p.status === 'Used').length;
-  const available = ports.filter(p => p.status === 'Available').length;
-  const reserved = ports.filter(p => p.status === 'Reserved').length;
-  const damaged = ports.filter(p => p.status === 'Damaged').length;
-  const unverified = ports.filter(p => p.status === 'Unverified').length;
+  const used = ports.filter((p) => p.status === 'Used').length;
+  const available = ports.filter((p) => p.status === 'Available').length;
+  const reserved = ports.filter((p) => p.status === 'Reserved').length;
+  const damaged = ports.filter((p) => p.status === 'Damaged').length;
+  const unverified = ports.filter((p) => p.status === 'Unverified').length;
   const utilization = total ? Math.round((used / total) * 100) : 0;
   return { total, used, available, reserved, damaged, unverified, utilization };
 }

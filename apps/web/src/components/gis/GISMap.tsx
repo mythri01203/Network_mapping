@@ -30,7 +30,7 @@ import {
   Users,
   Cpu,
   ChevronDown,
-  BookOpen
+  BookOpen,
 } from 'lucide-react';
 import { getOltChassisSvgString, OltChassisIcon } from '../common/OltChassisIcon';
 import { getUtilityPoleSvgString, UtilityPoleIcon } from '../common/UtilityPoleIcon';
@@ -39,7 +39,13 @@ import { MapControls, OltFilterControl } from './map/MapControls';
 import { categoryForType } from './map/markerIcons';
 
 // Generate custom SVG icon for each equipment type
-const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected: boolean, isTraced: boolean, technology?: string) => {
+const createCustomMarkerIcon = (
+  type: EquipmentType,
+  status: string,
+  isSelected: boolean,
+  isTraced: boolean,
+  technology?: string,
+) => {
   // Use Realistic 19" Rack-Mount Chassis Shape for OLT
   if (type === 'OLT') {
     const width = isSelected ? 58 : isTraced ? 54 : 48;
@@ -50,7 +56,7 @@ const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected:
       className: `gis-equipment-marker olt-chassis-marker ${isSelected ? 'selected' : ''} ${status === 'Faulty' ? 'faulty' : ''}`,
       iconSize: [width, height],
       iconAnchor: [width / 2, height / 2],
-      popupAnchor: [0, -height / 2]
+      popupAnchor: [0, -height / 2],
     });
   }
 
@@ -64,7 +70,7 @@ const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected:
       className: `gis-equipment-marker utility-pole-marker ${isSelected ? 'selected' : ''} ${status === 'Faulty' ? 'faulty' : ''}`,
       iconSize: [width, height],
       iconAnchor: [width / 2, height * 0.28], // Anchor at crossarm level so overhead wires snap directly to insulators
-      popupAnchor: [0, -height * 0.28]
+      popupAnchor: [0, -height * 0.28],
     });
   }
 
@@ -108,10 +114,10 @@ const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected:
   const ringStyle = isSelected
     ? `stroke="#2563eb" stroke-width="4" stroke-dasharray="3,3"`
     : isTraced
-    ? `stroke="#10b981" stroke-width="4"`
-    : `stroke="#ffffff" stroke-width="2.5"`;
+      ? `stroke="#10b981" stroke-width="4"`
+      : `stroke="#ffffff" stroke-width="2.5"`;
 
-  const size = isSelected ? 38 : isTraced ? 36 : (type.includes('Pole') || type.includes('Manhole')) ? 26 : 32;
+  const size = isSelected ? 38 : isTraced ? 36 : type.includes('Pole') || type.includes('Manhole') ? 26 : 32;
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40">
@@ -131,7 +137,7 @@ const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected:
     className: `gis-equipment-marker ${isSelected ? 'selected' : ''} ${status === 'Faulty' ? 'faulty' : ''}`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2]
+    popupAnchor: [0, -size / 2],
   });
 };
 
@@ -150,7 +156,7 @@ const createCustomerMarkerIcon = (status: string, isSelected: boolean) => {
     html: svg,
     className: 'gis-customer-marker',
     iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2]
+    iconAnchor: [size / 2, size / 2],
   });
 };
 
@@ -221,7 +227,7 @@ export const GISMap: React.FC = () => {
     deleteEquipment,
     updateEquipment,
     setIsKnowledgeModalOpen,
-    uiMode
+    uiMode,
   } = useNetwork();
 
   const [snapTarget, setSnapTarget] = useState<{ lat: number; lng: number; id: string; name: string } | null>(null);
@@ -245,7 +251,7 @@ export const GISMap: React.FC = () => {
           </div>
         `,
         iconSize: [34, 34],
-        iconAnchor: [17, 17]
+        iconAnchor: [17, 17],
       });
       const marker = L.marker(projectStartPoint, { icon: starIcon });
       marker.bindPopup(`
@@ -268,14 +274,14 @@ export const GISMap: React.FC = () => {
       center: [12.9385, 77.6275],
       zoom: 16,
       zoomControl: false,
-      attributionControl: false
+      attributionControl: false,
     });
 
     // Add initial tile layer using Google Maps (Direct Free Tiles, No API Key Required)
     const initialTile = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
       maxZoom: 21,
       subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-      attribution: '&copy; Google Maps'
+      attribution: '&copy; Google Maps',
     });
     initialTile.addTo(map);
     tileLayerRef.current = initialTile;
@@ -312,19 +318,19 @@ export const GISMap: React.FC = () => {
       newLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 21,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '&copy; Google Maps Satellite'
+        attribution: '&copy; Google Maps Satellite',
       });
     } else if (mapTileProvider === 'osm') {
       newLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap contributors',
       });
     } else {
       // Default: Google Streets
       newLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         maxZoom: 21,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: '&copy; Google Maps'
+        attribution: '&copy; Google Maps',
       });
     }
 
@@ -346,7 +352,7 @@ export const GISMap: React.FC = () => {
   useEffect(() => {
     if (mapFlyToTarget && mapInstanceRef.current) {
       mapInstanceRef.current.flyTo([mapFlyToTarget.lat, mapFlyToTarget.lng], mapFlyToTarget.zoom || 17, {
-        duration: 1.2
+        duration: 1.2,
       });
     }
   }, [mapFlyToTarget]);
@@ -358,7 +364,7 @@ export const GISMap: React.FC = () => {
     group.clearLayers();
     markerMapRef.current.clear();
 
-    equipments.forEach(eq => {
+    equipments.forEach((eq) => {
       // Filter by network mode
       if (networkMode === 'Fiber' && eq.category === 'Cable TV Infrastructure') return;
       if (networkMode === 'CableTV' && eq.category === 'Central Office' && eq.type !== 'OLT') return;
@@ -381,22 +387,25 @@ export const GISMap: React.FC = () => {
       const isTraced = activeTraceEquipmentIds.includes(eq.id);
 
       const marker = L.marker([eq.lat, eq.lng], {
-        icon: createCustomMarkerIcon(eq.type, eq.status, isSelected, isTraced, eq.technology)
+        icon: createCustomMarkerIcon(eq.type, eq.status, isSelected, isTraced, eq.technology),
       });
       markerMapRef.current.set(eq.id, marker);
 
       // Tooltip with clean details
-      marker.bindTooltip(`
+      marker.bindTooltip(
+        `
         <div class="text-xs">
           <div class="font-bold text-sky-400">${eq.id}</div>
           <div class="font-medium">${eq.name}</div>
           <div class="text-[10px] text-slate-300">${eq.type}${eq.type === 'OLT' ? ` (${eq.technology || 'GPON'})` : ''} &bull; ${eq.status}</div>
         </div>
-      `, {
-        direction: 'top',
-        className: 'gis-tooltip',
-        offset: [0, -16]
-      });
+      `,
+        {
+          direction: 'top',
+          className: 'gis-tooltip',
+          offset: [0, -16],
+        },
+      );
 
       // Interactive Action Popup when clicking OLT
       if (eq.type === 'OLT') {
@@ -459,7 +468,7 @@ export const GISMap: React.FC = () => {
           maxWidth: 290,
           minWidth: 260,
           className: 'olt-quick-popup',
-          offset: [0, -14]
+          offset: [0, -14],
         });
 
         marker.on('popupopen', () => {
@@ -472,7 +481,11 @@ export const GISMap: React.FC = () => {
                 setSelectedCableTypeToDraw('Main Feeder Fiber');
                 setActiveDrawingPoints([[eq.lat, eq.lng]]);
                 setActiveTool('draw_cable');
-                showToast('info', 'Drawing Feeder Wire', `Started wire from ${eq.name}. Click along the street or poles!`);
+                showToast(
+                  'info',
+                  'Drawing Feeder Wire',
+                  `Started wire from ${eq.name}. Click along the street or poles!`,
+                );
               };
             }
 
@@ -536,13 +549,13 @@ export const GISMap: React.FC = () => {
     setActiveTool,
     setSelectedEquipmentTypeToAdd,
     setIsPortManagerOpen,
-    showToast
+    showToast,
   ]);
 
   // Update marker selected state without recreating markers or destroying popups
   useEffect(() => {
     markerMapRef.current.forEach((marker, eqId) => {
-      const eq = equipments.find(e => e.id === eqId);
+      const eq = equipments.find((e) => e.id === eqId);
       if (!eq) return;
       const isSelected = selectedObject?.type === 'equipment' && selectedObject.data.id === eqId;
       const isTraced = activeTraceEquipmentIds.includes(eqId);
@@ -556,7 +569,7 @@ export const GISMap: React.FC = () => {
     const group = cableLayerGroupRef.current;
     group.clearLayers();
 
-    cables.forEach(cable => {
+    cables.forEach((cable) => {
       if (networkMode === 'Fiber' && cable.cableCategory === 'Coaxial') return;
       if (networkMode === 'CableTV' && cable.cableCategory === 'Fiber') return;
 
@@ -579,7 +592,7 @@ export const GISMap: React.FC = () => {
           color: isTraced ? '#10b981' : '#3b82f6',
           weight: styleDef.strokeWidth + 8,
           opacity: 0.6,
-          className: isTraced ? 'fiber-trace-active' : ''
+          className: isTraced ? 'fiber-trace-active' : '',
         });
         halo.addTo(group);
       }
@@ -588,19 +601,22 @@ export const GISMap: React.FC = () => {
         color: isTraced ? '#059669' : isSelected ? '#1d4ed8' : styleDef.stroke,
         weight: isSelected ? styleDef.strokeWidth + 2 : styleDef.strokeWidth,
         dashArray: styleDef.dashArray,
-        opacity: cable.status === 'Damaged' ? 0.6 : 0.95
+        opacity: cable.status === 'Damaged' ? 0.6 : 0.95,
       });
 
-      polyline.bindTooltip(`
+      polyline.bindTooltip(
+        `
         <div class="text-xs">
           <div class="font-bold text-sky-400">${cable.id}</div>
           <div class="font-medium">${cable.name}</div>
           <div class="text-[10px] text-slate-300">${cable.type} &bull; ${cable.fiberCount} Cores &bull; ${cable.lengthMeters}m</div>
         </div>
-      `, {
-        direction: 'center',
-        className: 'gis-tooltip'
-      });
+      `,
+        {
+          direction: 'center',
+          className: 'gis-tooltip',
+        },
+      );
 
       const popupHtml = `
         <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 220px; padding: 4px;">
@@ -620,7 +636,7 @@ export const GISMap: React.FC = () => {
 
       polyline.bindPopup(popupHtml, {
         className: 'cable-quick-popup',
-        offset: [0, -4]
+        offset: [0, -4],
       });
 
       polyline.on('popupopen', () => {
@@ -645,7 +661,17 @@ export const GISMap: React.FC = () => {
 
       polyline.addTo(group);
     });
-  }, [cables, selectedObject, activeTraceCableIds, activeLayers, networkMode, setSelectedObject, deleteCable, showToast, setIsRightPanelOpen]);
+  }, [
+    cables,
+    selectedObject,
+    activeTraceCableIds,
+    activeLayers,
+    networkMode,
+    setSelectedObject,
+    deleteCable,
+    showToast,
+    setIsRightPanelOpen,
+  ]);
 
   // Render Customers
   useEffect(() => {
@@ -656,23 +682,26 @@ export const GISMap: React.FC = () => {
     const group = customerLayerGroupRef.current;
     group.clearLayers();
 
-    customers.forEach(cust => {
+    customers.forEach((cust) => {
       const isSelected = selectedObject?.type === 'customer' && selectedObject.data.id === cust.id;
       const marker = L.marker([cust.lat, cust.lng], {
-        icon: createCustomerMarkerIcon(cust.status, isSelected)
+        icon: createCustomerMarkerIcon(cust.status, isSelected),
       });
 
-      marker.bindTooltip(`
+      marker.bindTooltip(
+        `
         <div class="text-xs">
           <div class="font-bold text-emerald-400">${cust.name} (${cust.id})</div>
           <div class="text-[11px]">${cust.plan}</div>
           <div class="text-[10px] text-slate-300">Terminal: ${cust.terminalBoxId} &bull; Splitter: ${cust.splitterId} (Port ${cust.splitterOutputPort})</div>
         </div>
-      `, {
-        direction: 'top',
-        className: 'gis-tooltip',
-        offset: [0, -12]
-      });
+      `,
+        {
+          direction: 'top',
+          className: 'gis-tooltip',
+          offset: [0, -12],
+        },
+      );
 
       marker.on('click', () => {
         setSelectedObject({ type: 'customer', data: cust });
@@ -692,10 +721,12 @@ export const GISMap: React.FC = () => {
     const group = faultLayerGroupRef.current;
     group.clearLayers();
 
-    faults.filter(f => f.status !== 'Resolved').forEach(fault => {
-      const isSelected = selectedObject?.type === 'fault' && selectedObject.data.id === fault.id;
-      const faultIcon = L.divIcon({
-        html: `
+    faults
+      .filter((f) => f.status !== 'Resolved')
+      .forEach((fault) => {
+        const isSelected = selectedObject?.type === 'fault' && selectedObject.data.id === fault.id;
+        const faultIcon = L.divIcon({
+          html: `
           <div class="relative flex items-center justify-center w-8 h-8">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
             <div class="relative inline-flex rounded-full h-7 w-7 bg-rose-600 border-2 border-white items-center justify-center text-white shadow-lg">
@@ -703,33 +734,36 @@ export const GISMap: React.FC = () => {
             </div>
           </div>
         `,
-        className: 'gis-fault-marker',
-        iconSize: [32, 32],
-        iconAnchor: [16, 16]
-      });
+          className: 'gis-fault-marker',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        });
 
-      const marker = L.marker([fault.affectedLocation.lat, fault.affectedLocation.lng], {
-        icon: faultIcon
-      });
+        const marker = L.marker([fault.affectedLocation.lat, fault.affectedLocation.lng], {
+          icon: faultIcon,
+        });
 
-      marker.bindTooltip(`
+        marker.bindTooltip(
+          `
         <div class="text-xs">
           <div class="font-bold text-rose-400">${fault.id} [${fault.severity}]</div>
           <div class="font-medium">${fault.title}</div>
           <div class="text-[10px] text-slate-300">${fault.affectedCustomerIds.length} Downstream Customers Affected</div>
         </div>
-      `, {
-        direction: 'top',
-        className: 'gis-tooltip'
-      });
+      `,
+          {
+            direction: 'top',
+            className: 'gis-tooltip',
+          },
+        );
 
-      marker.on('click', () => {
-        setSelectedObject({ type: 'fault', data: fault });
-        setIsRightPanelOpen(true);
-      });
+        marker.on('click', () => {
+          setSelectedObject({ type: 'fault', data: fault });
+          setIsRightPanelOpen(true);
+        });
 
-      marker.addTo(group);
-    });
+        marker.addTo(group);
+      });
   }, [faults, selectedObject, activeLayers.faults, setSelectedObject]);
 
   // Render Biker Motorcycle Navigation Road Route
@@ -748,7 +782,7 @@ export const GISMap: React.FC = () => {
       weight: 8,
       opacity: 0.85,
       lineCap: 'round',
-      lineJoin: 'round'
+      lineJoin: 'round',
     });
     casing.addTo(group);
 
@@ -757,10 +791,11 @@ export const GISMap: React.FC = () => {
       color: '#f97316',
       weight: 4.5,
       dashArray: '10, 8',
-      opacity: 1
+      opacity: 1,
     });
 
-    roadLine.bindTooltip(`
+    roadLine.bindTooltip(
+      `
       <div class="text-xs font-sans">
         <div class="font-bold text-orange-400 flex items-center gap-1.5">
           <span>🏍️ Biker Road Navigation</span>
@@ -773,10 +808,12 @@ export const GISMap: React.FC = () => {
           Actual road traffic path (distinct from fiber cable route)
         </div>
       </div>
-    `, {
-      sticky: true,
-      className: 'gis-tooltip'
-    });
+    `,
+      {
+        sticky: true,
+        className: 'gis-tooltip',
+      },
+    );
     roadLine.addTo(group);
 
     // 3. Start Marker (Motorcycle / Origin icon)
@@ -792,7 +829,7 @@ export const GISMap: React.FC = () => {
       `,
       className: 'gis-biker-origin-marker',
       iconSize: [36, 36],
-      iconAnchor: [18, 18]
+      iconAnchor: [18, 18],
     });
     L.marker(startPt, { icon: startIcon })
       .bindTooltip('Motorcycle Departure Point (Technician Origin)', { direction: 'top', className: 'gis-tooltip' })
@@ -809,7 +846,7 @@ export const GISMap: React.FC = () => {
           `,
           className: 'gis-biker-wp-marker',
           iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          iconAnchor: [12, 12],
         });
         L.marker([wp.lat, wp.lng], { icon: wpIcon })
           .bindTooltip(`Stop ${idx + 1}: ${wp.name || wp.id}`, { direction: 'top', className: 'gis-tooltip' })
@@ -829,7 +866,7 @@ export const GISMap: React.FC = () => {
       `,
       className: 'gis-biker-dest-marker',
       iconSize: [32, 32],
-      iconAnchor: [16, 16]
+      iconAnchor: [16, 16],
     });
     L.marker(endPt, { icon: endIcon })
       .bindTooltip('Target Network Asset Destination', { direction: 'top', className: 'gis-tooltip' })
@@ -845,20 +882,24 @@ export const GISMap: React.FC = () => {
   }, [isBikerMode, bikerRoute, bikerWaypoints]);
 
   // Snapping logic: find nearest equipment or pole within 25 meters
-  const findSnapTarget = useCallback((lat: number, lng: number): { lat: number; lng: number; id: string; name: string; dist: number } | null => {
-    let nearest: { lat: number; lng: number; id: string; name: string; dist: number } | null = null;
-    equipments.forEach(eq => {
-      const dLat = (eq.lat - lat) * 111000;
-      const dLng = (eq.lng - lng) * 111000 * Math.cos(lat * Math.PI / 180);
-      const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-      if (dist < 30) { // within 30 meters
-        if (!nearest || dist < nearest.dist) {
-          nearest = { lat: eq.lat, lng: eq.lng, id: eq.id, name: eq.name, dist };
+  const findSnapTarget = useCallback(
+    (lat: number, lng: number): { lat: number; lng: number; id: string; name: string; dist: number } | null => {
+      let nearest: { lat: number; lng: number; id: string; name: string; dist: number } | null = null;
+      equipments.forEach((eq) => {
+        const dLat = (eq.lat - lat) * 111000;
+        const dLng = (eq.lng - lng) * 111000 * Math.cos((lat * Math.PI) / 180);
+        const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+        if (dist < 30) {
+          // within 30 meters
+          if (!nearest || dist < nearest.dist) {
+            nearest = { lat: eq.lat, lng: eq.lng, id: eq.id, name: eq.name, dist };
+          }
         }
-      }
-    });
-    return nearest;
-  }, [equipments]);
+      });
+      return nearest;
+    },
+    [equipments],
+  );
 
   // Interactive Map Click Handler (Drawing, Placing Equipment, Measuring)
   useEffect(() => {
@@ -884,23 +925,23 @@ export const GISMap: React.FC = () => {
       }
 
       if (activeTool === 'draw_cable') {
-        setActiveDrawingPoints(prev => [...prev, [lat, lng]]);
+        setActiveDrawingPoints((prev) => [...prev, [lat, lng]]);
 
         // If Auto-Drop Pole is active and point didn't snap to existing equipment, place a utility pole automatically
         if (autoAddPolesOnDraw && !snapped) {
-          const poleCount = equipments.filter(eq => eq.type.includes('Pole')).length + 1;
+          const poleCount = equipments.filter((eq) => eq.type.includes('Pole')).length + 1;
           const poleName = `Pole-${poleCount.toString().padStart(2, '0')}`;
           addEquipment({
             name: poleName,
             type: 'Telecom Pole',
             lat,
             lng,
-            category: 'Supporting Infrastructure'
+            category: 'Supporting Infrastructure',
           });
           showToast('success', 'Pole Added ⚡', `${poleName} placed along wire path`);
         }
       } else if (activeTool === 'measure') {
-        setMeasuringPoints(prev => [...prev, [lat, lng]]);
+        setMeasuringPoints((prev) => [...prev, [lat, lng]]);
       } else if (activeTool === 'add_equipment' && selectedEquipmentTypeToAdd) {
         // Place new equipment directly
         const created = addEquipment({
@@ -908,7 +949,7 @@ export const GISMap: React.FC = () => {
           type: selectedEquipmentTypeToAdd,
           lat,
           lng,
-          category: categoryForType(selectedEquipmentTypeToAdd)
+          category: categoryForType(selectedEquipmentTypeToAdd),
         });
         if (created) {
           setSelectedObject({ type: 'equipment', data: created });
@@ -937,7 +978,19 @@ export const GISMap: React.FC = () => {
       map.off('click', handleMapClick);
       map.off('mousemove', handleMouseMove);
     };
-  }, [activeTool, selectedEquipmentTypeToAdd, findSnapTarget, addEquipment, setActiveDrawingPoints, setMeasuringPoints, setSelectedObject, setActiveTool, autoAddPolesOnDraw, equipments, showToast]);
+  }, [
+    activeTool,
+    selectedEquipmentTypeToAdd,
+    findSnapTarget,
+    addEquipment,
+    setActiveDrawingPoints,
+    setMeasuringPoints,
+    setSelectedObject,
+    setActiveTool,
+    autoAddPolesOnDraw,
+    equipments,
+    showToast,
+  ]);
 
   // Render Drawing & Measuring Previews
   useEffect(() => {
@@ -955,7 +1008,7 @@ export const GISMap: React.FC = () => {
           color: '#2563eb',
           fillColor: isEnd ? '#3b82f6' : '#ffffff',
           fillOpacity: 1,
-          weight: 2
+          weight: 2,
         });
         ptMarker.addTo(group);
       });
@@ -970,7 +1023,7 @@ export const GISMap: React.FC = () => {
         color: '#0284c7',
         weight: 4,
         dashArray: '6, 6',
-        opacity: 0.8
+        opacity: 0.8,
       });
       drawLine.addTo(group);
 
@@ -986,13 +1039,13 @@ export const GISMap: React.FC = () => {
 
     // Measuring Line
     if (measuringPoints.length > 0) {
-      measuringPoints.forEach(pt => {
+      measuringPoints.forEach((pt) => {
         L.circleMarker(pt, {
           radius: 5,
           color: '#d97706',
           fillColor: '#f59e0b',
           fillOpacity: 0.9,
-          weight: 2
+          weight: 2,
         }).addTo(group);
       });
 
@@ -1004,12 +1057,14 @@ export const GISMap: React.FC = () => {
       L.polyline(fullMeas, {
         color: '#f59e0b',
         weight: 3,
-        dashArray: '4, 4'
+        dashArray: '4, 4',
       }).addTo(group);
 
       let totalMeters = 0;
       for (let i = 0; i < fullMeas.length - 1; i++) {
-        totalMeters += L.latLng(fullMeas[i][0], fullMeas[i][1]).distanceTo(L.latLng(fullMeas[i + 1][0], fullMeas[i + 1][1]));
+        totalMeters += L.latLng(fullMeas[i][0], fullMeas[i][1]).distanceTo(
+          L.latLng(fullMeas[i + 1][0], fullMeas[i + 1][1]),
+        );
       }
       setCumulativeDistance(Math.round(totalMeters));
     }
@@ -1021,7 +1076,7 @@ export const GISMap: React.FC = () => {
         color: '#10b981',
         fillColor: '#34d399',
         fillOpacity: 0.3,
-        weight: 2.5
+        weight: 2.5,
       }).addTo(group);
     }
   }, [activeDrawingPoints, measuringPoints, tempMousePos, activeTool, snapTarget]);
@@ -1057,7 +1112,7 @@ export const GISMap: React.FC = () => {
             </div>
           `,
           iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          iconAnchor: [14, 14],
         });
 
         const userMarker = L.marker([latitude, longitude], { icon: gpsIcon });
@@ -1077,7 +1132,7 @@ export const GISMap: React.FC = () => {
           fillColor: '#3b82f6',
           fillOpacity: 0.12,
           weight: 1.5,
-          dashArray: '4, 4'
+          dashArray: '4, 4',
         });
 
         userLocationLayerRef.current.addLayer(accuracyCircle);
@@ -1085,7 +1140,7 @@ export const GISMap: React.FC = () => {
 
         // Smooth fly to current location
         map.flyTo([latitude, longitude], 17, {
-          duration: 1.5
+          duration: 1.5,
         });
 
         setTimeout(() => {
@@ -1095,9 +1150,17 @@ export const GISMap: React.FC = () => {
         setCurrentGpsCoords({ lat: latitude, lng: longitude, accuracy });
 
         if (accuracy > 80) {
-          showToast('warning', 'Location Accuracy Notice', `GPS accuracy is ±${Math.round(accuracy)}m. You can manually adjust coordinates if required.`);
+          showToast(
+            'warning',
+            'Location Accuracy Notice',
+            `GPS accuracy is ±${Math.round(accuracy)}m. You can manually adjust coordinates if required.`,
+          );
         } else {
-          showToast('success', 'GPS Location Locked', `Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${Math.round(accuracy)}m)`);
+          showToast(
+            'success',
+            'GPS Location Locked',
+            `Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${Math.round(accuracy)}m)`,
+          );
         }
       },
       (error) => {
@@ -1115,8 +1178,8 @@ export const GISMap: React.FC = () => {
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 0
-      }
+        maximumAge: 0,
+      },
     );
   };
 
@@ -1131,22 +1194,30 @@ export const GISMap: React.FC = () => {
     }
 
     if (!targetCoords) {
-      showToast('warning', 'No Point Selected', 'Click on the road first to place a wire point, then click + Add Pole.');
+      showToast(
+        'warning',
+        'No Point Selected',
+        'Click on the road first to place a wire point, then click + Add Pole.',
+      );
       return;
     }
 
-    const poleCount = equipments.filter(eq => eq.type.includes('Pole')).length + 1;
+    const poleCount = equipments.filter((eq) => eq.type.includes('Pole')).length + 1;
     const poleName = `Pole-${poleCount.toString().padStart(2, '0')}`;
     const newPole = addEquipment({
       name: poleName,
       type: 'Telecom Pole',
       lat: targetCoords[0],
       lng: targetCoords[1],
-      category: 'Supporting Infrastructure'
+      category: 'Supporting Infrastructure',
     });
 
     if (newPole) {
-      showToast('success', 'Utility Pole Added! ⚡', `${poleName} placed at wire point. Wire is now mounted on this pole!`);
+      showToast(
+        'success',
+        'Utility Pole Added! ⚡',
+        `${poleName} placed at wire point. Wire is now mounted on this pole!`,
+      );
     }
   };
 
@@ -1201,7 +1272,7 @@ export const GISMap: React.FC = () => {
       type,
       lat: latlng.lat,
       lng: latlng.lng,
-      category: categoryForType(type)
+      category: categoryForType(type),
     });
 
     if (created) {
@@ -1243,9 +1314,9 @@ export const GISMap: React.FC = () => {
         value={oltTechFilter}
         onChange={setOltTechFilter}
         counts={{
-          All: equipments.filter(e => e.type === 'OLT').length,
-          GPON: equipments.filter(e => e.type === 'OLT' && (e.technology || 'GPON') === 'GPON').length,
-          EPON: equipments.filter(e => e.type === 'OLT' && e.technology === 'EPON').length,
+          All: equipments.filter((e) => e.type === 'OLT').length,
+          GPON: equipments.filter((e) => e.type === 'OLT' && (e.technology || 'GPON') === 'GPON').length,
+          EPON: equipments.filter((e) => e.type === 'OLT' && e.technology === 'EPON').length,
         }}
       />
 
@@ -1265,26 +1336,36 @@ export const GISMap: React.FC = () => {
                 />
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Central Internet Hub</div>
-                <div className="text-sm font-bold text-slate-900 leading-tight truncate">{activeOltModal.name || activeOltModal.id}</div>
+                <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">
+                  Central Internet Hub
+                </div>
+                <div className="text-sm font-bold text-slate-900 leading-tight truncate">
+                  {activeOltModal.name || activeOltModal.id}
+                </div>
                 <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                   <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     16 PON Ports Active
                   </span>
                   <span>&bull;</span>
-                  <span>{activeOltModal.manufacturer || 'Huawei'} {activeOltModal.model || 'MA5800'}</span>
+                  <span>
+                    {activeOltModal.manufacturer || 'Huawei'} {activeOltModal.model || 'MA5800'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${
-                    (activeOltModal.technology || 'GPON') === 'EPON'
-                      ? 'bg-purple-100 text-purple-800 border-purple-300'
-                      : 'bg-blue-100 text-blue-800 border-blue-300'
-                  }`}>
-                    {(activeOltModal.technology || 'GPON')} OLT
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${
+                      (activeOltModal.technology || 'GPON') === 'EPON'
+                        ? 'bg-purple-100 text-purple-800 border-purple-300'
+                        : 'bg-blue-100 text-blue-800 border-blue-300'
+                    }`}
+                  >
+                    {activeOltModal.technology || 'GPON'} OLT
                   </span>
                   <span className="text-[10px] text-slate-500">
-                    {(activeOltModal.technology || 'GPON') === 'EPON' ? 'IEEE 802.3ah (1.25G/1.25G)' : 'ITU-T G.984 (2.5G/1.25G)'}
+                    {(activeOltModal.technology || 'GPON') === 'EPON'
+                      ? 'IEEE 802.3ah (1.25G/1.25G)'
+                      : 'ITU-T G.984 (2.5G/1.25G)'}
                   </span>
                 </div>
               </div>
@@ -1398,7 +1479,11 @@ export const GISMap: React.FC = () => {
                 setSelectedCableTypeToDraw('Main Feeder Fiber');
                 setActiveDrawingPoints([[olt.lat, olt.lng]]);
                 setActiveTool('draw_cable');
-                showToast('info', 'Drawing Feeder Wire', `Started wire from ${olt.name}. Click along the street or poles!`);
+                showToast(
+                  'info',
+                  'Drawing Feeder Wire',
+                  `Started wire from ${olt.name}. Click along the street or poles!`,
+                );
               }}
               className="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs flex items-center gap-2.5 shadow-md shadow-blue-500/20 text-left transition-all active:scale-98"
             >
@@ -1436,7 +1521,9 @@ export const GISMap: React.FC = () => {
               }}
               className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs flex items-center gap-2.5 border border-emerald-200 text-left transition-all active:scale-98"
             >
-              <div className="w-6 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">FAT</div>
+              <div className="w-6 h-6 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                FAT
+              </div>
               <div>
                 <div className="font-extrabold text-[13px]">+ Add Street Box (FAT)</div>
                 <div className="text-[10px] text-emerald-700 font-normal">8-port home distribution box</div>

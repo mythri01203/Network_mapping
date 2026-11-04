@@ -99,7 +99,13 @@ export const LeftSidebar: React.FC = () => {
     ...extra,
   });
 
-  const tool = (key: string, label: string, icon: LucideIcon, onClick: () => void, extra?: Partial<NavEntry>): NavEntry => ({
+  const tool = (
+    key: string,
+    label: string,
+    icon: LucideIcon,
+    onClick: () => void,
+    extra?: Partial<NavEntry>,
+  ): NavEntry => ({
     key,
     label,
     icon,
@@ -127,24 +133,26 @@ export const LeftSidebar: React.FC = () => {
         view('operations', { count: openFaults + openWorkOrders || undefined, alert: openFaults > 0, simple: true }),
         view('field', { simple: true }),
         tool('tech', 'Technician App', Smartphone, () => setIsTechnicianMobileOpen(true)),
-        tool(
-          'biker',
-          'Ride Navigation',
-          Bike,
-          () => {
-            setActiveMainView('map');
-            setIsBikerMode(true);
-          },
-        ),
+        tool('biker', 'Ride Navigation', Bike, () => {
+          setActiveMainView('map');
+          setIsBikerMode(true);
+        }),
       ],
     },
     {
       label: 'Fiber Tools',
       items: [
         tool('trace', 'Route Trace', Route, () => setIsRouteTraceModalOpen(true), { simple: true }),
-        tool('fat', 'Terminal Boxes', Box, () => setIsTerminalBoxModalOpen(true), { count: fatCount || undefined, simple: true }),
-        tool('splitter', 'Splitters', Split, () => setIsSplitterModalOpen(true), { count: splitters.length || undefined }),
-        tool('splice', 'Splicing', Combine, () => setIsSplicingModalOpen(true), { count: closures.length || undefined }),
+        tool('fat', 'Terminal Boxes', Box, () => setIsTerminalBoxModalOpen(true), {
+          count: fatCount || undefined,
+          simple: true,
+        }),
+        tool('splitter', 'Splitters', Split, () => setIsSplitterModalOpen(true), {
+          count: splitters.length || undefined,
+        }),
+        tool('splice', 'Splicing', Combine, () => setIsSplicingModalOpen(true), {
+          count: closures.length || undefined,
+        }),
         tool('ports', 'Port Manager', Unplug, () => setIsPortManagerOpen(true)),
       ],
     },
@@ -153,7 +161,9 @@ export const LeftSidebar: React.FC = () => {
       items: [
         tool('capacity', 'Capacity', ChartColumn, () => setIsCapacityDashboardOpen(true)),
         tool('reports', 'Reports', FileText, () => setIsReportsModalOpen(true)),
-        tool('docs', 'Documents', FolderOpen, () => setIsDocumentModalOpen(true), { count: documents.length || undefined }),
+        tool('docs', 'Documents', FolderOpen, () => setIsDocumentModalOpen(true), {
+          count: documents.length || undefined,
+        }),
         tool('knowledge', 'Equipment Guide', BookOpenText, () => setIsKnowledgeModalOpen(true), { simple: true }),
         tool('catalog', 'Component Catalog', LibraryBig, () => setIsComponentCatalogOpen(true)),
       ],
@@ -189,7 +199,9 @@ export const LeftSidebar: React.FC = () => {
           className={cn(
             'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
             collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
-            item.active ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+            item.active
+              ? 'bg-blue-50 font-medium text-blue-700'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
           )}
         >
           {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600" />}
@@ -254,8 +266,22 @@ export const LeftSidebar: React.FC = () => {
           {(close) => (
             <>
               <MenuLabel>Add to network</MenuLabel>
-              <MenuItem icon={UserPlus} label="New customer connection" onClick={() => { setIsCustomerWizardOpen(true); close(); }} />
-              <MenuItem icon={Cable} label="New cable route" onClick={() => { setIsCableWizardOpen(true); close(); }} />
+              <MenuItem
+                icon={UserPlus}
+                label="New customer connection"
+                onClick={() => {
+                  setIsCustomerWizardOpen(true);
+                  close();
+                }}
+              />
+              <MenuItem
+                icon={Cable}
+                label="New cable route"
+                onClick={() => {
+                  setIsCableWizardOpen(true);
+                  close();
+                }}
+              />
               <MenuItem
                 icon={MapPinPlus}
                 label="Place equipment"
@@ -267,7 +293,14 @@ export const LeftSidebar: React.FC = () => {
                 }}
               />
               <MenuSeparator />
-              <MenuItem icon={TriangleAlert} label="Report a fault" onClick={() => { setIsFaultModalOpen(true); close(); }} />
+              <MenuItem
+                icon={TriangleAlert}
+                label="Report a fault"
+                onClick={() => {
+                  setIsFaultModalOpen(true);
+                  close();
+                }}
+              />
             </>
           )}
         </Popover>
@@ -278,7 +311,9 @@ export const LeftSidebar: React.FC = () => {
         {visibleGroups.map((group, gi) => (
           <div key={group.label} className={cn(gi > 0 && (collapsed ? 'mt-2 border-t border-slate-100 pt-2' : 'mt-3'))}>
             {!collapsed && (
-              <div className="px-5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{group.label}</div>
+              <div className="px-5 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">
+                {group.label}
+              </div>
             )}
             <ul className={cn('space-y-px', collapsed ? 'px-2' : 'px-2.5')}>{group.items.map(renderItem)}</ul>
           </div>

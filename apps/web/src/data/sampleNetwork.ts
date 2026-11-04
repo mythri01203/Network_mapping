@@ -1,4 +1,15 @@
-import { Equipment, Cable, Splitter, JointClosure, Customer, Fault, WorkOrder, AuditLog, NetworkZone, NetworkDocument } from '../types/network';
+import {
+  Equipment,
+  Cable,
+  Splitter,
+  JointClosure,
+  Customer,
+  Fault,
+  WorkOrder,
+  AuditLog,
+  NetworkZone,
+  NetworkDocument,
+} from '../types/network';
 import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
 
 // Helper to generate fiber cores
@@ -35,7 +46,7 @@ function generateCores(count: number, usedCount: number, reservedCount = 2, dama
       connectedToEquipmentName: connEquip ? `Distribution Terminal ${connEquip}` : undefined,
       connectedPort: connPort,
       remarks,
-      attenuationDb: status === 'In Use' ? +(0.22 + (i * 0.01)).toFixed(2) : status === 'Damaged' ? 3.45 : undefined
+      attenuationDb: status === 'In Use' ? +(0.22 + i * 0.01).toFixed(2) : status === 'Damaged' ? 3.45 : undefined,
     });
   }
   return cores;
@@ -68,30 +79,76 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     shelfNumber: 'Shelf-A',
     slotNumber: 'Slot-04',
     ponPorts: [
-      { id: 'PON-01', portNumber: 1, status: 'Active', connectedFeederCableId: 'CBL-FEEDER-01', connectedCustomersCount: 16, signalDbm: 3.2, txPowerDbm: 3.2, rxPowerDbm: -18.4 },
-      { id: 'PON-02', portNumber: 2, status: 'Active', connectedFeederCableId: 'CBL-FEEDER-02', connectedCustomersCount: 12, signalDbm: 3.4, txPowerDbm: 3.4, rxPowerDbm: -19.1 },
-      { id: 'PON-03', portNumber: 3, status: 'Active', connectedFeederCableId: 'CBL-FEEDER-03', connectedCustomersCount: 8, signalDbm: 2.9, txPowerDbm: 2.9, rxPowerDbm: -20.6 },
-      { id: 'PON-04', portNumber: 4, status: 'Available', connectedCustomersCount: 0, signalDbm: 3.5, txPowerDbm: 3.5, rxPowerDbm: undefined },
-      { id: 'PON-05', portNumber: 5, status: 'Active', connectedFeederCableId: 'CBL-FEEDER-04', connectedCustomersCount: 14, signalDbm: 3.1, txPowerDbm: 3.1, rxPowerDbm: -24.8 },
+      {
+        id: 'PON-01',
+        portNumber: 1,
+        status: 'Active',
+        connectedFeederCableId: 'CBL-FEEDER-01',
+        connectedCustomersCount: 16,
+        signalDbm: 3.2,
+        txPowerDbm: 3.2,
+        rxPowerDbm: -18.4,
+      },
+      {
+        id: 'PON-02',
+        portNumber: 2,
+        status: 'Active',
+        connectedFeederCableId: 'CBL-FEEDER-02',
+        connectedCustomersCount: 12,
+        signalDbm: 3.4,
+        txPowerDbm: 3.4,
+        rxPowerDbm: -19.1,
+      },
+      {
+        id: 'PON-03',
+        portNumber: 3,
+        status: 'Active',
+        connectedFeederCableId: 'CBL-FEEDER-03',
+        connectedCustomersCount: 8,
+        signalDbm: 2.9,
+        txPowerDbm: 2.9,
+        rxPowerDbm: -20.6,
+      },
+      {
+        id: 'PON-04',
+        portNumber: 4,
+        status: 'Available',
+        connectedCustomersCount: 0,
+        signalDbm: 3.5,
+        txPowerDbm: 3.5,
+        rxPowerDbm: undefined,
+      },
+      {
+        id: 'PON-05',
+        portNumber: 5,
+        status: 'Active',
+        connectedFeederCableId: 'CBL-FEEDER-04',
+        connectedCustomersCount: 14,
+        signalDbm: 3.1,
+        txPowerDbm: 3.1,
+        rxPowerDbm: -24.8,
+      },
       { id: 'PON-06', portNumber: 6, status: 'Available', connectedCustomersCount: 0, signalDbm: 3.4, txPowerDbm: 3.4 },
     ],
     uptimeHours: 4280,
-    images: [{
-      id: 'IMG-OLT-01',
-      equipmentId: 'OLT-01',
-      url: SAMPLE_BOX_PHOTO,
-      name: 'Main Rack Central Office OLT Chassis',
-      category: 'Front View',
-      uploadDate: '2026-08-10',
-      uploadedBy: 'Rajesh Kumar (Senior NOC Engineer)',
-      description: 'Chassis front view with 10G uplink and GPON line cards.',
-      annotations: [
-        { id: 'ANN-1', type: 'port_circle', x: 25, y: 45, label: 'GPON Board 01', status: 'Occupied' },
-        { id: 'ANN-2', type: 'port_circle', x: 55, y: 45, label: 'GPON Board 02', status: 'Occupied' }
-      ]
-    }],
+    images: [
+      {
+        id: 'IMG-OLT-01',
+        equipmentId: 'OLT-01',
+        url: SAMPLE_BOX_PHOTO,
+        name: 'Main Rack Central Office OLT Chassis',
+        category: 'Front View',
+        uploadDate: '2026-08-10',
+        uploadedBy: 'Rajesh Kumar (Senior NOC Engineer)',
+        description: 'Chassis front view with 10G uplink and GPON line cards.',
+        annotations: [
+          { id: 'ANN-1', type: 'port_circle', x: 25, y: 45, label: 'GPON Board 01', status: 'Occupied' },
+          { id: 'ANN-2', type: 'port_circle', x: 55, y: 45, label: 'GPON Board 02', status: 'Occupied' },
+        ],
+      },
+    ],
     notes: 'Main Central Office serving Sector A, B, and C with redundant 40Gbps backhaul rings.',
-    installedDate: '2024-03-15'
+    installedDate: '2024-03-15',
   },
   {
     id: 'OLT-02',
@@ -100,7 +157,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     technology: 'EPON',
     category: 'Central Office',
     lat: 12.9468,
-    lng: 77.6320,
+    lng: 77.632,
     area: 'North Commercial Zone',
     street: 'Outer Ring Expressway',
     status: 'Active',
@@ -115,13 +172,20 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     shelfNumber: 'Shelf-B',
     slotNumber: 'Slot-02',
     ponPorts: [
-      { id: 'PON-01', portNumber: 1, status: 'Active', connectedFeederCableId: 'CBL-FEEDER-05', connectedCustomersCount: 14, signalDbm: 3.1 },
+      {
+        id: 'PON-01',
+        portNumber: 1,
+        status: 'Active',
+        connectedFeederCableId: 'CBL-FEEDER-05',
+        connectedCustomersCount: 14,
+        signalDbm: 3.1,
+      },
       { id: 'PON-02', portNumber: 2, status: 'Active', connectedCustomersCount: 8, signalDbm: 3.3 },
-      { id: 'PON-03', portNumber: 3, status: 'Available', connectedCustomersCount: 0, signalDbm: 3.5 }
+      { id: 'PON-03', portNumber: 3, status: 'Available', connectedCustomersCount: 0, signalDbm: 3.5 },
     ],
     images: [],
     notes: 'Substation OLT serving Northern IT corridors and industrial park.',
-    installedDate: '2024-06-20'
+    installedDate: '2024-06-20',
   },
 
   // 2 ODFs
@@ -140,14 +204,14 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 144,
     rackNumber: 'ODF-Bay-1',
     images: [],
-    installedDate: '2024-03-15'
+    installedDate: '2024-03-15',
   },
   {
     id: 'ODF-02',
     name: 'North Metro ODF-02',
     type: 'ODF',
     category: 'Central Office',
-    lat: 12.9470,
+    lat: 12.947,
     lng: 77.6322,
     area: 'North Commercial Zone',
     street: 'Outer Ring Expressway',
@@ -157,7 +221,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 72,
     rackNumber: 'ODF-Bay-2',
     images: [],
-    installedDate: '2024-06-20'
+    installedDate: '2024-06-20',
   },
 
   // 3 FDMS Units
@@ -175,7 +239,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 58,
     availablePorts: 38,
     images: [],
-    installedDate: '2024-04-10'
+    installedDate: '2024-04-10',
   },
   {
     id: 'FDMS-02',
@@ -191,7 +255,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 64,
     availablePorts: 32,
     images: [],
-    installedDate: '2024-05-12'
+    installedDate: '2024-05-12',
   },
   {
     id: 'FDMS-03',
@@ -207,7 +271,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 40,
     availablePorts: 32,
     images: [],
-    installedDate: '2024-07-02'
+    installedDate: '2024-07-02',
   },
 
   // 5 FDTs
@@ -225,7 +289,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 36,
     availablePorts: 12,
     images: [],
-    installedDate: '2024-05-01'
+    installedDate: '2024-05-01',
   },
   {
     id: 'FDT-02',
@@ -241,7 +305,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 32,
     availablePorts: 16,
     images: [],
-    installedDate: '2024-05-18'
+    installedDate: '2024-05-18',
   },
   {
     id: 'FDT-03',
@@ -257,7 +321,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 28,
     availablePorts: 20,
     images: [],
-    installedDate: '2024-06-11'
+    installedDate: '2024-06-11',
   },
   {
     id: 'FDT-04',
@@ -273,7 +337,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 24,
     availablePorts: 24,
     images: [],
-    installedDate: '2024-07-15'
+    installedDate: '2024-07-15',
   },
   {
     id: 'FDT-05',
@@ -289,7 +353,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 30,
     availablePorts: 18,
     images: [],
-    installedDate: '2024-08-01'
+    installedDate: '2024-08-01',
   },
 
   // 8 FATs (Fiber Access Terminals) with photos & annotations
@@ -308,28 +372,102 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 3,
     availablePorts: 4,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
-    images: [{
-      id: 'IMG-FAT-01',
-      equipmentId: 'FAT-01',
-      url: SAMPLE_BOX_PHOTO,
-      name: 'FAT-01 Internal PLC Splitter & Drop Ports',
-      category: 'Internal Trays',
-      uploadDate: '2026-09-02',
-      uploadedBy: 'Arun Varma (Lead Fiber Splicer)',
-      description: 'Internal 8-port terminal box with 1:8 PLC module. Ports 1-3 spliced to residential customers.',
-      annotations: [
-        { id: 'ANN-FAT-1', type: 'port_circle', x: 22, y: 48, label: 'Port 01 (CUST-001)', portNumber: 1, status: 'Occupied', remarks: 'Active 200Mbps customer' },
-        { id: 'ANN-FAT-2', type: 'port_circle', x: 31, y: 48, label: 'Port 02 (CUST-002)', portNumber: 2, status: 'Occupied', remarks: 'Active 100Mbps customer' },
-        { id: 'ANN-FAT-3', type: 'port_circle', x: 40, y: 48, label: 'Port 03 (CUST-003)', portNumber: 3, status: 'Occupied', remarks: 'Active 300Mbps customer' },
-        { id: 'ANN-FAT-4', type: 'port_circle', x: 49, y: 48, label: 'Port 04 (FREE)', portNumber: 4, status: 'Available', remarks: 'Clean laser verified lead' },
-        { id: 'ANN-FAT-5', type: 'port_circle', x: 58, y: 48, label: 'Port 05 (FREE)', portNumber: 5, status: 'Available', remarks: 'Free to connect' },
-        { id: 'ANN-FAT-6', type: 'port_circle', x: 67, y: 48, label: 'Port 06 (FREE)', portNumber: 6, status: 'Available', remarks: 'Free to connect' },
-        { id: 'ANN-FAT-7', type: 'port_circle', x: 76, y: 48, label: 'Port 07 (RESERVED)', portNumber: 7, status: 'Reserved', remarks: 'Hold for building leasing' },
-        { id: 'ANN-FAT-8', type: 'port_circle', x: 85, y: 48, label: 'Port 08 (FAULTY)', portNumber: 8, status: 'Faulty', remarks: 'High connector loss - needs polish' }
-      ]
-    }],
+    images: [
+      {
+        id: 'IMG-FAT-01',
+        equipmentId: 'FAT-01',
+        url: SAMPLE_BOX_PHOTO,
+        name: 'FAT-01 Internal PLC Splitter & Drop Ports',
+        category: 'Internal Trays',
+        uploadDate: '2026-09-02',
+        uploadedBy: 'Arun Varma (Lead Fiber Splicer)',
+        description: 'Internal 8-port terminal box with 1:8 PLC module. Ports 1-3 spliced to residential customers.',
+        annotations: [
+          {
+            id: 'ANN-FAT-1',
+            type: 'port_circle',
+            x: 22,
+            y: 48,
+            label: 'Port 01 (CUST-001)',
+            portNumber: 1,
+            status: 'Occupied',
+            remarks: 'Active 200Mbps customer',
+          },
+          {
+            id: 'ANN-FAT-2',
+            type: 'port_circle',
+            x: 31,
+            y: 48,
+            label: 'Port 02 (CUST-002)',
+            portNumber: 2,
+            status: 'Occupied',
+            remarks: 'Active 100Mbps customer',
+          },
+          {
+            id: 'ANN-FAT-3',
+            type: 'port_circle',
+            x: 40,
+            y: 48,
+            label: 'Port 03 (CUST-003)',
+            portNumber: 3,
+            status: 'Occupied',
+            remarks: 'Active 300Mbps customer',
+          },
+          {
+            id: 'ANN-FAT-4',
+            type: 'port_circle',
+            x: 49,
+            y: 48,
+            label: 'Port 04 (FREE)',
+            portNumber: 4,
+            status: 'Available',
+            remarks: 'Clean laser verified lead',
+          },
+          {
+            id: 'ANN-FAT-5',
+            type: 'port_circle',
+            x: 58,
+            y: 48,
+            label: 'Port 05 (FREE)',
+            portNumber: 5,
+            status: 'Available',
+            remarks: 'Free to connect',
+          },
+          {
+            id: 'ANN-FAT-6',
+            type: 'port_circle',
+            x: 67,
+            y: 48,
+            label: 'Port 06 (FREE)',
+            portNumber: 6,
+            status: 'Available',
+            remarks: 'Free to connect',
+          },
+          {
+            id: 'ANN-FAT-7',
+            type: 'port_circle',
+            x: 76,
+            y: 48,
+            label: 'Port 07 (RESERVED)',
+            portNumber: 7,
+            status: 'Reserved',
+            remarks: 'Hold for building leasing',
+          },
+          {
+            id: 'ANN-FAT-8',
+            type: 'port_circle',
+            x: 85,
+            y: 48,
+            label: 'Port 08 (FAULTY)',
+            portNumber: 8,
+            status: 'Faulty',
+            remarks: 'High connector loss - needs polish',
+          },
+        ],
+      },
+    ],
     notes: 'Mounted on POLE-01. Feeds Residential Block 12-A.',
-    installedDate: '2024-05-15'
+    installedDate: '2024-05-15',
   },
   {
     id: 'FAT-02',
@@ -346,18 +484,20 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     usedPorts: 5,
     availablePorts: 3,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
-    images: [{
-      id: 'IMG-FAT-02',
-      equipmentId: 'FAT-02',
-      url: SAMPLE_BOX_PHOTO,
-      name: 'Sapphire Heights Basement FAT-02',
-      category: 'Front View',
-      uploadDate: '2026-09-05',
-      uploadedBy: 'Sunil Kumar (Technician)',
-      description: 'Basement distribution box with 5 active drop connections.',
-      annotations: []
-    }],
-    installedDate: '2024-05-20'
+    images: [
+      {
+        id: 'IMG-FAT-02',
+        equipmentId: 'FAT-02',
+        url: SAMPLE_BOX_PHOTO,
+        name: 'Sapphire Heights Basement FAT-02',
+        category: 'Front View',
+        uploadDate: '2026-09-05',
+        uploadedBy: 'Sunil Kumar (Technician)',
+        description: 'Basement distribution box with 5 active drop connections.',
+        annotations: [],
+      },
+    ],
+    installedDate: '2024-05-20',
   },
   {
     id: 'FAT-03',
@@ -375,7 +515,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 4,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
     images: [],
-    installedDate: '2024-06-05'
+    installedDate: '2024-06-05',
   },
   {
     id: 'FAT-04',
@@ -392,7 +532,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 7,
     splitterConfig: { ratio: '1:16', splitterCount: 1 },
     images: [],
-    installedDate: '2024-06-18'
+    installedDate: '2024-06-18',
   },
   {
     id: 'FAT-05',
@@ -409,7 +549,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 5,
     splitterConfig: { ratio: '1:16', splitterCount: 1 },
     images: [],
-    installedDate: '2024-06-25'
+    installedDate: '2024-06-25',
   },
   {
     id: 'FAT-06',
@@ -427,7 +567,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 5,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
     images: [],
-    installedDate: '2024-07-20'
+    installedDate: '2024-07-20',
   },
   {
     id: 'FAT-07',
@@ -435,7 +575,7 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     type: 'FAT',
     category: 'Fiber Distribution',
     lat: 12.9462,
-    lng: 77.6310,
+    lng: 77.631,
     area: 'North Commercial Zone',
     street: 'Valley View Lane',
     status: 'Warning',
@@ -444,15 +584,15 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 3,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
     images: [],
-    installedDate: '2024-08-05'
+    installedDate: '2024-08-05',
   },
   {
     id: 'FAT-08',
     name: 'Expressway East FAT-08',
     type: 'FAT',
     category: 'Fiber Distribution',
-    lat: 12.9490,
-    lng: 77.6360,
+    lat: 12.949,
+    lng: 77.636,
     area: 'Expressway East',
     street: 'Factory Road',
     poleNumber: 'POLE-09',
@@ -462,39 +602,332 @@ export const SAMPLE_EQUIPMENT: Equipment[] = [
     availablePorts: 6,
     splitterConfig: { ratio: '1:8', splitterCount: 1 },
     images: [],
-    installedDate: '2024-08-25'
+    installedDate: '2024-08-25',
   },
 
   // 10 Supporting Poles
-  { id: 'POLE-01', name: 'Telecom Pole P-01', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9358, lng: 77.6295, area: 'Koramangala 4th Block', street: '8th Main Cross 3', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-02', name: 'Electric Pole P-02', type: 'Electric Pole', category: 'Supporting Infrastructure', lat: 12.9366, lng: 77.6302, area: 'Koramangala 4th Block', street: 'Rose Garden Layout', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-03', name: 'Telecom Pole P-03', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9398, lng: 77.6268, area: 'Lakeview Enclave', street: 'Park Avenue North', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-04', name: 'Telecom Pole P-04', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9408, lng: 77.6275, area: 'Lakeview Enclave', street: 'Park Avenue North', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-05', name: 'Telecom Pole P-05', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9416, lng: 77.6258, area: 'Lakeview Enclave', street: 'Silicon Link', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-06', name: 'Telecom Pole P-06', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9448, lng: 77.6292, area: 'North Commercial Zone', street: 'Maple Street', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-07', name: 'Telecom Pole P-07', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9458, lng: 77.6298, area: 'North Commercial Zone', street: 'Maple Street North', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-08', name: 'Electric Pole P-08', type: 'Electric Pole', category: 'Supporting Infrastructure', lat: 12.9475, lng: 77.6335, area: 'Expressway East', street: 'Outer Ring', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-09', name: 'Telecom Pole P-09', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9490, lng: 77.6360, area: 'Expressway East', street: 'Factory Road', status: 'Active', installedDate: '2023-11-01', images: [] },
-  { id: 'POLE-10', name: 'Telecom Pole P-10', type: 'Telecom Pole', category: 'Supporting Infrastructure', lat: 12.9498, lng: 77.6375, area: 'Expressway East', street: 'East Terminus', status: 'Active', installedDate: '2023-11-01', images: [] },
+  {
+    id: 'POLE-01',
+    name: 'Telecom Pole P-01',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9358,
+    lng: 77.6295,
+    area: 'Koramangala 4th Block',
+    street: '8th Main Cross 3',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-02',
+    name: 'Electric Pole P-02',
+    type: 'Electric Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9366,
+    lng: 77.6302,
+    area: 'Koramangala 4th Block',
+    street: 'Rose Garden Layout',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-03',
+    name: 'Telecom Pole P-03',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9398,
+    lng: 77.6268,
+    area: 'Lakeview Enclave',
+    street: 'Park Avenue North',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-04',
+    name: 'Telecom Pole P-04',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9408,
+    lng: 77.6275,
+    area: 'Lakeview Enclave',
+    street: 'Park Avenue North',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-05',
+    name: 'Telecom Pole P-05',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9416,
+    lng: 77.6258,
+    area: 'Lakeview Enclave',
+    street: 'Silicon Link',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-06',
+    name: 'Telecom Pole P-06',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9448,
+    lng: 77.6292,
+    area: 'North Commercial Zone',
+    street: 'Maple Street',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-07',
+    name: 'Telecom Pole P-07',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9458,
+    lng: 77.6298,
+    area: 'North Commercial Zone',
+    street: 'Maple Street North',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-08',
+    name: 'Electric Pole P-08',
+    type: 'Electric Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9475,
+    lng: 77.6335,
+    area: 'Expressway East',
+    street: 'Outer Ring',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-09',
+    name: 'Telecom Pole P-09',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.949,
+    lng: 77.636,
+    area: 'Expressway East',
+    street: 'Factory Road',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
+  {
+    id: 'POLE-10',
+    name: 'Telecom Pole P-10',
+    type: 'Telecom Pole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9498,
+    lng: 77.6375,
+    area: 'Expressway East',
+    street: 'East Terminus',
+    status: 'Active',
+    installedDate: '2023-11-01',
+    images: [],
+  },
 
   // 5 Manholes
-  { id: 'MH-01', name: 'Underground Chamber MH-01', type: 'Manhole', category: 'Supporting Infrastructure', lat: 12.9360, lng: 77.6252, area: 'Central Business District', street: '100 Feet Main Blvd', status: 'Active', installedDate: '2023-08-15', images: [] },
-  { id: 'MH-02', name: 'Junction Chamber MH-02', type: 'Manhole', category: 'Supporting Infrastructure', lat: 12.9378, lng: 77.6265, area: 'Koramangala 4th Block', street: 'Main Intersection', status: 'Active', installedDate: '2023-08-15', images: [] },
-  { id: 'MH-03', name: 'Tech Junction MH-03', type: 'Manhole', category: 'Supporting Infrastructure', lat: 12.9388, lng: 77.6225, area: 'Tech Plaza Complex', street: 'Innovation Avenue', status: 'Active', installedDate: '2023-08-15', images: [] },
-  { id: 'MH-04', name: 'Expressway MH-04', type: 'Manhole', category: 'Supporting Infrastructure', lat: 12.9438, lng: 77.6315, area: 'North Commercial Zone', street: 'Sector 7 Highway', status: 'Active', installedDate: '2023-08-15', images: [] },
-  { id: 'MH-05', name: 'Metro Entry MH-05', type: 'Manhole', category: 'Supporting Infrastructure', lat: 12.9465, lng: 77.6328, area: 'North Commercial Zone', street: 'Expressway Flyover', status: 'Active', installedDate: '2023-08-15', images: [] },
+  {
+    id: 'MH-01',
+    name: 'Underground Chamber MH-01',
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    lat: 12.936,
+    lng: 77.6252,
+    area: 'Central Business District',
+    street: '100 Feet Main Blvd',
+    status: 'Active',
+    installedDate: '2023-08-15',
+    images: [],
+  },
+  {
+    id: 'MH-02',
+    name: 'Junction Chamber MH-02',
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9378,
+    lng: 77.6265,
+    area: 'Koramangala 4th Block',
+    street: 'Main Intersection',
+    status: 'Active',
+    installedDate: '2023-08-15',
+    images: [],
+  },
+  {
+    id: 'MH-03',
+    name: 'Tech Junction MH-03',
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9388,
+    lng: 77.6225,
+    area: 'Tech Plaza Complex',
+    street: 'Innovation Avenue',
+    status: 'Active',
+    installedDate: '2023-08-15',
+    images: [],
+  },
+  {
+    id: 'MH-04',
+    name: 'Expressway MH-04',
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9438,
+    lng: 77.6315,
+    area: 'North Commercial Zone',
+    street: 'Sector 7 Highway',
+    status: 'Active',
+    installedDate: '2023-08-15',
+    images: [],
+  },
+  {
+    id: 'MH-05',
+    name: 'Metro Entry MH-05',
+    type: 'Manhole',
+    category: 'Supporting Infrastructure',
+    lat: 12.9465,
+    lng: 77.6328,
+    area: 'North Commercial Zone',
+    street: 'Expressway Flyover',
+    status: 'Active',
+    installedDate: '2023-08-15',
+    images: [],
+  },
 
   // 3 Cable TV Optical Nodes
-  { id: 'CATV-NODE-01', name: 'CATV Optical Receiver Node 01', type: 'CATV Optical Node', category: 'Cable TV Infrastructure', lat: 12.9362, lng: 77.6280, area: 'Koramangala 4th Block', street: '8th Main', status: 'Active', rfLevelDbf: 104.5, totalPorts: 4, usedPorts: 3, availablePorts: 1, installedDate: '2024-04-12', images: [] },
-  { id: 'CATV-NODE-02', name: 'CATV Optical Node 02 Lakeview', type: 'CATV Optical Node', category: 'Cable TV Infrastructure', lat: 12.9402, lng: 77.6260, area: 'Lakeview Enclave', street: 'Park Avenue', status: 'Active', rfLevelDbf: 102.8, totalPorts: 4, usedPorts: 4, availablePorts: 0, installedDate: '2024-05-19', images: [] },
-  { id: 'CATV-NODE-03', name: 'CATV Optical Node 03 North', type: 'CATV Optical Node', category: 'Cable TV Infrastructure', lat: 12.9452, lng: 77.6295, area: 'North Commercial Zone', street: 'Phase 2', status: 'Active', rfLevelDbf: 103.2, totalPorts: 4, usedPorts: 2, availablePorts: 2, installedDate: '2024-07-22', images: [] },
+  {
+    id: 'CATV-NODE-01',
+    name: 'CATV Optical Receiver Node 01',
+    type: 'CATV Optical Node',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9362,
+    lng: 77.628,
+    area: 'Koramangala 4th Block',
+    street: '8th Main',
+    status: 'Active',
+    rfLevelDbf: 104.5,
+    totalPorts: 4,
+    usedPorts: 3,
+    availablePorts: 1,
+    installedDate: '2024-04-12',
+    images: [],
+  },
+  {
+    id: 'CATV-NODE-02',
+    name: 'CATV Optical Node 02 Lakeview',
+    type: 'CATV Optical Node',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9402,
+    lng: 77.626,
+    area: 'Lakeview Enclave',
+    street: 'Park Avenue',
+    status: 'Active',
+    rfLevelDbf: 102.8,
+    totalPorts: 4,
+    usedPorts: 4,
+    availablePorts: 0,
+    installedDate: '2024-05-19',
+    images: [],
+  },
+  {
+    id: 'CATV-NODE-03',
+    name: 'CATV Optical Node 03 North',
+    type: 'CATV Optical Node',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9452,
+    lng: 77.6295,
+    area: 'North Commercial Zone',
+    street: 'Phase 2',
+    status: 'Active',
+    rfLevelDbf: 103.2,
+    totalPorts: 4,
+    usedPorts: 2,
+    availablePorts: 2,
+    installedDate: '2024-07-22',
+    images: [],
+  },
 
   // 5 RF Amplifiers
-  { id: 'CATV-AMP-01', name: 'RF Trunk Amplifier AMP-01', type: 'CATV RF Amplifier', category: 'Cable TV Infrastructure', lat: 12.9368, lng: 77.6292, area: 'Koramangala 4th Block', street: '8th Main Cross 2', status: 'Active', rfLevelDbf: 98.4, installedDate: '2024-04-15', images: [] },
-  { id: 'CATV-AMP-02', name: 'RF Distribution Amp AMP-02', type: 'CATV RF Amplifier', category: 'Cable TV Infrastructure', lat: 12.9376, lng: 77.6315, area: 'Koramangala 4th Block', street: 'Rose Garden', status: 'Active', rfLevelDbf: 96.1, installedDate: '2024-04-18', images: [] },
-  { id: 'CATV-AMP-03', name: 'RF Line Extender AMP-03', type: 'CATV RF Amplifier', category: 'Cable TV Infrastructure', lat: 12.9409, lng: 77.6272, area: 'Lakeview Enclave', street: 'Lotus Garden', status: 'Active', rfLevelDbf: 95.7, installedDate: '2024-05-22', images: [] },
-  { id: 'CATV-AMP-04', name: 'RF Trunk Amplifier AMP-04', type: 'CATV RF Amplifier', category: 'Cable TV Infrastructure', lat: 12.9420, lng: 77.6238, area: 'Tech Plaza Complex', street: 'Silicon High', status: 'Active', rfLevelDbf: 97.2, installedDate: '2024-06-15', images: [] },
-  { id: 'CATV-AMP-05', name: 'RF Line Extender AMP-05', type: 'CATV RF Amplifier', category: 'Cable TV Infrastructure', lat: 12.9460, lng: 77.6305, area: 'North Commercial Zone', street: 'Valley View', status: 'Active', rfLevelDbf: 94.9, installedDate: '2024-07-25', images: [] },
+  {
+    id: 'CATV-AMP-01',
+    name: 'RF Trunk Amplifier AMP-01',
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9368,
+    lng: 77.6292,
+    area: 'Koramangala 4th Block',
+    street: '8th Main Cross 2',
+    status: 'Active',
+    rfLevelDbf: 98.4,
+    installedDate: '2024-04-15',
+    images: [],
+  },
+  {
+    id: 'CATV-AMP-02',
+    name: 'RF Distribution Amp AMP-02',
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9376,
+    lng: 77.6315,
+    area: 'Koramangala 4th Block',
+    street: 'Rose Garden',
+    status: 'Active',
+    rfLevelDbf: 96.1,
+    installedDate: '2024-04-18',
+    images: [],
+  },
+  {
+    id: 'CATV-AMP-03',
+    name: 'RF Line Extender AMP-03',
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV Infrastructure',
+    lat: 12.9409,
+    lng: 77.6272,
+    area: 'Lakeview Enclave',
+    street: 'Lotus Garden',
+    status: 'Active',
+    rfLevelDbf: 95.7,
+    installedDate: '2024-05-22',
+    images: [],
+  },
+  {
+    id: 'CATV-AMP-04',
+    name: 'RF Trunk Amplifier AMP-04',
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV Infrastructure',
+    lat: 12.942,
+    lng: 77.6238,
+    area: 'Tech Plaza Complex',
+    street: 'Silicon High',
+    status: 'Active',
+    rfLevelDbf: 97.2,
+    installedDate: '2024-06-15',
+    images: [],
+  },
+  {
+    id: 'CATV-AMP-05',
+    name: 'RF Line Extender AMP-05',
+    type: 'CATV RF Amplifier',
+    category: 'Cable TV Infrastructure',
+    lat: 12.946,
+    lng: 77.6305,
+    area: 'North Commercial Zone',
+    street: 'Valley View',
+    status: 'Active',
+    rfLevelDbf: 94.9,
+    installedDate: '2024-07-25',
+    images: [],
+  },
 ];
 
 export const SAMPLE_CABLES: Cable[] = [
@@ -512,14 +945,14 @@ export const SAMPLE_CABLES: Cable[] = [
     remarks: 'High priority 96-core underground feeder backbone from OLT-01 to FDMS-01.',
     coordinates: [
       [12.9352, 77.6245], // OLT-01
-      [12.9360, 77.6252], // MH-01
-      [12.9368, 77.6260],
-      [12.9375, 77.6272]  // FDMS-01
+      [12.936, 77.6252], // MH-01
+      [12.9368, 77.626],
+      [12.9375, 77.6272], // FDMS-01
     ],
     startEquipmentId: 'OLT-01',
     endEquipmentId: 'FDMS-01',
     cableCategory: 'Fiber',
-    cores: generateCores(96, 48, 12, 2)
+    cores: generateCores(96, 48, 12, 2),
   },
   {
     id: 'CBL-FEEDER-02',
@@ -536,12 +969,12 @@ export const SAMPLE_CABLES: Cable[] = [
       [12.9352, 77.6245], // OLT-01
       [12.9362, 77.6238],
       [12.9378, 77.6232],
-      [12.9392, 77.6231]  // FDMS-02
+      [12.9392, 77.6231], // FDMS-02
     ],
     startEquipmentId: 'OLT-01',
     endEquipmentId: 'FDMS-02',
     cableCategory: 'Fiber',
-    cores: generateCores(48, 28, 6, 1)
+    cores: generateCores(48, 28, 6, 1),
   },
   {
     id: 'CBL-FEEDER-03',
@@ -556,15 +989,15 @@ export const SAMPLE_CABLES: Cable[] = [
     remarks: 'Inter-hub ring joining OLT-01 with North Substation OLT-02 via MH-04.',
     coordinates: [
       [12.9352, 77.6245],
-      [12.9380, 77.6275],
-      [12.9410, 77.6295],
+      [12.938, 77.6275],
+      [12.941, 77.6295],
       [12.9438, 77.6315],
-      [12.9468, 77.6320]
+      [12.9468, 77.632],
     ],
     startEquipmentId: 'OLT-01',
     endEquipmentId: 'OLT-02',
     cableCategory: 'Fiber',
-    cores: generateCores(48, 24, 8, 0)
+    cores: generateCores(48, 24, 8, 0),
   },
 
   // Distribution Cables (FDMS -> FDT / Closures)
@@ -581,13 +1014,13 @@ export const SAMPLE_CABLES: Cable[] = [
     remarks: 'Aerial ADSS 24-core cable from FDMS-01 along POLE-01 to FDT-01.',
     coordinates: [
       [12.9375, 77.6272], // FDMS-01
-      [12.9368, 77.6280],
-      [12.9365, 77.6288]  // FDT-01
+      [12.9368, 77.628],
+      [12.9365, 77.6288], // FDT-01
     ],
     startEquipmentId: 'FDMS-01',
     endEquipmentId: 'FDT-01',
     cableCategory: 'Fiber',
-    cores: generateCores(24, 16, 4, 1)
+    cores: generateCores(24, 16, 4, 1),
   },
   {
     id: 'CBL-DIST-02',
@@ -603,12 +1036,12 @@ export const SAMPLE_CABLES: Cable[] = [
     coordinates: [
       [12.9375, 77.6272],
       [12.9388, 77.6268],
-      [12.9405, 77.6255]
+      [12.9405, 77.6255],
     ],
     startEquipmentId: 'FDMS-01',
     endEquipmentId: 'FDT-02',
     cableCategory: 'Fiber',
-    cores: generateCores(24, 14, 4, 0)
+    cores: generateCores(24, 14, 4, 0),
   },
   {
     id: 'CBL-DIST-03',
@@ -624,12 +1057,12 @@ export const SAMPLE_CABLES: Cable[] = [
     coordinates: [
       [12.9392, 77.6231],
       [12.9405, 77.6222],
-      [12.9418, 77.6212]
+      [12.9418, 77.6212],
     ],
     startEquipmentId: 'FDMS-02',
     endEquipmentId: 'FDT-03',
     cableCategory: 'Fiber',
-    cores: generateCores(24, 18, 2, 1)
+    cores: generateCores(24, 18, 2, 1),
   },
   {
     id: 'CBL-DIST-04',
@@ -645,12 +1078,12 @@ export const SAMPLE_CABLES: Cable[] = [
     coordinates: [
       [12.9442, 77.6305],
       [12.9448, 77.6295],
-      [12.9455, 77.6285]
+      [12.9455, 77.6285],
     ],
     startEquipmentId: 'FDMS-03',
     endEquipmentId: 'FDT-04',
     cableCategory: 'Fiber',
-    cores: generateCores(24, 12, 6, 0)
+    cores: generateCores(24, 12, 6, 0),
   },
   {
     id: 'CBL-DIST-05',
@@ -664,14 +1097,14 @@ export const SAMPLE_CABLES: Cable[] = [
     status: 'Active',
     remarks: 'Connects North OLT-02 to East FDT-05.',
     coordinates: [
-      [12.9468, 77.6320],
+      [12.9468, 77.632],
       [12.9475, 77.6335],
-      [12.9482, 77.6345]
+      [12.9482, 77.6345],
     ],
     startEquipmentId: 'OLT-02',
     endEquipmentId: 'FDT-05',
     cableCategory: 'Fiber',
-    cores: generateCores(24, 15, 4, 1)
+    cores: generateCores(24, 15, 4, 1),
   },
 
   // Terminal Branch Cables (FDT -> FATs)
@@ -687,13 +1120,13 @@ export const SAMPLE_CABLES: Cable[] = [
     status: 'Active',
     coordinates: [
       [12.9365, 77.6288], // FDT-01
-      [12.9360, 77.6292],
-      [12.9358, 77.6295]  // FAT-01
+      [12.936, 77.6292],
+      [12.9358, 77.6295], // FAT-01
     ],
     startEquipmentId: 'FDT-01',
     endEquipmentId: 'FAT-01',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 6, 2, 0)
+    cores: generateCores(12, 6, 2, 0),
   },
   {
     id: 'CBL-BRANCH-02',
@@ -708,12 +1141,12 @@ export const SAMPLE_CABLES: Cable[] = [
     coordinates: [
       [12.9365, 77.6288],
       [12.9368, 77.6298],
-      [12.9372, 77.6308]
+      [12.9372, 77.6308],
     ],
     startEquipmentId: 'FDT-01',
     endEquipmentId: 'FAT-02',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 8, 2, 0)
+    cores: generateCores(12, 8, 2, 0),
   },
   {
     id: 'CBL-BRANCH-03',
@@ -727,13 +1160,13 @@ export const SAMPLE_CABLES: Cable[] = [
     status: 'Active',
     coordinates: [
       [12.9405, 77.6255],
-      [12.9400, 77.6262],
-      [12.9398, 77.6268]
+      [12.94, 77.6262],
+      [12.9398, 77.6268],
     ],
     startEquipmentId: 'FDT-02',
     endEquipmentId: 'FAT-03',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 6, 4, 0)
+    cores: generateCores(12, 6, 4, 0),
   },
   {
     id: 'CBL-BRANCH-04',
@@ -747,13 +1180,13 @@ export const SAMPLE_CABLES: Cable[] = [
     status: 'Active',
     coordinates: [
       [12.9418, 77.6212],
-      [12.9415, 77.6230],
-      [12.9412, 77.6248]
+      [12.9415, 77.623],
+      [12.9412, 77.6248],
     ],
     startEquipmentId: 'FDT-03',
     endEquipmentId: 'FAT-04',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 9, 2, 0)
+    cores: generateCores(12, 9, 2, 0),
   },
   {
     id: 'CBL-BRANCH-05',
@@ -767,13 +1200,13 @@ export const SAMPLE_CABLES: Cable[] = [
     status: 'Active',
     coordinates: [
       [12.9455, 77.6285],
-      [12.9450, 77.6290],
-      [12.9448, 77.6292]
+      [12.945, 77.629],
+      [12.9448, 77.6292],
     ],
     startEquipmentId: 'FDT-04',
     endEquipmentId: 'FAT-06',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 4, 4, 1)
+    cores: generateCores(12, 4, 4, 1),
   },
   {
     id: 'CBL-BRANCH-06',
@@ -788,12 +1221,12 @@ export const SAMPLE_CABLES: Cable[] = [
     coordinates: [
       [12.9482, 77.6345],
       [12.9486, 77.6352],
-      [12.9490, 77.6360]
+      [12.949, 77.636],
     ],
     startEquipmentId: 'FDT-05',
     endEquipmentId: 'FAT-08',
     cableCategory: 'Fiber',
-    cores: generateCores(12, 3, 5, 0)
+    cores: generateCores(12, 3, 5, 0),
   },
 
   // Cable TV Coaxial Backbone
@@ -808,15 +1241,15 @@ export const SAMPLE_CABLES: Cable[] = [
     installationDate: '2024-04-14',
     status: 'Active',
     coordinates: [
-      [12.9362, 77.6280], // CATV-NODE-01
+      [12.9362, 77.628], // CATV-NODE-01
       [12.9365, 77.6285],
-      [12.9368, 77.6292]  // CATV-AMP-01
+      [12.9368, 77.6292], // CATV-AMP-01
     ],
     startEquipmentId: 'CATV-NODE-01',
     endEquipmentId: 'CATV-AMP-01',
     cableCategory: 'Coaxial',
-    cores: generateCores(1, 1, 0, 0)
-  }
+    cores: generateCores(1, 1, 0, 0),
+  },
 ];
 
 export const SAMPLE_SPLITTERS: Splitter[] = [
@@ -829,15 +1262,39 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
     status: 'Active',
     inputPort: { id: 'IN-01', connectedCableId: 'CBL-BRANCH-01', connectedCore: 1, signalLevelDbm: -14.2 },
     outputPorts: [
-      { portNumber: 1, label: 'OUT-01', status: 'Occupied', connectedCustomerId: 'CUST-001', connectedCustomerName: 'Anand Sharma', connectedDropCableId: 'DROP-001', attenuationDb: 10.2 },
-      { portNumber: 2, label: 'OUT-02', status: 'Occupied', connectedCustomerId: 'CUST-002', connectedCustomerName: 'Priya Narayanan', connectedDropCableId: 'DROP-002', attenuationDb: 10.4 },
-      { portNumber: 3, label: 'OUT-03', status: 'Occupied', connectedCustomerId: 'CUST-003', connectedCustomerName: 'Vikramaditya Rao', connectedDropCableId: 'DROP-003', attenuationDb: 10.1 },
+      {
+        portNumber: 1,
+        label: 'OUT-01',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-001',
+        connectedCustomerName: 'Anand Sharma',
+        connectedDropCableId: 'DROP-001',
+        attenuationDb: 10.2,
+      },
+      {
+        portNumber: 2,
+        label: 'OUT-02',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-002',
+        connectedCustomerName: 'Priya Narayanan',
+        connectedDropCableId: 'DROP-002',
+        attenuationDb: 10.4,
+      },
+      {
+        portNumber: 3,
+        label: 'OUT-03',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-003',
+        connectedCustomerName: 'Vikramaditya Rao',
+        connectedDropCableId: 'DROP-003',
+        attenuationDb: 10.1,
+      },
       { portNumber: 4, label: 'OUT-04', status: 'Available', attenuationDb: 10.3 },
       { portNumber: 5, label: 'OUT-05', status: 'Available', attenuationDb: 10.3 },
       { portNumber: 6, label: 'OUT-06', status: 'Available', attenuationDb: 10.2 },
       { portNumber: 7, label: 'OUT-07', status: 'Reserved', attenuationDb: 10.3 },
-      { portNumber: 8, label: 'OUT-08', status: 'Faulty', attenuationDb: 22.8 }
-    ]
+      { portNumber: 8, label: 'OUT-08', status: 'Faulty', attenuationDb: 22.8 },
+    ],
   },
   {
     id: 'SP-02',
@@ -848,15 +1305,55 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
     status: 'Active',
     inputPort: { id: 'IN-01', connectedCableId: 'CBL-BRANCH-02', connectedCore: 1, signalLevelDbm: -14.5 },
     outputPorts: [
-      { portNumber: 1, label: 'OUT-01', status: 'Occupied', connectedCustomerId: 'CUST-004', connectedCustomerName: 'Deepak Mehrotra', connectedDropCableId: 'DROP-004', attenuationDb: 10.3 },
-      { portNumber: 2, label: 'OUT-02', status: 'Occupied', connectedCustomerId: 'CUST-005', connectedCustomerName: 'Meera Kulkarni', connectedDropCableId: 'DROP-005', attenuationDb: 10.5 },
-      { portNumber: 3, label: 'OUT-03', status: 'Occupied', connectedCustomerId: 'CUST-006', connectedCustomerName: 'Rohan Deshmukh', connectedDropCableId: 'DROP-006', attenuationDb: 10.4 },
-      { portNumber: 4, label: 'OUT-04', status: 'Occupied', connectedCustomerId: 'CUST-007', connectedCustomerName: 'Swati Pillai', connectedDropCableId: 'DROP-007', attenuationDb: 10.3 },
-      { portNumber: 5, label: 'OUT-05', status: 'Occupied', connectedCustomerId: 'CUST-008', connectedCustomerName: 'Karthik Iyer', connectedDropCableId: 'DROP-008', attenuationDb: 10.6 },
+      {
+        portNumber: 1,
+        label: 'OUT-01',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-004',
+        connectedCustomerName: 'Deepak Mehrotra',
+        connectedDropCableId: 'DROP-004',
+        attenuationDb: 10.3,
+      },
+      {
+        portNumber: 2,
+        label: 'OUT-02',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-005',
+        connectedCustomerName: 'Meera Kulkarni',
+        connectedDropCableId: 'DROP-005',
+        attenuationDb: 10.5,
+      },
+      {
+        portNumber: 3,
+        label: 'OUT-03',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-006',
+        connectedCustomerName: 'Rohan Deshmukh',
+        connectedDropCableId: 'DROP-006',
+        attenuationDb: 10.4,
+      },
+      {
+        portNumber: 4,
+        label: 'OUT-04',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-007',
+        connectedCustomerName: 'Swati Pillai',
+        connectedDropCableId: 'DROP-007',
+        attenuationDb: 10.3,
+      },
+      {
+        portNumber: 5,
+        label: 'OUT-05',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-008',
+        connectedCustomerName: 'Karthik Iyer',
+        connectedDropCableId: 'DROP-008',
+        attenuationDb: 10.6,
+      },
       { portNumber: 6, label: 'OUT-06', status: 'Available', attenuationDb: 10.3 },
       { portNumber: 7, label: 'OUT-07', status: 'Available', attenuationDb: 10.4 },
-      { portNumber: 8, label: 'OUT-08', status: 'Available', attenuationDb: 10.3 }
-    ]
+      { portNumber: 8, label: 'OUT-08', status: 'Available', attenuationDb: 10.3 },
+    ],
   },
   {
     id: 'SP-03',
@@ -867,15 +1364,43 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
     status: 'Active',
     inputPort: { id: 'IN-01', connectedCableId: 'CBL-BRANCH-03', connectedCore: 1, signalLevelDbm: -14.1 },
     outputPorts: [
-      { portNumber: 1, label: 'OUT-01', status: 'Occupied', connectedCustomerId: 'CUST-009', connectedCustomerName: 'Sanjay Dutt', connectedDropCableId: 'DROP-009' },
-      { portNumber: 2, label: 'OUT-02', status: 'Occupied', connectedCustomerId: 'CUST-010', connectedCustomerName: 'Neha Kapoor', connectedDropCableId: 'DROP-010' },
-      { portNumber: 3, label: 'OUT-03', status: 'Occupied', connectedCustomerId: 'CUST-011', connectedCustomerName: 'Sameer Sen', connectedDropCableId: 'DROP-011' },
-      { portNumber: 4, label: 'OUT-04', status: 'Occupied', connectedCustomerId: 'CUST-012', connectedCustomerName: 'Farhan Akhtar', connectedDropCableId: 'DROP-012' },
+      {
+        portNumber: 1,
+        label: 'OUT-01',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-009',
+        connectedCustomerName: 'Sanjay Dutt',
+        connectedDropCableId: 'DROP-009',
+      },
+      {
+        portNumber: 2,
+        label: 'OUT-02',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-010',
+        connectedCustomerName: 'Neha Kapoor',
+        connectedDropCableId: 'DROP-010',
+      },
+      {
+        portNumber: 3,
+        label: 'OUT-03',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-011',
+        connectedCustomerName: 'Sameer Sen',
+        connectedDropCableId: 'DROP-011',
+      },
+      {
+        portNumber: 4,
+        label: 'OUT-04',
+        status: 'Occupied',
+        connectedCustomerId: 'CUST-012',
+        connectedCustomerName: 'Farhan Akhtar',
+        connectedDropCableId: 'DROP-012',
+      },
       { portNumber: 5, label: 'OUT-05', status: 'Available' },
       { portNumber: 6, label: 'OUT-06', status: 'Available' },
       { portNumber: 7, label: 'OUT-07', status: 'Available' },
-      { portNumber: 8, label: 'OUT-08', status: 'Available' }
-    ]
+      { portNumber: 8, label: 'OUT-08', status: 'Available' },
+    ],
   },
   {
     id: 'SP-04',
@@ -890,8 +1415,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       label: `OUT-${(i + 1).toString().padStart(2, '0')}`,
       status: i < 5 ? 'Occupied' : i < 6 ? 'Reserved' : 'Available',
       connectedCustomerId: i < 5 ? `CUST-0${(13 + i).toString().padStart(2, '0')}` : undefined,
-      connectedCustomerName: i < 5 ? `Business Client ${i + 1}` : undefined
-    }))
+      connectedCustomerName: i < 5 ? `Business Client ${i + 1}` : undefined,
+    })),
   },
   {
     id: 'SP-05',
@@ -906,8 +1431,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       label: `OUT-${(i + 1).toString().padStart(2, '0')}`,
       status: i < 4 ? 'Occupied' : 'Available',
       connectedCustomerId: i < 4 ? `CUST-0${(18 + i).toString().padStart(2, '0')}` : undefined,
-      connectedCustomerName: i < 4 ? `Tech Enterprise ${i + 1}` : undefined
-    }))
+      connectedCustomerName: i < 4 ? `Tech Enterprise ${i + 1}` : undefined,
+    })),
   },
   {
     id: 'SP-06',
@@ -922,8 +1447,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       label: `OUT-0${i + 1}`,
       status: i < 3 ? 'Occupied' : 'Available',
       connectedCustomerId: i < 3 ? `CUST-0${(22 + i).toString().padStart(2, '0')}` : undefined,
-      connectedCustomerName: i < 3 ? `Maple Resident ${i + 1}` : undefined
-    }))
+      connectedCustomerName: i < 3 ? `Maple Resident ${i + 1}` : undefined,
+    })),
   },
   {
     id: 'SP-07',
@@ -938,8 +1463,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       label: `OUT-0${i + 1}`,
       status: i < 1 ? 'Occupied' : 'Available',
       connectedCustomerId: i === 0 ? 'CUST-025' : undefined,
-      connectedCustomerName: i === 0 ? 'Rahul Dravid' : undefined
-    }))
+      connectedCustomerName: i === 0 ? 'Rahul Dravid' : undefined,
+    })),
   },
   {
     id: 'SP-08',
@@ -952,8 +1477,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
     outputPorts: Array.from({ length: 8 }, (_, i) => ({
       portNumber: i + 1,
       label: `OUT-0${i + 1}`,
-      status: 'Available'
-    }))
+      status: 'Available',
+    })),
   },
   {
     id: 'SP-09',
@@ -967,8 +1492,8 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       { portNumber: 1, label: 'OUT-01', status: 'Occupied' },
       { portNumber: 2, label: 'OUT-02', status: 'Occupied' },
       { portNumber: 3, label: 'OUT-03', status: 'Available' },
-      { portNumber: 4, label: 'OUT-04', status: 'Available' }
-    ]
+      { portNumber: 4, label: 'OUT-04', status: 'Available' },
+    ],
   },
   {
     id: 'SP-10',
@@ -982,9 +1507,9 @@ export const SAMPLE_SPLITTERS: Splitter[] = [
       { portNumber: 1, label: 'OUT-01', status: 'Occupied' },
       { portNumber: 2, label: 'OUT-02', status: 'Available' },
       { portNumber: 3, label: 'OUT-03', status: 'Available' },
-      { portNumber: 4, label: 'OUT-04', status: 'Available' }
-    ]
-  }
+      { portNumber: 4, label: 'OUT-04', status: 'Available' },
+    ],
+  },
 ];
 
 export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
@@ -992,7 +1517,7 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     id: 'JC-01',
     name: 'Main Chamber Dome Splice Closure JC-01',
     closureType: 'Dome Splice Closure',
-    lat: 12.9360,
+    lat: 12.936,
     lng: 77.6252,
     area: 'Central Business District',
     cableAId: 'CBL-FEEDER-01',
@@ -1002,20 +1527,68 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-03-22',
     technician: 'Ramesh Gowda',
     splices: [
-      { id: 'SPL-01', inputCableId: 'CBL-FEEDER-01', inputCableName: 'Feeder Trunk 01', inputCore: 1, outputCableId: 'CBL-DIST-01', outputCableName: 'Sector 4 Dist', outputCore: 1, spliceLossDb: 0.02, status: 'Spliced', technician: 'Ramesh Gowda', date: '2024-03-22' },
-      { id: 'SPL-02', inputCableId: 'CBL-FEEDER-01', inputCableName: 'Feeder Trunk 01', inputCore: 2, outputCableId: 'CBL-DIST-01', outputCableName: 'Sector 4 Dist', outputCore: 2, spliceLossDb: 0.03, status: 'Spliced', technician: 'Ramesh Gowda', date: '2024-03-22' },
-      { id: 'SPL-03', inputCableId: 'CBL-FEEDER-01', inputCableName: 'Feeder Trunk 01', inputCore: 3, outputCableId: 'CBL-DIST-01', outputCableName: 'Sector 4 Dist', outputCore: 3, spliceLossDb: 0.01, status: 'Spliced', technician: 'Ramesh Gowda', date: '2024-03-22' },
-      { id: 'SPL-04', inputCableId: 'CBL-FEEDER-01', inputCableName: 'Feeder Trunk 01', inputCore: 4, outputCableId: 'CBL-DIST-01', outputCableName: 'Sector 4 Dist', outputCore: 4, spliceLossDb: 0.02, status: 'Spliced', technician: 'Ramesh Gowda', date: '2024-03-22' }
+      {
+        id: 'SPL-01',
+        inputCableId: 'CBL-FEEDER-01',
+        inputCableName: 'Feeder Trunk 01',
+        inputCore: 1,
+        outputCableId: 'CBL-DIST-01',
+        outputCableName: 'Sector 4 Dist',
+        outputCore: 1,
+        spliceLossDb: 0.02,
+        status: 'Spliced',
+        technician: 'Ramesh Gowda',
+        date: '2024-03-22',
+      },
+      {
+        id: 'SPL-02',
+        inputCableId: 'CBL-FEEDER-01',
+        inputCableName: 'Feeder Trunk 01',
+        inputCore: 2,
+        outputCableId: 'CBL-DIST-01',
+        outputCableName: 'Sector 4 Dist',
+        outputCore: 2,
+        spliceLossDb: 0.03,
+        status: 'Spliced',
+        technician: 'Ramesh Gowda',
+        date: '2024-03-22',
+      },
+      {
+        id: 'SPL-03',
+        inputCableId: 'CBL-FEEDER-01',
+        inputCableName: 'Feeder Trunk 01',
+        inputCore: 3,
+        outputCableId: 'CBL-DIST-01',
+        outputCableName: 'Sector 4 Dist',
+        outputCore: 3,
+        spliceLossDb: 0.01,
+        status: 'Spliced',
+        technician: 'Ramesh Gowda',
+        date: '2024-03-22',
+      },
+      {
+        id: 'SPL-04',
+        inputCableId: 'CBL-FEEDER-01',
+        inputCableName: 'Feeder Trunk 01',
+        inputCore: 4,
+        outputCableId: 'CBL-DIST-01',
+        outputCableName: 'Sector 4 Dist',
+        outputCore: 4,
+        spliceLossDb: 0.02,
+        status: 'Spliced',
+        technician: 'Ramesh Gowda',
+        date: '2024-03-22',
+      },
     ],
     images: [],
-    remarks: 'Dome enclosure situated inside MH-01. Waterproof gasket inspected.'
+    remarks: 'Dome enclosure situated inside MH-01. Waterproof gasket inspected.',
   },
   {
     id: 'JC-02',
     name: 'Sector 4 Junction Closure JC-02',
     closureType: 'Horizontal In-line',
     lat: 12.9368,
-    lng: 77.6280,
+    lng: 77.628,
     area: 'Koramangala 4th Block',
     cableAId: 'CBL-DIST-01',
     cableBId: 'CBL-BRANCH-01',
@@ -1024,9 +1597,21 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-04-18',
     technician: 'Arun Varma',
     splices: [
-      { id: 'SPL-05', inputCableId: 'CBL-DIST-01', inputCableName: 'Sector 4 Dist', inputCore: 1, outputCableId: 'CBL-BRANCH-01', outputCableName: 'Branch 01', outputCore: 1, spliceLossDb: 0.02, status: 'Spliced', technician: 'Arun Varma', date: '2024-04-18' }
+      {
+        id: 'SPL-05',
+        inputCableId: 'CBL-DIST-01',
+        inputCableName: 'Sector 4 Dist',
+        inputCore: 1,
+        outputCableId: 'CBL-BRANCH-01',
+        outputCableName: 'Branch 01',
+        outputCore: 1,
+        spliceLossDb: 0.02,
+        status: 'Spliced',
+        technician: 'Arun Varma',
+        date: '2024-04-18',
+      },
     ],
-    images: []
+    images: [],
   },
   {
     id: 'JC-03',
@@ -1042,7 +1627,7 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-05-04',
     technician: 'Sunil Kumar',
     splices: [],
-    images: []
+    images: [],
   },
   {
     id: 'JC-04',
@@ -1056,7 +1641,7 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-05-20',
     technician: 'Rajesh Kumar',
     splices: [],
-    images: []
+    images: [],
   },
   {
     id: 'JC-05',
@@ -1070,7 +1655,7 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-07-08',
     technician: 'Arun Varma',
     splices: [],
-    images: []
+    images: [],
   },
   {
     id: 'JC-06',
@@ -1084,8 +1669,8 @@ export const SAMPLE_JOINT_CLOSURES: JointClosure[] = [
     installationDate: '2024-08-05',
     technician: 'Ramesh Gowda',
     splices: [],
-    images: []
-  }
+    images: [],
+  },
 ];
 
 // 25 Realistic Customers with complete end-to-end paths
@@ -1116,7 +1701,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-A981-01',
     routerModel: 'Huawei EchoLife HG8245H5',
     ipAddress: '100.64.12.44',
-    rxOpticalPowerDbm: -19.4
+    rxOpticalPowerDbm: -19.4,
   },
   {
     id: 'CUST-002',
@@ -1142,7 +1727,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-A981-02',
     routerModel: 'Huawei EchoLife HG8245H5',
     ipAddress: '100.64.12.45',
-    rxOpticalPowerDbm: -18.9
+    rxOpticalPowerDbm: -18.9,
   },
   {
     id: 'CUST-003',
@@ -1168,7 +1753,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-A981-03',
     routerModel: 'Nokia G-140W-ME',
     ipAddress: '100.64.12.46',
-    rxOpticalPowerDbm: -20.1
+    rxOpticalPowerDbm: -20.1,
   },
   {
     id: 'CUST-004',
@@ -1178,8 +1763,8 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     area: 'Koramangala 4th Block',
     building: 'Sapphire Heights',
     flatNumber: '101',
-    lat: 12.9370,
-    lng: 77.6310,
+    lat: 12.937,
+    lng: 77.631,
     serviceType: 'Fiber Broadband',
     plan: 'FTTH Gigabit 1 Gbps',
     status: 'Active',
@@ -1196,7 +1781,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-01',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.14.10',
-    rxOpticalPowerDbm: -19.1
+    rxOpticalPowerDbm: -19.1,
   },
   {
     id: 'CUST-005',
@@ -1224,7 +1809,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-02',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.14.11',
-    rxOpticalPowerDbm: -19.5
+    rxOpticalPowerDbm: -19.5,
   },
   {
     id: 'CUST-006',
@@ -1252,7 +1837,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-03',
     routerModel: 'Nokia G-140W-ME',
     ipAddress: '100.64.14.12',
-    rxOpticalPowerDbm: -18.7
+    rxOpticalPowerDbm: -18.7,
   },
   {
     id: 'CUST-007',
@@ -1280,7 +1865,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-ENT-889',
     routerModel: 'Cisco 1100 Series ISR',
     ipAddress: '203.192.88.14',
-    rxOpticalPowerDbm: -17.5
+    rxOpticalPowerDbm: -17.5,
   },
   {
     id: 'CUST-008',
@@ -1306,7 +1891,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-A981-08',
     routerModel: 'Huawei HG8245H5',
     ipAddress: '100.64.14.15',
-    rxOpticalPowerDbm: -19.9
+    rxOpticalPowerDbm: -19.9,
   },
   {
     id: 'CUST-009',
@@ -1332,7 +1917,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'ZTE-F670L-01',
     routerModel: 'ZTE F670L Dual-Band',
     ipAddress: '100.64.16.21',
-    rxOpticalPowerDbm: -20.4
+    rxOpticalPowerDbm: -20.4,
   },
   {
     id: 'CUST-010',
@@ -1358,7 +1943,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'ZTE-F670L-02',
     routerModel: 'ZTE F670L Dual-Band',
     ipAddress: '100.64.16.22',
-    rxOpticalPowerDbm: -19.8
+    rxOpticalPowerDbm: -19.8,
   },
   {
     id: 'CUST-011',
@@ -1367,7 +1952,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     address: 'Plot 104, Park Avenue',
     area: 'Lakeview Enclave',
     lat: 12.9397,
-    lng: 77.6270,
+    lng: 77.627,
     serviceType: 'Fiber Broadband',
     plan: 'FTTH Pro 200 Mbps',
     status: 'Active',
@@ -1384,7 +1969,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'ZTE-F670L-03',
     routerModel: 'ZTE F670L Dual-Band',
     ipAddress: '100.64.16.23',
-    rxOpticalPowerDbm: -20.8
+    rxOpticalPowerDbm: -20.8,
   },
   {
     id: 'CUST-012',
@@ -1410,7 +1995,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HWTC-XGSPON-01',
     routerModel: 'Huawei OptiXstar HN8255Ws',
     ipAddress: '100.64.16.24',
-    rxOpticalPowerDbm: -17.2
+    rxOpticalPowerDbm: -17.2,
   },
   {
     id: 'CUST-013',
@@ -1418,7 +2003,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     mobile: '+91 98451 33456',
     address: 'Tech Plaza Tower B, 3rd Floor',
     area: 'Tech Plaza Complex',
-    lat: 12.9410,
+    lat: 12.941,
     lng: 77.6244,
     serviceType: 'Enterprise Fiber',
     plan: 'Enterprise Dedicated DIA 1 Gbps',
@@ -1436,7 +2021,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'CI-DIA-1001',
     routerModel: 'Cisco Catalyst 8300 Edge',
     ipAddress: '203.192.90.10',
-    rxOpticalPowerDbm: -16.8
+    rxOpticalPowerDbm: -16.8,
   },
   {
     id: 'CUST-014',
@@ -1462,7 +2047,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'CI-DIA-1002',
     routerModel: 'Juniper SRX345',
     ipAddress: '203.192.90.11',
-    rxOpticalPowerDbm: -17.1
+    rxOpticalPowerDbm: -17.1,
   },
   {
     id: 'CUST-015',
@@ -1471,7 +2056,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     address: 'Tech Arcade Unit 12',
     area: 'Tech Plaza Complex',
     lat: 12.9414,
-    lng: 77.6250,
+    lng: 77.625,
     serviceType: 'Fiber Broadband',
     plan: 'Business Pro 500 Mbps',
     status: 'Active',
@@ -1488,7 +2073,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HW-PRO-301',
     routerModel: 'Huawei AR651C',
     ipAddress: '100.64.18.31',
-    rxOpticalPowerDbm: -18.2
+    rxOpticalPowerDbm: -18.2,
   },
   {
     id: 'CUST-016',
@@ -1514,7 +2099,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HW-PRO-302',
     routerModel: 'Fortinet FortiGate 60F',
     ipAddress: '203.192.90.12',
-    rxOpticalPowerDbm: -17.9
+    rxOpticalPowerDbm: -17.9,
   },
   {
     id: 'CUST-017',
@@ -1540,7 +2125,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'CI-DIA-1003',
     routerModel: 'Cisco 1100 ISR',
     ipAddress: '203.192.90.13',
-    rxOpticalPowerDbm: -16.9
+    rxOpticalPowerDbm: -16.9,
   },
   {
     id: 'CUST-018',
@@ -1566,7 +2151,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-18',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.18.40',
-    rxOpticalPowerDbm: -19.2
+    rxOpticalPowerDbm: -19.2,
   },
   {
     id: 'CUST-019',
@@ -1592,7 +2177,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-19',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.18.41',
-    rxOpticalPowerDbm: -19.4
+    rxOpticalPowerDbm: -19.4,
   },
   {
     id: 'CUST-020',
@@ -1618,7 +2203,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'HW-ENT-901',
     routerModel: 'Cisco RV340',
     ipAddress: '203.192.90.14',
-    rxOpticalPowerDbm: -18.6
+    rxOpticalPowerDbm: -18.6,
   },
   {
     id: 'CUST-021',
@@ -1644,7 +2229,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-21',
     routerModel: 'Nokia G-140W-ME',
     ipAddress: '100.64.18.42',
-    rxOpticalPowerDbm: -19.9
+    rxOpticalPowerDbm: -19.9,
   },
   {
     id: 'CUST-022',
@@ -1653,7 +2238,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     address: 'Maple Villa 7, Maple Street',
     area: 'North Commercial Zone',
     lat: 12.9446,
-    lng: 77.6290,
+    lng: 77.629,
     serviceType: 'Fiber Broadband',
     plan: 'FTTH Ultra 300 Mbps',
     status: 'Active',
@@ -1670,7 +2255,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-22',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.20.10',
-    rxOpticalPowerDbm: -20.2
+    rxOpticalPowerDbm: -20.2,
   },
   {
     id: 'CUST-023',
@@ -1678,7 +2263,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     mobile: '+91 98452 33456',
     address: 'Maple Villa 9, Maple Street',
     area: 'North Commercial Zone',
-    lat: 12.9450,
+    lat: 12.945,
     lng: 77.6294,
     serviceType: 'Fiber Broadband',
     plan: 'FTTH Starter 100 Mbps',
@@ -1696,7 +2281,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-23',
     routerModel: 'Nokia G-140W-ME',
     ipAddress: '100.64.20.11',
-    rxOpticalPowerDbm: -19.7
+    rxOpticalPowerDbm: -19.7,
   },
   {
     id: 'CUST-024',
@@ -1724,7 +2309,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-24',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.20.12',
-    rxOpticalPowerDbm: -20.5
+    rxOpticalPowerDbm: -20.5,
   },
   {
     id: 'CUST-025',
@@ -1732,7 +2317,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     mobile: '+91 98452 55678',
     address: 'Valley View Mansion 1',
     area: 'North Commercial Zone',
-    lat: 12.9460,
+    lat: 12.946,
     lng: 77.6308,
     serviceType: 'Fiber Broadband',
     plan: 'FTTH Gigabit 1 Gbps',
@@ -1750,8 +2335,8 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
     ontSerialNumber: 'NK-ONT-2201-25',
     routerModel: 'Nokia G-2425G-A',
     ipAddress: '100.64.20.15',
-    rxOpticalPowerDbm: -18.3
-  }
+    rxOpticalPowerDbm: -18.3,
+  },
 ];
 
 export const SAMPLE_FAULTS: Fault[] = [
@@ -1761,17 +2346,18 @@ export const SAMPLE_FAULTS: Fault[] = [
     type: 'Fiber Cut',
     severity: 'Critical',
     status: 'In Progress',
-    affectedLocation: { lat: 12.9363, lng: 77.6290 },
+    affectedLocation: { lat: 12.9363, lng: 77.629 },
     affectedCableId: 'CBL-BRANCH-01',
     affectedEquipmentId: 'FAT-01',
     affectedCustomerIds: ['CUST-001', 'CUST-002', 'CUST-003'],
     affectedCores: [1, 2, 3],
     affectedSplitterPorts: [1, 2, 3],
-    description: 'Tree branch collapse severed the 12F ADSS aerial cable span during morning storm. OTDR reflects complete reflection cut at 112 meters from FDT-01.',
+    description:
+      'Tree branch collapse severed the 12F ADSS aerial cable span during morning storm. OTDR reflects complete reflection cut at 112 meters from FDT-01.',
     reportedAt: '2026-11-01 08:35 AM',
     assignedTechnician: 'Arun Varma (Lead Splicer)',
     workOrderId: 'WO-2026-104',
-    images: [SAMPLE_BOX_PHOTO]
+    images: [SAMPLE_BOX_PHOTO],
   },
   {
     id: 'FLT-2026-002',
@@ -1784,12 +2370,13 @@ export const SAMPLE_FAULTS: Fault[] = [
     affectedCustomerIds: [],
     affectedCores: [8],
     affectedSplitterPorts: [8],
-    description: 'Connector ferrule contaminated on port 8 (+22.8 dB loss recorded on optical power meter). Needs microscope inspection and alcohol wipe.',
+    description:
+      'Connector ferrule contaminated on port 8 (+22.8 dB loss recorded on optical power meter). Needs microscope inspection and alcohol wipe.',
     reportedAt: '2026-10-31 03:15 PM',
     assignedTechnician: 'Sunil Kumar',
     workOrderId: 'WO-2026-098',
-    images: []
-  }
+    images: [],
+  },
 ];
 
 export const SAMPLE_WORK_ORDERS: WorkOrder[] = [
@@ -1805,8 +2392,9 @@ export const SAMPLE_WORK_ORDERS: WorkOrder[] = [
     equipmentId: 'FAT-01',
     cableId: 'CBL-BRANCH-01',
     scheduledDate: '2026-11-01',
-    notes: 'Splicing crew on site with Fujikura 90S fusion splicer. Replacing 50-meter cable section between Pole 01 and FAT-01.',
-    photos: []
+    notes:
+      'Splicing crew on site with Fujikura 90S fusion splicer. Replacing 50-meter cable section between Pole 01 and FAT-01.',
+    photos: [],
   },
   {
     id: 'WO-2026-105',
@@ -1819,7 +2407,7 @@ export const SAMPLE_WORK_ORDERS: WorkOrder[] = [
     equipmentId: 'FAT-01',
     scheduledDate: '2026-11-01',
     notes: 'Connect 2-core drop cable from FAT-01 free port 4 to customer ONT in Apt 201.',
-    photos: []
+    photos: [],
   },
   {
     id: 'WO-2026-106',
@@ -1831,8 +2419,8 @@ export const SAMPLE_WORK_ORDERS: WorkOrder[] = [
     technicianPhone: '+91 98440 44321',
     scheduledDate: '2026-11-03',
     notes: 'Inspect water accumulation, check cable tags and rodent guard seals inside all 5 chambers.',
-    photos: []
-  }
+    photos: [],
+  },
 ];
 
 export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
@@ -1844,7 +2432,7 @@ export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
     action: 'FAULT_DETECTED',
     details: 'Optical Loss of Signal detected on OLT-01 PON-01 (Feeder 01 downstream branch)',
     assetId: 'CBL-BRANCH-01',
-    assetType: 'Cable'
+    assetType: 'Cable',
   },
   {
     id: 'LOG-002',
@@ -1854,7 +2442,7 @@ export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
     action: 'WORK_ORDER_DISPATCHED',
     details: 'Dispatched emergency work order WO-2026-104 to technician Arun Varma',
     assetId: 'WO-2026-104',
-    assetType: 'WorkOrder'
+    assetType: 'WorkOrder',
   },
   {
     id: 'LOG-003',
@@ -1864,7 +2452,7 @@ export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
     action: 'IMAGE_UPLOAD_ANNOTATED',
     details: 'Uploaded updated internal tray photograph for FAT-01 with port pin annotations',
     assetId: 'FAT-01',
-    assetType: 'Equipment'
+    assetType: 'Equipment',
   },
   {
     id: 'LOG-004',
@@ -1874,10 +2462,9 @@ export const SAMPLE_AUDIT_LOGS: AuditLog[] = [
     action: 'CUSTOMER_CONNECTED',
     details: 'Verified and approved customer CUST-025 onboarding on OLT-02 PON-01 FAT-07',
     assetId: 'CUST-025',
-    assetType: 'Customer'
-  }
+    assetType: 'Customer',
+  },
 ];
-
 
 export const SAMPLE_ZONES: NetworkZone[] = [
   {
@@ -1892,11 +2479,11 @@ export const SAMPLE_ZONES: NetworkZone[] = [
     penetrationRatePct: 38.4,
     status: 'Operational',
     boundaryCoords: [
-      [12.9330, 77.6220],
-      [12.9390, 77.6220],
-      [12.9390, 77.6320],
-      [12.9330, 77.6320]
-    ]
+      [12.933, 77.622],
+      [12.939, 77.622],
+      [12.939, 77.632],
+      [12.933, 77.632],
+    ],
   },
   {
     id: 'ZONE-02',
@@ -1910,11 +2497,11 @@ export const SAMPLE_ZONES: NetworkZone[] = [
     penetrationRatePct: 37.5,
     status: 'Operational',
     boundaryCoords: [
-      [12.9380, 77.6240],
-      [12.9430, 77.6240],
-      [12.9430, 77.6300],
-      [12.9380, 77.6300]
-    ]
+      [12.938, 77.624],
+      [12.943, 77.624],
+      [12.943, 77.63],
+      [12.938, 77.63],
+    ],
   },
   {
     id: 'ZONE-03',
@@ -1928,11 +2515,11 @@ export const SAMPLE_ZONES: NetworkZone[] = [
     penetrationRatePct: 45.3,
     status: 'Operational',
     boundaryCoords: [
-      [12.9390, 77.6200],
-      [12.9440, 77.6200],
-      [12.9440, 77.6260],
-      [12.9390, 77.6260]
-    ]
+      [12.939, 77.62],
+      [12.944, 77.62],
+      [12.944, 77.626],
+      [12.939, 77.626],
+    ],
   },
   {
     id: 'ZONE-04',
@@ -1946,12 +2533,12 @@ export const SAMPLE_ZONES: NetworkZone[] = [
     penetrationRatePct: 32.0,
     status: 'Expansion',
     boundaryCoords: [
-      [12.9430, 77.6270],
-      [12.9510, 77.6270],
-      [12.9510, 77.6380],
-      [12.9430, 77.6380]
-    ]
-  }
+      [12.943, 77.627],
+      [12.951, 77.627],
+      [12.951, 77.638],
+      [12.943, 77.638],
+    ],
+  },
 ];
 
 export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
@@ -1962,7 +2549,7 @@ export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
     cableId: 'CBL-FEEDER-01',
     uploadedBy: 'Rajesh Kumar (NOC Lead)',
     uploadDate: '2026-08-15',
-    fileSizeKb: 1420
+    fileSizeKb: 1420,
   },
   {
     id: 'DOC-002',
@@ -1971,7 +2558,7 @@ export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
     equipmentId: 'OLT-01',
     uploadedBy: 'Central Engineering',
     uploadDate: '2026-04-10',
-    fileSizeKb: 3840
+    fileSizeKb: 3840,
   },
   {
     id: 'DOC-003',
@@ -1980,7 +2567,7 @@ export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
     equipmentId: 'FAT-01',
     uploadedBy: 'Arun Varma (Lead Splicer)',
     uploadDate: '2026-09-02',
-    fileSizeKb: 920
+    fileSizeKb: 920,
   },
   {
     id: 'DOC-004',
@@ -1988,7 +2575,7 @@ export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
     category: 'As-Built CAD',
     uploadedBy: 'Municipal Liaison',
     uploadDate: '2026-03-01',
-    fileSizeKb: 6150
+    fileSizeKb: 6150,
   },
   {
     id: 'DOC-005',
@@ -1996,6 +2583,6 @@ export const SAMPLE_DOCUMENTS: NetworkDocument[] = [
     category: 'Lease Agreement',
     uploadedBy: 'Legal Dept',
     uploadDate: '2026-01-15',
-    fileSizeKb: 2100
-  }
+    fileSizeKb: 2100,
+  },
 ];
