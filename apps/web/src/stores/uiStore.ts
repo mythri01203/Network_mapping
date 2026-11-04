@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Cable, Customer, Equipment, Fault, JointClosure, UserRole } from '@fibergis/shared';
-import type { MainView } from '../types/ui';
 import { preferenceKey, preferenceStorage } from './persistStorage';
 
 export type SelectedObject =
@@ -62,7 +61,6 @@ export function knowledgeKeyFor(equipmentTypeOrId: string): string {
 }
 
 export interface UiState {
-  activeMainView: MainView;
   selectedObject: SelectedObject | null;
   modals: Record<ModalId, boolean>;
   panels: Record<PanelId, boolean>;
@@ -73,7 +71,6 @@ export interface UiState {
   userRole: UserRole;
   networkMode: NetworkMode;
 
-  setActiveMainView: (view: MainView) => void;
   select: (selection: SelectedObject | null) => void;
   setModalOpen: (id: ModalId, open: boolean) => void;
   setPanelOpen: (id: PanelId, open: Updater<boolean>) => void;
@@ -88,7 +85,6 @@ export interface UiState {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      activeMainView: 'map',
       selectedObject: null,
       modals: closedModals,
       // Start uncluttered: maximum map space, panels open on demand.
@@ -99,7 +95,6 @@ export const useUiStore = create<UiState>()(
       userRole: 'Network Engineer',
       networkMode: 'All',
 
-      setActiveMainView: (activeMainView) => set({ activeMainView }),
       select: (selectedObject) => set({ selectedObject }),
       setModalOpen: (id, open) => set((s) => (s.modals[id] === open ? s : { modals: { ...s.modals, [id]: open } })),
       setPanelOpen: (id, open) => set((s) => ({ panels: { ...s.panels, [id]: resolve(open, s.panels[id]) } })),

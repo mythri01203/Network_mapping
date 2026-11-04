@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import {
   GitFork,
   Search,
@@ -17,15 +18,8 @@ import {
 } from 'lucide-react';
 
 export const NetworkTopologyView: React.FC = () => {
-  const {
-    equipments,
-    customers,
-    faults,
-    setActiveMainView,
-    flyToLocation,
-    setIsTerminalBoxModalOpen,
-    traceNetworkPath,
-  } = useNetwork();
+  const { equipments, customers, faults, flyToLocation, setIsTerminalBoxModalOpen, traceNetworkPath } = useNetwork();
+  const openView = useOpenView();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedArea, setSelectedArea] = useState<string>('All');
@@ -68,7 +62,7 @@ export const NetworkTopologyView: React.FC = () => {
 
   const handleLocateOnMap = (lat?: number, lng?: number) => {
     if (lat && lng) {
-      setActiveMainView('map');
+      openView('map');
       setTimeout(() => {
         flyToLocation(lat, lng, 18);
       }, 100);

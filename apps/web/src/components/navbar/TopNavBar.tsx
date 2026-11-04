@@ -19,6 +19,7 @@ import {
   CornerDownLeft,
   type LucideIcon,
 } from 'lucide-react';
+import { Link } from 'react-router';
 import { useNetwork } from '../../context/NetworkContext';
 import type { UserRole } from '@fibergis/shared';
 import {
@@ -32,7 +33,8 @@ import {
   CableIcon,
   cableColor,
 } from '../ui';
-import { VIEW_META, ROLE_INITIALS } from '../sidebar/navigation';
+import { VIEW_META, useActiveView, useShowOnMap } from '../../app/views';
+import type { SelectedObject } from '../../stores/uiStore';
 import { SyncStatus } from './SyncStatus';
 
 type ResultKind = 'equipment' | 'cable' | 'customer' | 'fault';
@@ -44,7 +46,7 @@ interface SearchResult {
   meta: string;
   icon: LucideIcon;
   color?: string;
-  data: any;
+  selection: SelectedObject;
 }
 
 const KIND_LABEL: Record<ResultKind, string> = {
@@ -64,14 +66,20 @@ const NETWORK_MODES: Array<{ id: 'All' | 'Fiber' | 'CableTV'; label: string }> =
 
 const matches = (value: string | undefined | null, q: string) => !!value && value.toLowerCase().includes(q);
 
+const roleInitials = (role: string) =>
+  role
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
 export const TopNavBar: React.FC = () => {
   const {
     equipments,
     cables,
     customers,
     faults,
-    activeMainView,
-    setActiveMainView,
     userRole,
     setUserRole,
     networkMode,
@@ -81,8 +89,6 @@ export const TopNavBar: React.FC = () => {
     setIsFaultModalOpen,
     setIsHelpModalOpen,
     setIsLayersDrawerOpen,
-    flyToLocation,
-    setSelectedObject,
     undo,
     redo,
     canUndo,
@@ -93,6 +99,8 @@ export const TopNavBar: React.FC = () => {
     exportKML,
   } = useNetwork();
 
+  const activeView = useActiveView();
+  const showOnMap = useShowOnMap();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -112,7 +120,7 @@ export const TopNavBar: React.FC = () => {
         label: e.name,
         meta: [e.type, e.area].filter(Boolean).join(' · '),
         icon: equipmentIcon(e.type),
-        data: e,
+        selection: { type: 'equipment', data: e },
       }));
     const cb = cables
       .filter((c) => matches(c.id, q) || matches(c.name, q))
@@ -124,7 +132,7 @@ export const TopNavBar: React.FC = () => {
         meta: `${c.type} · ${Math.round(c.lengthMeters || 0).toLocaleString()} m`,
         icon: CableIcon,
         color: cableColor(c.type),
-        data: c,
+        selection: { type: 'cable', data: c },
       }));
     const cu = customers
       .filter(
@@ -142,7 +150,7 @@ export const TopNavBar: React.FC = () => {
         label: c.name,
         meta: [c.ontSerialNumber && `ONT ${c.ontSerialNumber}`, c.plan].filter(Boolean).join(' · '),
         icon: UserRound,
-        data: c,
+        selection: { type: 'customer', data: c },
       }));
     const ft = faults
       .filter((f) => matches(f.id, q) || matches(f.title, q))
@@ -153,7 +161,7 @@ export const TopNavBar: React.FC = () => {
         label: f.title,
         meta: `${f.severity} · ${f.status}`,
         icon: TriangleAlert,
-        data: f,
+        selection: { type: 'fault', data: f },
       }));
     return [...eq, ...cb, ...cu, ...ft];
   }, [query, equipments, cables, customers, faults]);
@@ -205,21 +213,7 @@ export const TopNavBar: React.FC = () => {
   }, [open]);
 
   const selectResult = (r: SearchResult) => {
-    setSelectedObject({ type: r.kind, data: r.data });
-    setActiveMainView('map');
-    let target: { lat: number; lng: number; zoom: number } | null = null;
-    if (r.kind === 'fault' && r.data.affectedLocation) {
-      target = { lat: r.data.affectedLocation.lat, lng: r.data.affectedLocation.lng, zoom: 18 };
-    } else if (typeof r.data.lat === 'number' && typeof r.data.lng === 'number') {
-      target = { lat: r.data.lat, lng: r.data.lng, zoom: 18 };
-    } else if (Array.isArray(r.data.coordinates) && r.data.coordinates.length > 0) {
-      const mid = r.data.coordinates[Math.floor(r.data.coordinates.length / 2)];
-      target = { lat: mid[0], lng: mid[1], zoom: 17 };
-    }
-    if (target) {
-      const t = target;
-      setTimeout(() => flyToLocation(t.lat, t.lng, t.zoom), 100);
-    }
+    showOnMap(r.selection);
     setQuery('');
     setOpen(false);
     inputRef.current?.blur();
@@ -257,7 +251,7 @@ export const TopNavBar: React.FC = () => {
   const handleReset = () => void resetToSampleData();
 
   const activeFaultsCount = faults.filter((f) => f.status !== 'Resolved').length;
-  const view = VIEW_META[activeMainView];
+  const view = VIEW_META[activeView];
   const showDropdown = open && query.trim().length > 0;
 
   let lastKind: ResultKind | null = null;
@@ -266,9 +260,8 @@ export const TopNavBar: React.FC = () => {
     <header className="relative z-[1100] flex h-12 shrink-0 items-center gap-3 border-b border-slate-950 bg-slate-900 pl-3 pr-2 text-slate-300">
       {/* Brand + breadcrumb */}
       <div className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setActiveMainView('map')}
+        <Link
+          to={VIEW_META.map.path}
           className="flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 text-white"
           aria-label="FiberGIS home"
         >
@@ -276,7 +269,7 @@ export const TopNavBar: React.FC = () => {
             <Waypoints size={16} strokeWidth={2.2} />
           </span>
           <span className="text-[14px] font-semibold tracking-tight">FiberGIS</span>
-        </button>
+        </Link>
         <span className="hidden h-5 w-px bg-slate-700 md:block" />
         <div className="hidden min-w-0 items-center gap-2 md:flex">
           <view.icon size={15} strokeWidth={1.9} className="shrink-0 text-slate-400" />
@@ -441,7 +434,7 @@ export const TopNavBar: React.FC = () => {
 
         <span className="mx-1 hidden h-5 w-px bg-slate-700 sm:block" />
 
-        {activeMainView === 'map' && (
+        {activeView === 'map' && (
           <IconButton icon={Layers} label="Map layers" variant="dark" onClick={() => setIsLayersDrawerOpen(true)} />
         )}
         <IconButton
@@ -473,7 +466,7 @@ export const TopNavBar: React.FC = () => {
               )}
             >
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 text-[10.5px] font-semibold text-white">
-                {ROLE_INITIALS(userRole)}
+                {roleInitials(userRole)}
               </span>
               <span className="hidden text-[13px] font-medium text-slate-200 xl:inline">{userRole}</span>
               <ChevronDown size={14} className="text-slate-500" />

@@ -28,7 +28,6 @@ import type {
   UserRole,
   WorkOrder,
 } from '@fibergis/shared';
-import type { MainView } from '../types/ui';
 import { type BikerRoute, type BikerWaypoint, useBikerStore } from '../stores/bikerStore';
 import { type MapTool, type TileProvider, useMapStore } from '../stores/mapStore';
 import * as actions from '../stores/networkActions';
@@ -48,9 +47,6 @@ export type { BikerRoute, BikerWaypoint, ToastItem };
 type BooleanUpdater = boolean | ((prev: boolean) => boolean);
 
 interface NetworkContextType {
-  activeMainView: MainView;
-  setActiveMainView: (view: MainView) => void;
-
   equipments: Equipment[];
   cables: Cable[];
   splitters: Splitter[];
@@ -224,9 +220,6 @@ export const useNetwork = (): NetworkContextType => {
   const panel = (id: Parameters<typeof ui.setPanelOpen>[0]) => (open: BooleanUpdater) => ui.setPanelOpen(id, open);
 
   return {
-    activeMainView: ui.activeMainView,
-    setActiveMainView: ui.setActiveMainView,
-
     equipments: network.equipment,
     cables: network.cables,
     splitters: network.splitters,

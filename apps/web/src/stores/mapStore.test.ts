@@ -36,6 +36,20 @@ describe('mapStore', () => {
     expect(store.getState().flyToTarget).not.toBe(first);
   });
 
+  it('consumes fly targets and keeps the viewport out of persisted prefs', async () => {
+    const { DEFAULT_VIEWPORT } = await import('./mapStore');
+    const store = await loadStore();
+    expect(store.getState().viewport).toEqual(DEFAULT_VIEWPORT);
+
+    store.getState().flyTo(1, 2, 15);
+    store.getState().clearFlyTo();
+    expect(store.getState().flyToTarget).toBeNull();
+
+    store.getState().setViewport({ lat: 3, lng: 4, zoom: 11 });
+    expect(store.getState().viewport).toEqual({ lat: 3, lng: 4, zoom: 11 });
+    expect(localStorage.getItem('fiber_gis_map_prefs') ?? '').not.toContain('viewport');
+  });
+
   it('applies updater functions to sketch points and clears them together', async () => {
     const store = await loadStore();
     store.getState().setDrawingPoints([[1, 1]]);

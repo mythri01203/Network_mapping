@@ -1,18 +1,12 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useShowOnMap } from '../../app/views';
 import type { Customer } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, GitFork } from 'lucide-react';
 
 export const CustomerDirectoryView: React.FC = () => {
-  const {
-    customers,
-    setActiveMainView,
-    flyToLocation,
-    setSelectedObject,
-    setIsCustomerWizardOpen,
-    traceNetworkPath,
-    showToast,
-  } = useNetwork();
+  const { customers, setIsCustomerWizardOpen, traceNetworkPath, showToast } = useNetwork();
+  const showOnMap = useShowOnMap();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedService, setSelectedService] = useState<string>('All');
@@ -35,13 +29,7 @@ export const CustomerDirectoryView: React.FC = () => {
     return matchesSearch && matchesService && matchesStatus;
   });
 
-  const handleLocateOnMap = (customer: Customer) => {
-    setSelectedObject({ type: 'customer', data: customer });
-    setActiveMainView('map');
-    setTimeout(() => {
-      flyToLocation(customer.lat, customer.lng, 18);
-    }, 100);
-  };
+  const handleLocateOnMap = (customer: Customer) => showOnMap({ type: 'customer', data: customer });
 
   const handleExportCSV = () => {
     const headers = [

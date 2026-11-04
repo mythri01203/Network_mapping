@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import { Tv, Radio, Activity, MapPin, Zap } from 'lucide-react';
 
 export const CableTVView: React.FC = () => {
-  const { customers, setActiveMainView, flyToLocation } = useNetwork();
+  const { customers, flyToLocation } = useNetwork();
+  const openView = useOpenView();
 
   const [activeTab, setActiveTab] = useState<'schematic' | 'spectrum' | 'subscribers'>('schematic');
   const [selectedNode, setSelectedNode] = useState<{
@@ -22,7 +24,7 @@ export const CableTVView: React.FC = () => {
 
   const handleLocateOnMap = (lat?: number, lng?: number) => {
     if (lat && lng) {
-      setActiveMainView('map');
+      openView('map');
       setTimeout(() => {
         flyToLocation(lat, lng, 18);
       }, 100);

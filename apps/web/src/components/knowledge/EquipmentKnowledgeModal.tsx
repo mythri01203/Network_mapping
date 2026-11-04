@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import { EQUIPMENT_KNOWLEDGE_BASE, searchEquipmentKnowledge } from '../../data/equipmentKnowledgeBase';
 import {
   Search,
@@ -29,8 +30,8 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   onClose,
   initialEquipmentId,
 }) => {
-  const { setActiveMainView, setSelectedEquipmentTypeToAdd, setActiveTool, showToast, equipments, flyToLocation } =
-    useNetwork();
+  const { setSelectedEquipmentTypeToAdd, setActiveTool, showToast, equipments, flyToLocation } = useNetwork();
+  const openView = useOpenView();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -97,7 +98,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   // Handle Place on Map
   const handlePlaceOnMap = () => {
     onClose();
-    setActiveMainView('map');
+    openView('map');
     let targetType: any = 'FAT';
     if (activeItem.id.includes('olt')) targetType = 'OLT';
     else if (activeItem.id === 'odf') targetType = 'ODF';
@@ -129,7 +130,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   const handleLocateOnMap = () => {
     if (matchingPlacedEquipment) {
       onClose();
-      setActiveMainView('map');
+      openView('map');
       setTimeout(() => {
         flyToLocation(matchingPlacedEquipment.lat, matchingPlacedEquipment.lng, 18);
         showToast(

@@ -21,16 +21,19 @@ import {
   PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
+import { Link } from 'react-router';
 import { useNetwork } from '../../context/NetworkContext';
 import type { MainView } from '../../types/ui';
+import { VIEW_META, useActiveView, useOpenView } from '../../app/views';
 import { Popover, MenuItem, MenuLabel, MenuSeparator, cn } from '../ui';
-import { VIEW_META } from './navigation';
 
 interface NavEntry {
   key: string;
   label: string;
   icon: LucideIcon;
-  onClick: () => void;
+  /** Views are links; tools run onClick. */
+  to?: string;
+  onClick?: () => void;
   active?: boolean;
   count?: number;
   alert?: boolean;
@@ -49,8 +52,6 @@ interface TooltipState {
 
 export const LeftSidebar: React.FC = () => {
   const {
-    activeMainView,
-    setActiveMainView,
     isSidebarCollapsed,
     setIsSidebarCollapsed,
     uiMode,
@@ -81,6 +82,8 @@ export const LeftSidebar: React.FC = () => {
     setIsBikerMode,
   } = useNetwork();
 
+  const activeView = useActiveView();
+  const openView = useOpenView();
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const collapsed = isSidebarCollapsed;
   const simple = uiMode === 'simple';
@@ -94,8 +97,8 @@ export const LeftSidebar: React.FC = () => {
     key: id,
     label: VIEW_META[id].label,
     icon: VIEW_META[id].icon,
-    onClick: () => setActiveMainView(id),
-    active: activeMainView === id,
+    to: VIEW_META[id].path,
+    active: activeView === id,
     ...extra,
   });
 
@@ -134,7 +137,7 @@ export const LeftSidebar: React.FC = () => {
         view('field', { simple: true }),
         tool('tech', 'Technician App', Smartphone, () => setIsTechnicianMobileOpen(true)),
         tool('biker', 'Ride Navigation', Bike, () => {
-          setActiveMainView('map');
+          openView('map');
           setIsBikerMode(true);
         }),
       ],
@@ -185,46 +188,53 @@ export const LeftSidebar: React.FC = () => {
 
   const renderItem = (item: NavEntry) => {
     const Icon = item.icon;
+    const shared = {
+      onMouseEnter: showTip(item.count ? `${item.label} · ${item.count}` : item.label),
+      onMouseLeave: hideTip,
+      onFocus: showTip(item.label),
+      onBlur: hideTip,
+      'aria-label': collapsed ? item.label : undefined,
+      className: cn(
+        'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
+        collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
+        item.active ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+      ),
+    };
+    const content = (
+      <>
+        {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600" />}
+        <Icon
+          size={collapsed ? 18 : 16}
+          strokeWidth={1.8}
+          className={cn('shrink-0', item.active ? 'text-blue-600' : 'text-slate-500 group-hover:text-slate-700')}
+        />
+        {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
+        {!collapsed && item.count !== undefined && (
+          <span
+            className={cn(
+              'tabular shrink-0 rounded px-1.5 text-[11px] leading-[18px]',
+              item.alert ? 'bg-red-50 font-medium text-red-600' : item.active ? 'text-blue-600' : 'text-slate-400',
+            )}
+          >
+            {item.count}
+          </span>
+        )}
+        {collapsed && item.alert && (
+          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+        )}
+      </>
+    );
     return (
       <li key={item.key}>
-        <button
-          type="button"
-          onClick={item.onClick}
-          onMouseEnter={showTip(item.count ? `${item.label} · ${item.count}` : item.label)}
-          onMouseLeave={hideTip}
-          onFocus={showTip(item.label)}
-          onBlur={hideTip}
-          aria-label={collapsed ? item.label : undefined}
-          aria-current={item.active ? 'page' : undefined}
-          className={cn(
-            'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
-            collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
-            item.active
-              ? 'bg-blue-50 font-medium text-blue-700'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-          )}
-        >
-          {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600" />}
-          <Icon
-            size={collapsed ? 18 : 16}
-            strokeWidth={1.8}
-            className={cn('shrink-0', item.active ? 'text-blue-600' : 'text-slate-500 group-hover:text-slate-700')}
-          />
-          {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
-          {!collapsed && item.count !== undefined && (
-            <span
-              className={cn(
-                'tabular shrink-0 rounded px-1.5 text-[11px] leading-[18px]',
-                item.alert ? 'bg-red-50 font-medium text-red-600' : item.active ? 'text-blue-600' : 'text-slate-400',
-              )}
-            >
-              {item.count}
-            </span>
-          )}
-          {collapsed && item.alert && (
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
-          )}
-        </button>
+        {item.to ? (
+          <Link to={item.to} aria-current={item.active ? 'page' : undefined} {...shared}>
+            {content}
+          </Link>
+        ) : (
+          <button type="button" onClick={item.onClick} {...shared}>
+            {content}
+          </button>
+        )}
       </li>
     );
   };
@@ -287,7 +297,7 @@ export const LeftSidebar: React.FC = () => {
                 label="Place equipment"
                 hint="from library"
                 onClick={() => {
-                  setActiveMainView('map');
+                  openView('map');
                   setIsLeftPanelOpen(true);
                   close();
                 }}

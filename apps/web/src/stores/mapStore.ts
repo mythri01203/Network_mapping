@@ -12,7 +12,14 @@ export interface FlyToTarget {
   zoom?: number;
 }
 
+export interface MapViewport {
+  lat: number;
+  lng: number;
+  zoom: number;
+}
+
 export const DEFAULT_FLY_TO_ZOOM = 17;
+export const DEFAULT_VIEWPORT: MapViewport = { lat: 12.9385, lng: 77.6275, zoom: 16 };
 
 export const DEFAULT_LAYERS: Record<string, boolean> = {
   feederCable: true,
@@ -63,7 +70,10 @@ export interface MapState {
   cableTypeToDraw: CableType;
   drawingPoints: LatLng[];
   measuringPoints: LatLng[];
+  /** A pending camera move; the map clears it once it has flown there. */
   flyToTarget: FlyToTarget | null;
+  /** Last camera position, so the map reopens where the user left it after visiting another view. */
+  viewport: MapViewport;
   isLayersDrawerOpen: boolean;
   // Preferences (persisted)
   layers: Record<string, boolean>;
@@ -76,6 +86,8 @@ export interface MapState {
   setDrawingPoints: (points: PointsUpdater) => void;
   setMeasuringPoints: (points: PointsUpdater) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
+  clearFlyTo: () => void;
+  setViewport: (viewport: MapViewport) => void;
   setLayersDrawerOpen: (open: boolean) => void;
   toggleLayer: (layer: string) => void;
   setLayerOpacity: (layer: string, opacity: number) => void;
@@ -95,6 +107,7 @@ export const useMapStore = create<MapState>()(
       drawingPoints: [],
       measuringPoints: [],
       flyToTarget: null,
+      viewport: DEFAULT_VIEWPORT,
       isLayersDrawerOpen: false,
       layers: DEFAULT_LAYERS,
       layerOpacity: DEFAULT_LAYER_OPACITY,
@@ -107,6 +120,8 @@ export const useMapStore = create<MapState>()(
       setMeasuringPoints: (points) => set((s) => ({ measuringPoints: resolvePoints(points, s.measuringPoints) })),
       // A fresh object every call, so flying to the same spot twice still re-centres the map.
       flyTo: (lat, lng, zoom = DEFAULT_FLY_TO_ZOOM) => set({ flyToTarget: { lat, lng, zoom } }),
+      clearFlyTo: () => set({ flyToTarget: null }),
+      setViewport: (viewport) => set({ viewport }),
       setLayersDrawerOpen: (isLayersDrawerOpen) => set({ isLayersDrawerOpen }),
       toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
       setLayerOpacity: (layer, opacity) =>

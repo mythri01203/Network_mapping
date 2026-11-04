@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import { useNetwork } from '../../context/NetworkContext';
+import { DEFAULT_VIEWPORT, useMapStore } from '../../stores/mapStore';
 import type { Equipment, EquipmentType } from '@fibergis/shared';
 import { cableStyle } from '../../theme/network';
 import { BikerModePanel } from '../biker/BikerModePanel';
@@ -201,7 +202,7 @@ export const GISMap: React.FC = () => {
   // Synchronize Project Start Point Marker
   useEffect(() => {
     projectStartLayerGroupRef.current.clearLayers();
-    if (projectStartPoint && mapInstanceRef.current) {
+    if (projectStartPoint) {
       const starIcon = L.divIcon({
         className: 'project-start-marker',
         html: `
@@ -229,9 +230,10 @@ export const GISMap: React.FC = () => {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
+    const { viewport } = useMapStore.getState();
     const map = L.map(mapContainerRef.current, {
-      center: [12.9385, 77.6275],
-      zoom: 16,
+      center: [viewport.lat, viewport.lng],
+      zoom: viewport.zoom,
       zoomControl: false,
       attributionControl: false,
     });
@@ -255,6 +257,11 @@ export const GISMap: React.FC = () => {
     bikerLayerGroupRef.current.addTo(map);
     userLocationLayerRef.current.addTo(map);
     projectStartLayerGroupRef.current.addTo(map);
+
+    map.on('moveend', () => {
+      const center = map.getCenter();
+      useMapStore.getState().setViewport({ lat: center.lat, lng: center.lng, zoom: map.getZoom() });
+    });
 
     mapInstanceRef.current = map;
 
@@ -313,6 +320,7 @@ export const GISMap: React.FC = () => {
       mapInstanceRef.current.flyTo([mapFlyToTarget.lat, mapFlyToTarget.lng], mapFlyToTarget.zoom || 17, {
         duration: 1.2,
       });
+      useMapStore.getState().clearFlyTo();
     }
   }, [mapFlyToTarget]);
 
@@ -1263,7 +1271,9 @@ export const GISMap: React.FC = () => {
         onZoomOut={() => mapInstanceRef.current?.zoomOut()}
         onLocate={handleGetCurrentLocation}
         isLocating={isLocating}
-        onResetView={() => mapInstanceRef.current?.flyTo([12.9385, 77.6275], 16)}
+        onResetView={() =>
+          mapInstanceRef.current?.flyTo([DEFAULT_VIEWPORT.lat, DEFAULT_VIEWPORT.lng], DEFAULT_VIEWPORT.zoom)
+        }
       />
 
       <OltFilterControl

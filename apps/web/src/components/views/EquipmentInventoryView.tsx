@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView, useShowOnMap } from '../../app/views';
 import type { Equipment } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, Trash2, Camera } from 'lucide-react';
 
@@ -7,14 +8,14 @@ export const EquipmentInventoryView: React.FC = () => {
   const {
     equipments,
     deleteEquipment,
-    setActiveMainView,
-    flyToLocation,
     setSelectedObject,
     setIsTerminalBoxModalOpen,
     setSelectedEquipmentTypeToAdd,
     setActiveTool,
     showToast,
   } = useNetwork();
+  const openView = useOpenView();
+  const showOnMap = useShowOnMap();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -83,13 +84,7 @@ export const EquipmentInventoryView: React.FC = () => {
     showToast('success', 'Export Complete', `Exported ${filteredEquipments.length} equipment records to CSV.`);
   };
 
-  const handleLocateOnMap = (eq: Equipment) => {
-    setSelectedObject({ type: 'equipment', data: eq });
-    setActiveMainView('map');
-    setTimeout(() => {
-      flyToLocation(eq.lat, eq.lng, 18);
-    }, 100);
-  };
+  const handleLocateOnMap = (eq: Equipment) => showOnMap({ type: 'equipment', data: eq });
 
   const handleOpenTerminalBox = (eq: Equipment) => {
     setSelectedObject({ type: 'equipment', data: eq });
@@ -127,7 +122,7 @@ export const EquipmentInventoryView: React.FC = () => {
             onClick={() => {
               setActiveTool('add_equipment');
               setSelectedEquipmentTypeToAdd('FAT');
-              setActiveMainView('map');
+              openView('map');
             }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
           >

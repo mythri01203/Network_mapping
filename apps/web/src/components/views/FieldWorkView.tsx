@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import { Bike, MapPin, CheckCircle2, Clock, Camera } from 'lucide-react';
 
 export const FieldWorkView: React.FC = () => {
@@ -7,13 +8,13 @@ export const FieldWorkView: React.FC = () => {
     workOrders,
     updateWorkOrderStatus,
     setIsBikerMode,
-    setActiveMainView,
     flyToLocation,
     equipments,
     setSelectedObject,
     setIsTechnicianMobileOpen,
     setIsFaultModalOpen,
   } = useNetwork();
+  const openView = useOpenView();
   const [offlineDraft, setOfflineDraft] = useState(false);
 
   return (
@@ -27,7 +28,7 @@ export const FieldWorkView: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => {
-                setActiveMainView('map');
+                openView('map');
                 setIsBikerMode(true);
               }}
               className="px-3 py-2 bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
@@ -74,7 +75,7 @@ export const FieldWorkView: React.FC = () => {
                     onClick={() => {
                       if (eq) {
                         setSelectedObject({ type: 'equipment', data: eq });
-                        setActiveMainView('map');
+                        openView('map');
                         setIsBikerMode(true);
                         flyToLocation(eq.lat, eq.lng, 18);
                       }

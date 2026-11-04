@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import type { NetworkZone } from '@fibergis/shared';
 import { MapPin, PlusCircle, Trash2 } from 'lucide-react';
 
 export const ZoneManagementView: React.FC = () => {
-  const { zones, addZone, deleteZone, setActiveMainView, flyToLocation, showToast } = useNetwork();
+  const { zones, addZone, deleteZone, flyToLocation, showToast } = useNetwork();
+  const openView = useOpenView();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newZoneName, setNewZoneName] = useState('');
@@ -48,7 +50,7 @@ export const ZoneManagementView: React.FC = () => {
     if (zone.boundaryCoords && zone.boundaryCoords.length > 0) {
       const midLat = zone.boundaryCoords.reduce((acc, c) => acc + c[0], 0) / zone.boundaryCoords.length;
       const midLng = zone.boundaryCoords.reduce((acc, c) => acc + c[1], 0) / zone.boundaryCoords.length;
-      setActiveMainView('map');
+      openView('map');
       setTimeout(() => {
         flyToLocation(midLat, midLng, 16);
       }, 100);

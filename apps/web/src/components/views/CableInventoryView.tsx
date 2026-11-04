@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView, useShowOnMap } from '../../app/views';
 import { getFiberColor } from '@fibergis/shared';
 
 export const CableInventoryView: React.FC = () => {
-  const { cables, setSelectedObject, setActiveMainView, flyToLocation, setIsCableWizardOpen, setIsBottomPanelOpen } =
-    useNetwork();
+  const { cables, setIsCableWizardOpen, setIsBottomPanelOpen } = useNetwork();
+  const openView = useOpenView();
+  const showOnMap = useShowOnMap();
   const [q, setQ] = useState('');
   const rows = cables.filter(
     (c) => c.id.toLowerCase().includes(q.toLowerCase()) || c.name.toLowerCase().includes(q.toLowerCase()),
@@ -22,7 +24,7 @@ export const CableInventoryView: React.FC = () => {
           </div>
           <button
             onClick={() => {
-              setActiveMainView('map');
+              openView('map');
               setIsCableWizardOpen(true);
             }}
             className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold"
@@ -58,10 +60,8 @@ export const CableInventoryView: React.FC = () => {
                     key={c.id}
                     className="border-t hover:bg-slate-50 cursor-pointer"
                     onClick={() => {
-                      setSelectedObject({ type: 'cable', data: c });
-                      setActiveMainView('map');
+                      showOnMap({ type: 'cable', data: c });
                       setIsBottomPanelOpen(true);
-                      if (c.coordinates[0]) flyToLocation(c.coordinates[0][0], c.coordinates[0][1], 16);
                     }}
                   >
                     <td className="px-3 py-2 font-mono text-blue-700">{c.id}</td>

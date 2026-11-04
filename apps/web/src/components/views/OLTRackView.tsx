@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
+import { useOpenView } from '../../app/views';
 import { Server, Zap, Activity, Fan, Radio, MapPin, GitFork, Thermometer } from 'lucide-react';
 
 export const OLTRackView: React.FC = () => {
-  const {
-    equipments,
-    cables,
-    customers,
-    faults,
-    setActiveMainView,
-    flyToLocation,
-    traceNetworkPath,
-    setIsCableWizardOpen,
-  } = useNetwork();
+  const { equipments, cables, customers, faults, flyToLocation, traceNetworkPath, setIsCableWizardOpen } = useNetwork();
+  const openView = useOpenView();
 
   const olts = equipments.filter((e) => e.type === 'OLT');
   const [selectedOltId, setSelectedOltId] = useState<string>(olts[0]?.id || 'OLT-01');
@@ -49,7 +42,7 @@ export const OLTRackView: React.FC = () => {
 
   const handleLocateOnMap = () => {
     if (currentOlt) {
-      setActiveMainView('map');
+      openView('map');
       setTimeout(() => {
         flyToLocation(currentOlt.lat, currentOlt.lng, 18);
       }, 100);
