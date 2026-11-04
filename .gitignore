@@ -27,4 +27,16 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
-user_prompt_full.txt
+
+# Server runtime data
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+server_data.json
+server_data.json.tmp
+
+# Test output
+coverage/
+playwright-report/
+test-results/

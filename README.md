@@ -149,26 +149,20 @@ To experience the full prototype workflow:
 
 ## 💻 Running the Application
 
-### Development Server:
+Requirements: Node.js 22.13+ (Node 24 recommended, see `.nvmrc`).
+
 ```bash
-# From workspace root:
-npm run dev
-
-# Or directly in network mapping folder:
-cd "network mapping"
-npm run dev
+npm install        # installs every workspace from the repo root
+npm run dev        # starts the web app (Vite) at http://localhost:3000
+npm run server     # starts the API server on port 5000
+npm run build      # production build of every workspace
+npm run typecheck  # type-checks every workspace
 ```
-The Vite development server runs at `http://localhost:3000`.
 
-### Backend API Server:
-```bash
-npm run server
+## Repository Layout
+
 ```
-The backend API server runs on port 5000 with persistent data storage.
-
-### Production Build:
-```bash
-npm run build
+apps/
+  web/        React + Vite + Leaflet single-page app (@fibergis/web)
+packages/     shared libraries (added as the codebase is modularised)
 ```
-Creates an optimized production bundle in `dist/`.
-

@@ -1,13 +1,23 @@
 {
-  "name": "fiber-gis-network-mapping-workspace",
+  "name": "fibergis",
   "private": true,
   "version": "1.0.0",
-  "description": "FiberGIS – Advanced Fiber Network Mapping and Management System",
+  "description": "FiberGIS - FTTH fiber network mapping and management",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
-    "dev": "npm --prefix \"network mapping\" run dev",
-    "build": "npm --prefix \"network mapping\" run build",
-    "start": "npm --prefix \"network mapping\" start",
-    "server": "npm --prefix \"network mapping\" run server"
+    "dev": "npm run dev -w @fibergis/web",
+    "dev:web": "npm run dev -w @fibergis/web",
+    "server": "npm run server -w @fibergis/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   }
 }
-
