@@ -4,9 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { generateLogicalPorts, type LogicalPortStatus, type PonTechnology, summarizePorts } from '@fibergis/shared';
 
+import { requestConfirm } from '../../stores/confirmStore';
 import { updateEquipmentPort } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
-import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 import { PORT_STATUS_STYLE } from '../catalog/componentCatalog';
 
@@ -22,7 +22,6 @@ export const PortManagerModal: React.FC = () => {
   const { cables, splitters, customers } = useNetworkStore(
     useShallow((s) => ({ cables: s.cables, splitters: s.splitters, customers: s.customers })),
   );
-  const showToast = useToastStore((s) => s.show);
 
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [viewTab, setViewTab] = useState<'table' | 'visual'>('table');
@@ -94,22 +93,18 @@ export const PortManagerModal: React.FC = () => {
 
   if (!isPortManagerOpen || !equipment) return null;
 
-  const changeStatus = (status: LogicalPortStatus) => {
+  const changeStatus = async (status: LogicalPortStatus) => {
     if (!selected) return;
     if (selected.status === 'Used' && status !== 'Used') {
-      if (
-        !window.confirm(
-          `Port ${selected.slotCardPort || selected.portNumber} is currently in use. Changing status may disrupt subscriber connections. Continue?`,
-        )
-      )
-        return;
+      const confirmed = await requestConfirm({
+        title: 'Change port status',
+        message: `Port ${selected.slotCardPort || selected.portNumber} is in use. Changing its status may disrupt subscriber connections.`,
+        confirmLabel: `Mark ${status}`,
+        tone: 'danger',
+      });
+      if (!confirmed) return;
     }
     updateEquipmentPort(equipment.id, selected.id, { status });
-    showToast(
-      'info',
-      'Port Updated',
-      `Port ${selected.slotCardPort || selected.portNumber} status changed to ${status}`,
-    );
   };
 
   const isOlt = equipment.type === 'OLT';
@@ -447,7 +442,7 @@ export const PortManagerModal: React.FC = () => {
                   {(['Available', 'Used', 'Reserved', 'Damaged'] as LogicalPortStatus[]).map((st) => (
                     <button
                       key={st}
-                      onClick={() => changeStatus(st)}
+                      onClick={() => void changeStatus(st)}
                       className={`py-2 rounded-xl border text-xs font-bold transition-all ${
                         selected.status === st
                           ? 'bg-slate-900 text-white border-slate-900 shadow-xs'

@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { getFiberColor, type SpliceRecord } from '@fibergis/shared';
 
+import { requestConfirm } from '../../stores/confirmStore';
 import { addSplice, removeSplice } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -84,10 +85,14 @@ export const SplicingModal: React.FC = () => {
     }
   };
 
-  const handleDeleteSplice = (spliceId: string) => {
-    if (window.confirm('Delete this fiber core fusion splice mapping?')) {
-      removeSplice(currentClosure.id, spliceId);
-    }
+  const handleDeleteSplice = async (spliceId: string) => {
+    const confirmed = await requestConfirm({
+      title: 'Delete splice',
+      message: 'Remove this fusion splice mapping from the closure?',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (confirmed) removeSplice(currentClosure.id, spliceId);
   };
 
   return (
@@ -375,7 +380,7 @@ export const SplicingModal: React.FC = () => {
                       <td className="py-2.5 px-3 text-right">
                         <button
                           type="button"
-                          onClick={() => handleDeleteSplice(spl.id)}
+                          onClick={() => void handleDeleteSplice(spl.id)}
                           className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
                           title="Delete Splice"
                         >

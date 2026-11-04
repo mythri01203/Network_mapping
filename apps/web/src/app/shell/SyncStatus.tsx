@@ -3,7 +3,7 @@ import { Cloud, CloudAlert, CloudOff, CloudUpload, Loader2, type LucideIcon, Ref
 
 import { syncEngine } from '../../api/syncEngine';
 import { cn, MenuItem, MenuSeparator, Popover } from '../../components/ui';
-import { confirmAction } from '../../lib/browser';
+import { requestConfirm } from '../../stores/confirmStore';
 import { type SyncPhase, useSyncStore } from '../../stores/syncStore';
 
 interface PhaseMeta {
@@ -187,13 +187,14 @@ function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error,
             danger
             onClick={() => {
               close();
-              if (
-                confirmAction(
-                  `Discard ${pendingCount} unsaved change${pendingCount === 1 ? '' : 's'} and reload the network from the server?`,
-                )
-              ) {
-                void syncEngine.discardLocalChanges();
-              }
+              void requestConfirm({
+                title: 'Discard unsaved changes',
+                message: `Discard ${pendingCount} unsaved change${pendingCount === 1 ? '' : 's'} and reload the network from the server?`,
+                confirmLabel: 'Discard changes',
+                tone: 'danger',
+              }).then((confirmed) => {
+                if (confirmed) void syncEngine.discardLocalChanges();
+              });
             }}
           />
         </>

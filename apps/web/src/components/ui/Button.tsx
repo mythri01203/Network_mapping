@@ -3,7 +3,7 @@ import { Loader2, type LucideIcon } from 'lucide-react';
 
 import { cn } from './cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'subtle' | 'dark';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'destructive' | 'subtle' | 'dark';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -17,6 +17,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'bg-slate-100 text-slate-700 border border-transparent hover:bg-slate-200 hover:text-slate-900 disabled:text-slate-400',
   danger:
     'bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300 active:bg-red-100 disabled:text-red-300',
+  destructive:
+    'bg-red-600 text-white border border-red-600 hover:bg-red-700 hover:border-red-700 active:bg-red-800 disabled:bg-red-300 disabled:border-red-300',
   dark: 'bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700 hover:text-white disabled:text-slate-500',
 };
 

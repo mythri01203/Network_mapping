@@ -112,7 +112,7 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
             size="sm"
             icon={Trash2}
             className="ml-auto"
-            onClick={() => deleteEquipment(equipment.id)}
+            onClick={() => void deleteEquipment(equipment.id)}
           >
             Delete
           </Button>

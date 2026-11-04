@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
 import { ModalHost } from './ModalHost';
+import { ConfirmDialogHost } from './shell/ConfirmDialogHost';
 import { LeftSidebar } from './shell/LeftSidebar';
 import { ToastNotifications } from './shell/ToastNotifications';
 import { TopNavBar } from './shell/TopNavBar';
@@ -55,6 +56,7 @@ const AppContent: React.FC = () => {
         </Suspense>
       </div>
       <ModalHost />
+      <ConfirmDialogHost />
       <ToastNotifications />
     </div>
   );

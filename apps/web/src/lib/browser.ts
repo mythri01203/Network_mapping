@@ -1,8 +1,3 @@
-/** Asks the user to confirm a destructive action. Outside a browser (tests) it always confirms. */
-export function confirmAction(message: string): boolean {
-  return typeof window === 'undefined' || typeof window.confirm !== 'function' ? true : window.confirm(message);
-}
-
 /** True when a keyboard event comes from a text field, so global shortcuts should stay out of the way. */
 export function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;

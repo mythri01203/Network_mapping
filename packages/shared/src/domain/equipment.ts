@@ -167,7 +167,7 @@ export function deleteEquipment(data: NetworkData, id: string): CommandResult<Eq
     },
     {
       confirm: `Delete equipment ${id} (${target.name})?${splitterNote} You can undo this with Ctrl+Z.`,
-      notice: notice('info', 'Equipment Deleted', `Removed ${id} from network infrastructure`),
+      notice: notice('info', 'Equipment Deleted', `Removed ${target.name} (${id}). Press Ctrl+Z to undo.`),
       audit: [
         {
           action: 'EQUIPMENT_DELETED',

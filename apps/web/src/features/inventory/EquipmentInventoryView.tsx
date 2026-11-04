@@ -331,7 +331,7 @@ export const EquipmentInventoryView: React.FC = () => {
                         )}
 
                         <button
-                          onClick={() => deleteEquipment(eq.id)}
+                          onClick={() => void deleteEquipment(eq.id)}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           title="Delete Equipment"
                         >

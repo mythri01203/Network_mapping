@@ -21,8 +21,8 @@ import {
 } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
-import { confirmAction } from '../lib/browser';
 import { browserStorage, readJson, removeKeys, storageKey, writeJson } from '../lib/storage';
+import { requestConfirm } from './confirmStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { type SelectedObject, type SelectedObjectType, useUiStore } from './uiStore';
@@ -82,6 +82,9 @@ export interface CommandOptions {
   silent?: boolean;
   /** The caller already confirmed with the user. */
   skipConfirm?: boolean;
+  /** Title and button label for the confirmation dialog, when the command asks for one. */
+  confirmTitle?: string;
+  confirmLabel?: string;
 }
 
 export interface History {
@@ -94,10 +97,13 @@ export interface NetworkState extends NetworkSnapshot {
   history: History;
 
   /**
-   * Runs a domain command against the latest network: failures surface as a toast, confirmations go
-   * through the browser dialog, and successes patch state, notify the user, and extend the audit trail.
+   * Runs a domain command against the latest network: failures surface as a toast, and successes patch
+   * state, notify the user, and extend the audit trail. A command that needs confirmation returns `null`
+   * here and is re-run once the user accepts the dialog; use `runConfirmedCommand` to await that outcome.
    */
   runCommand: <T>(command: Command<T>, options?: CommandOptions) => CommandSuccess<T> | null;
+  /** Like `runCommand`, but resolves after any confirmation dialog with the applied result (or `null`). */
+  runConfirmedCommand: <T>(command: Command<T>, options?: CommandOptions) => Promise<CommandSuccess<T> | null>;
   logAudit: (...entries: AuditEntry[]) => void;
   undo: () => void;
   redo: () => void;
@@ -197,29 +203,55 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     return true;
   };
 
+  const evaluate = <T>(command: Command<T>): CommandSuccess<T> | null => {
+    const state = get();
+    const role = useUiStore.getState().userRole;
+    const result = command(pickData(state), {
+      now: new Date(),
+      actor: `${role} User`,
+      fallbackLocation: state.projectStartPoint ?? undefined,
+    });
+    if (result.ok) return result;
+    showToast(result.error.tone, result.error.title, result.error.message);
+    return null;
+  };
+
+  const apply = <T>(result: CommandSuccess<T>, options: CommandOptions) => {
+    commit(result.patch);
+    if (options.silent) return;
+    if (result.notice) showToast(result.notice.tone, result.notice.title, result.notice.message);
+    get().logAudit(...result.audit);
+  };
+
   return {
     ...initial,
     history: freshHistory(initial),
 
     runCommand: (command, options = {}) => {
-      const state = get();
-      const now = new Date();
-      const role = useUiStore.getState().userRole;
-      const result = command(pickData(state), {
-        now,
-        actor: `${role} User`,
-        fallbackLocation: state.projectStartPoint ?? undefined,
-      });
-      if (!result.ok) {
-        showToast(result.error.tone, result.error.title, result.error.message);
+      const result = evaluate(command);
+      if (!result) return null;
+      if (result.confirm && !options.skipConfirm) {
+        void get().runConfirmedCommand(command, options);
         return null;
       }
-      if (result.confirm && !options.skipConfirm && !confirmAction(result.confirm)) return null;
-      commit(result.patch);
-      if (!options.silent) {
-        if (result.notice) showToast(result.notice.tone, result.notice.title, result.notice.message);
-        get().logAudit(...result.audit);
+      apply(result, options);
+      return result;
+    },
+
+    runConfirmedCommand: async (command, options = {}) => {
+      const result = evaluate(command);
+      if (!result) return null;
+      if (result.confirm && !options.skipConfirm) {
+        const confirmed = await requestConfirm({
+          title: options.confirmTitle ?? 'Confirm change',
+          message: result.confirm,
+          confirmLabel: options.confirmLabel ?? 'Confirm',
+          tone: 'danger',
+        });
+        // Re-run against the network as it is now; it may have changed while the dialog was open.
+        return confirmed ? get().runCommand(command, { ...options, skipConfirm: true }) : null;
       }
+      apply(result, options);
       return result;
     },
 

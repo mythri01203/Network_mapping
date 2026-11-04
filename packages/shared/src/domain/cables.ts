@@ -157,7 +157,7 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
         /\s+/g,
         ' ',
       ),
-      notice: notice('info', 'Cable Deleted', `Removed cable ${id} from map`),
+      notice: notice('info', 'Cable Deleted', `Removed cable ${id}. Press Ctrl+Z to undo.`),
       audit: [
         {
           action: 'CABLE_DELETED',

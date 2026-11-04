@@ -20,8 +20,9 @@ import type {
 import * as domain from '@fibergis/shared';
 
 import { syncEngine } from '../api/syncEngine';
-import { confirmAction, downloadFile } from '../lib/browser';
+import { downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';
+import { requestConfirm } from './confirmStore';
 import { useMapStore } from './mapStore';
 import { type Command, type CommandOptions, getNetworkData, getNetworkSnapshot, useNetworkStore } from './networkStore';
 import { showToast } from './toastStore';
@@ -40,8 +41,14 @@ export const updateEquipment = (item: Equipment, options?: Pick<CommandOptions, 
   run((data) => domain.updateEquipment(data, item), options);
 };
 
-export function deleteEquipment(id: string, options?: Pick<CommandOptions, 'skipConfirm'>): boolean {
-  if (!run((data) => domain.deleteEquipment(data, id), options)) return false;
+/** Deletes equipment after the user confirms; resolves `true` once it is removed. */
+export async function deleteEquipment(id: string, options?: Pick<CommandOptions, 'skipConfirm'>): Promise<boolean> {
+  const result = await useNetworkStore.getState().runConfirmedCommand((data) => domain.deleteEquipment(data, id), {
+    ...options,
+    confirmTitle: 'Delete equipment',
+    confirmLabel: 'Delete',
+  });
+  if (!result) return false;
   const trace = useTraceStore.getState();
   if (trace.equipmentIds.includes(id)) trace.clear();
   return true;
@@ -73,8 +80,14 @@ export const updateCable = (item: Cable, options?: Pick<CommandOptions, 'silent'
   run((data) => domain.updateCable(data, item), options);
 };
 
-export function deleteCable(id: string, options?: Pick<CommandOptions, 'skipConfirm'>): boolean {
-  if (!run((data) => domain.deleteCable(data, id), options)) return false;
+/** Deletes a cable after the user confirms; resolves `true` once it is removed. */
+export async function deleteCable(id: string, options?: Pick<CommandOptions, 'skipConfirm'>): Promise<boolean> {
+  const result = await useNetworkStore.getState().runConfirmedCommand((data) => domain.deleteCable(data, id), {
+    ...options,
+    confirmTitle: 'Delete cable',
+    confirmLabel: 'Delete',
+  });
+  if (!result) return false;
   const trace = useTraceStore.getState();
   if (trace.cableIds.includes(id)) trace.clear();
   return true;
@@ -220,9 +233,13 @@ export async function restoreSystem(json: string): Promise<boolean> {
 
 /** Reloads the demo network. The component catalog is user configuration, so it is kept. */
 export async function resetToSampleData(): Promise<boolean> {
-  if (!confirmAction('Reset the entire network to the bundled sample dataset? All network changes will be lost.')) {
-    return false;
-  }
+  const confirmed = await requestConfirm({
+    title: 'Reset to sample data',
+    message: 'Replace the entire network with the bundled sample dataset? All network changes will be lost.',
+    confirmLabel: 'Reset network',
+    tone: 'danger',
+  });
+  if (!confirmed) return false;
   const outcome = await syncEngine.reset();
   if (outcome === 'failed') return false;
   clearTransientState();

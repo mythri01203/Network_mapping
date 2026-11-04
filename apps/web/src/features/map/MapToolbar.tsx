@@ -28,8 +28,7 @@ import { EQUIPMENT_DRAG_TYPE, isTypingTarget } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteCable, deleteEquipment } from '../../stores/networkActions';
 import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
-import { useToastStore } from '../../stores/toastStore';
-import { selectionLabel, useUiStore } from '../../stores/uiStore';
+import { useUiStore } from '../../stores/uiStore';
 import { cableStyle } from '../../theme/network';
 import { BUILT_IN_COMPONENTS } from '../catalog/componentCatalog';
 import { formatDistance } from './markerIcons';
@@ -417,17 +416,12 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
       setMeasuringPoints: s.setMeasuringPoints,
     })),
   );
-  const { setModalOpen, selectedObject, setSelectedObject } = useUiStore(
-    useShallow((s) => ({
-      setModalOpen: s.setModalOpen,
-      selectedObject: s.selectedObject,
-      setSelectedObject: s.select,
-    })),
+  const { setModalOpen, selectedObject } = useUiStore(
+    useShallow((s) => ({ setModalOpen: s.setModalOpen, selectedObject: s.selectedObject })),
   );
   const { undo, redo, canUndo, canRedo } = useNetworkStore(
     useShallow((s) => ({ undo: s.undo, redo: s.redo, canUndo: selectCanUndo(s), canRedo: selectCanRedo(s) })),
   );
-  const showToast = useToastStore((s) => s.show);
 
   const [menu, setMenu] = useState<null | 'equipment' | 'cable'>(null);
   const closeMenu = () => setMenu(null);
@@ -465,14 +459,10 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   };
 
   const canDelete = selectedObject?.type === 'cable' || selectedObject?.type === 'equipment';
+  // Once confirmed, the store clears the selection and the domain notice explains how to undo.
   const deleteSelected = () => {
-    if (!selectedObject) return;
-    const name = selectionLabel(selectedObject);
-    if (selectedObject.type === 'cable') deleteCable(selectedObject.data.id);
-    else if (selectedObject.type === 'equipment') deleteEquipment(selectedObject.data.id);
-    else return;
-    setSelectedObject(null);
-    showToast('info', 'Deleted', `${name} was removed. Press Ctrl+Z to undo.`);
+    if (selectedObject?.type === 'cable') void deleteCable(selectedObject.data.id);
+    else if (selectedObject?.type === 'equipment') void deleteEquipment(selectedObject.data.id);
   };
 
   const handlers = useRef({ selectTool, startMeasure, deleteSelected, canDelete, setMenu });

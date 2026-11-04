@@ -4,6 +4,7 @@ import { createBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { storageKey } from '../lib/storage';
+import { useConfirmStore } from './confirmStore';
 import * as actions from './networkActions';
 import { getNetworkSnapshot, MAX_HISTORY, selectCanRedo, selectCanUndo, useNetworkStore } from './networkStore';
 import { useToastStore } from './toastStore';
@@ -25,6 +26,7 @@ beforeEach(() => {
   useUiStore.setState({ selectedObject: null });
   useToastStore.setState({ toasts: [] });
   useTraceStore.getState().clear();
+  useConfirmStore.setState({ pending: null });
 });
 
 afterEach(() => {
@@ -77,36 +79,46 @@ describe('runCommand', () => {
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
-  it('asks for confirmation and aborts when the user declines', () => {
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal('window', { confirm });
+  it('asks for confirmation and aborts when the user declines', async () => {
     const target = addLooseEquipment();
 
-    expect(actions.deleteEquipment(target.id)).toBe(false);
-    expect(confirm).toHaveBeenCalledOnce();
+    const deleted = actions.deleteEquipment(target.id);
+    expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Delete equipment', tone: 'danger' });
+    useConfirmStore.getState().respond(false);
+
+    await expect(deleted).resolves.toBe(false);
+    expect(useConfirmStore.getState().pending).toBeNull();
     expect(useNetworkStore.getState().equipment).toContain(target);
   });
 
-  it('skips the dialog when the caller already confirmed', () => {
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal('window', { confirm });
+  it('applies the command once the user confirms', async () => {
     const target = addLooseEquipment();
 
-    expect(actions.deleteEquipment(target.id, { skipConfirm: true })).toBe(true);
-    expect(confirm).not.toHaveBeenCalled();
+    const deleted = actions.deleteEquipment(target.id);
+    useConfirmStore.getState().respond(true);
+
+    await expect(deleted).resolves.toBe(true);
+    expect(useNetworkStore.getState().equipment.some((e) => e.id === target.id)).toBe(false);
+  });
+
+  it('skips the dialog when the caller already confirmed', async () => {
+    const target = addLooseEquipment();
+
+    await expect(actions.deleteEquipment(target.id, { skipConfirm: true })).resolves.toBe(true);
+    expect(useConfirmStore.getState().pending).toBeNull();
     expect(useNetworkStore.getState().equipment.some((e) => e.id === target.id)).toBe(false);
   });
 });
 
 describe('selection sync', () => {
-  it('follows edits to the selected record and clears it once deleted', () => {
+  it('follows edits to the selected record and clears it once deleted', async () => {
     const target = addLooseEquipment();
     useUiStore.getState().select({ type: 'equipment', data: target });
 
     actions.updateEquipment({ ...target, name: 'Edited' });
     expect(useUiStore.getState().selectedObject?.data).toMatchObject({ id: target.id, name: 'Edited' });
 
-    actions.deleteEquipment(target.id, { skipConfirm: true });
+    await actions.deleteEquipment(target.id, { skipConfirm: true });
     expect(useUiStore.getState().selectedObject).toBeNull();
   });
 });

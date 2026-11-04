@@ -57,7 +57,13 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
           <Button size="sm" icon={Table2} onClick={openCoreTable}>
             Core table
           </Button>
-          <Button variant="danger" size="sm" icon={Trash2} className="ml-auto" onClick={() => deleteCable(cable.id)}>
+          <Button
+            variant="danger"
+            size="sm"
+            icon={Trash2}
+            className="ml-auto"
+            onClick={() => void deleteCable(cable.id)}
+          >
             Delete
           </Button>
         </>
