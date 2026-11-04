@@ -7,3 +7,6 @@ export const isoDate = (now: Date = new Date()) =>
 /** Local timestamp as `YYYY-MM-DD HH:mm`, the format used for fault and log records. */
 export const formatTimestamp = (now: Date = new Date()) =>
   `${isoDate(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+/** Local timestamp as `YYYY-MM-DD HH:mm:ss`; sorts chronologically as a plain string (audit trail). */
+export const formatLogTimestamp = (now: Date = new Date()) => `${formatTimestamp(now)}:${pad(now.getSeconds())}`;
