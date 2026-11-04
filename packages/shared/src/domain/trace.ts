@@ -10,7 +10,7 @@ export const RX_SENSITIVITY_DBM = -28;
 export const DEFAULT_TX_POWER_DBM = 3;
 
 export interface TraceData {
-  equipments: Equipment[];
+  equipment: Equipment[];
   cables: Cable[];
   splitters: Splitter[];
   closures: JointClosure[];
@@ -97,7 +97,7 @@ export function findUpstreamChain(
   preferredCableIds: string[] = [],
 ): UpstreamHop[] {
   const hops: UpstreamHop[] = [];
-  const start = data.equipments.find((e) => e.id === startEquipmentId);
+  const start = data.equipment.find((e) => e.id === startEquipmentId);
   if (!start || start.type === 'OLT') return hops;
 
   const visitedCables = new Set<string>();
@@ -111,7 +111,7 @@ export function findUpstreamChain(
     if (candidates.length === 0) break;
     const cable = candidates.find((c) => preferredCableIds.includes(c.id)) || candidates[0];
     visitedCables.add(cable.id);
-    const from = cable.startEquipmentId ? data.equipments.find((e) => e.id === cable.startEquipmentId) : undefined;
+    const from = cable.startEquipmentId ? data.equipment.find((e) => e.id === cable.startEquipmentId) : undefined;
     hops.unshift({ cable, from });
     if (!from || from.type === 'OLT' || visitedEquipment.has(from.id)) break;
     visitedEquipment.add(from.id);
@@ -122,7 +122,7 @@ export function findUpstreamChain(
 
 /** Returns the OLT that ultimately feeds an equipment (or the equipment itself if it is an OLT). */
 export function findServingOlt(equipmentId: string, data: TraceData, preferredCableIds: string[] = []) {
-  const eq = data.equipments.find((e) => e.id === equipmentId);
+  const eq = data.equipment.find((e) => e.id === equipmentId);
   if (eq?.type === 'OLT') return { olt: eq, hops: [] as UpstreamHop[] };
   const hops = findUpstreamChain(equipmentId, data, preferredCableIds);
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : undefined;
@@ -140,7 +140,7 @@ export function collectDownstream(equipmentId: string, data: TraceData) {
       .filter((c) => c.startEquipmentId === current)
       .forEach((c) => {
         const next = c.endEquipmentId;
-        const nextEq = next ? data.equipments.find((e) => e.id === next) : undefined;
+        const nextEq = next ? data.equipment.find((e) => e.id === next) : undefined;
         // Do not cross into another OLT's serving area via backhaul links.
         if (nextEq?.type === 'OLT') return;
         if (cableIds.has(c.id)) return;
@@ -159,7 +159,7 @@ export function collectDownstream(equipmentId: string, data: TraceData) {
 }
 
 const findPatchOdf = (olt: Equipment, data: TraceData) =>
-  data.equipments
+  data.equipment
     .filter((e) => e.type === 'ODF')
     .map((e) => ({
       e,
@@ -397,7 +397,7 @@ function buildTrunk(
 
 export function traceCustomer(customer: Customer, data: TraceData): TraceResult {
   const builder = new PathBuilder(data);
-  const fat = data.equipments.find((e) => e.id === customer.terminalBoxId);
+  const fat = data.equipment.find((e) => e.id === customer.terminalBoxId);
   const splitter = data.splitters.find((s) => s.id === customer.splitterId);
   let txPowerDbm: number | undefined;
 
@@ -542,8 +542,8 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
 
 export function traceCable(cable: Cable, data: TraceData): TraceResult {
   const builder = new PathBuilder(data);
-  const start = cable.startEquipmentId ? data.equipments.find((e) => e.id === cable.startEquipmentId) : undefined;
-  const end = cable.endEquipmentId ? data.equipments.find((e) => e.id === cable.endEquipmentId) : undefined;
+  const start = cable.startEquipmentId ? data.equipment.find((e) => e.id === cable.startEquipmentId) : undefined;
+  const end = cable.endEquipmentId ? data.equipment.find((e) => e.id === cable.endEquipmentId) : undefined;
   const isCoax = cable.cableCategory === 'Coaxial';
   let txPowerDbm: number | undefined;
 
@@ -594,4 +594,59 @@ export function estimateRxForSplitter(fat: Equipment, splitter: Splitter, data: 
     hops,
     rxDbm: tx !== undefined ? round1(tx - builder.lossDb - dropLoss) : undefined,
   };
+}
+
+/**
+ * Resolves any searchable identifier (customer ID or ONT serial, equipment, cable, `OLT/PON` port,
+ * fault, closure or splitter) to the fiber path that serves it.
+ */
+export function resolveTraceTarget(targetId: string, data: TraceData): TraceResult | null {
+  const id = targetId.trim();
+  if (!id) return null;
+  const findEquipment = (equipmentId?: string) =>
+    equipmentId ? data.equipment.find((e) => e.id === equipmentId) : undefined;
+  const findCable = (cableId?: string) => (cableId ? data.cables.find((c) => c.id === cableId) : undefined);
+
+  const customer = data.customers.find((c) => c.id === id || c.ontSerialNumber === id);
+  if (customer) return traceCustomer(customer, data);
+
+  const eq = findEquipment(id);
+  if (eq) return traceEquipment(eq, data);
+
+  const cable = findCable(id);
+  if (cable) return traceCable(cable, data);
+
+  // "OLT-01/PON-03" or a bare PON port ID: trace the feeder leaving that PON.
+  const [oltPart, ponPart] = id.includes('/') ? id.split('/') : [undefined, id];
+  const olt = data.equipment.find(
+    (e) => e.type === 'OLT' && (oltPart ? e.id === oltPart : e.ponPorts?.some((p) => p.id === ponPart)),
+  );
+  const pon = olt?.ponPorts?.find((p) => p.id === ponPart);
+  if (olt && pon) {
+    const feeder = findCable(pon.connectedFeederCableId);
+    return feeder ? traceCable(feeder, data) : traceEquipment(olt, data);
+  }
+
+  const fault = data.faults.find((f) => f.id === id);
+  if (fault) {
+    const faultCable = findCable(fault.affectedCableId);
+    if (faultCable) return traceCable(faultCable, data);
+    const faultEq = findEquipment(fault.affectedEquipmentId);
+    if (faultEq) return traceEquipment(faultEq, data);
+    const faultCustomer = data.customers.find((c) => fault.affectedCustomerIds.includes(c.id));
+    return faultCustomer ? traceCustomer(faultCustomer, data) : null;
+  }
+
+  const closure = data.closures.find((c) => c.id === id);
+  if (closure) {
+    const closureCable = findCable(closure.cableAId) ?? findCable(closure.cableBId);
+    return closureCable ? traceCable(closureCable, data) : null;
+  }
+
+  const splitter = data.splitters.find((s) => s.id === id);
+  if (splitter) {
+    const host = findEquipment(splitter.terminalBoxId);
+    return host ? traceEquipment(host, data) : null;
+  }
+  return null;
 }

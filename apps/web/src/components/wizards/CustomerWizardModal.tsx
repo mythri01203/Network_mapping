@@ -113,7 +113,7 @@ export const CustomerWizardModal: React.FC = () => {
     return estimateRxForSplitter(
       selectedTerminal,
       activeSplitter,
-      { equipments, cables, splitters, closures, customers, faults },
+      { equipment: equipments, cables, splitters, closures, customers, faults },
       dropLen,
     );
   }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults]);

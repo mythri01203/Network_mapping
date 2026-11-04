@@ -1,5 +1,6 @@
 import type { LogicalPortStatus } from '../model/enums';
 import type { Equipment, EquipmentPort } from '../model/types';
+import { isoDate } from './time';
 
 export function portTypeForEquipment(type: string): string {
   if (type === 'OLT') return 'PON';
@@ -51,7 +52,13 @@ export function generateLogicalPorts(eq: Equipment): EquipmentPort[] {
 }
 
 /** Marks the first matching port (by number, else first Available) as Used/Available and returns updated counts. */
-export function setPortUsage(eq: Equipment, portNumber: number | undefined, used: boolean, customerId?: string) {
+export function setPortUsage(
+  eq: Equipment,
+  portNumber: number | undefined,
+  used: boolean,
+  customerId?: string,
+  assignedDate = isoDate(),
+) {
   const ports = generateLogicalPorts(eq).map((p) => ({ ...p }));
   let target = portNumber !== undefined ? ports.find((p) => p.portNumber === portNumber) : undefined;
   if (used && (!target || target.status === 'Used' || target.status === 'Damaged')) {
@@ -61,7 +68,7 @@ export function setPortUsage(eq: Equipment, portNumber: number | undefined, used
   if (target) {
     target.status = used ? 'Used' : 'Available';
     target.customerId = used ? customerId : undefined;
-    target.assignedDate = used ? new Date().toISOString().split('T')[0] : undefined;
+    target.assignedDate = used ? assignedDate : undefined;
   }
   const summary = summarizePorts(ports);
   return {

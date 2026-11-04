@@ -46,12 +46,13 @@ export const DocumentManagerModal: React.FC = () => {
       return;
     }
 
-    addDocument({
+    const created = addDocument({
       title: newTitle,
       category: newCategory,
       equipmentId: newAssetId.startsWith('OLT') || newAssetId.startsWith('FAT') ? newAssetId : undefined,
       cableId: newAssetId.startsWith('CBL') ? newAssetId : undefined,
     });
+    if (!created) return;
 
     setIsUploadOpen(false);
     setNewTitle('');

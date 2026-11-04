@@ -33,7 +33,7 @@ export const FaultManagementModal: React.FC = () => {
 
   const handleCreateFault = (e: React.FormEvent) => {
     e.preventDefault();
-    recordNewFault({
+    const created = recordNewFault({
       title: faultTitle,
       type: faultType,
       severity,
@@ -42,6 +42,7 @@ export const FaultManagementModal: React.FC = () => {
       affectedCustomerIds: ['CUST-001', 'CUST-002', 'CUST-003', 'CUST-004'],
       affectedCores: [1, 2, 3, 4],
     });
+    if (!created) return;
     setActiveTab('active_faults');
   };
 

@@ -66,7 +66,7 @@ export const OperationsHubView: React.FC = () => {
       return;
     }
 
-    addWorkOrder({
+    const created = addWorkOrder({
       title: newTitle.trim(),
       type: newType,
       priority: newPriority,
@@ -75,6 +75,7 @@ export const OperationsHubView: React.FC = () => {
       technicianPhone: newTechPhone.trim(),
       notes: newNotes.trim(),
     });
+    if (!created) return;
     setIsNewOrderModalOpen(false);
     setNewTitle('');
     setNewNotes('');

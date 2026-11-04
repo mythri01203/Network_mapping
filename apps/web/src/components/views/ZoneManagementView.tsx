@@ -26,7 +26,7 @@ export const ZoneManagementView: React.FC = () => {
       return;
     }
 
-    addZone({
+    const created = addZone({
       name: newZoneName,
       areaCode: newAreaCode,
       homePassed: Number(newHomesPassed),
@@ -37,6 +37,7 @@ export const ZoneManagementView: React.FC = () => {
       penetrationRatePct: 0,
       status: newStatus,
     });
+    if (!created) return;
 
     setIsAddModalOpen(false);
     setNewZoneName('');
