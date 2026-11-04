@@ -236,26 +236,58 @@
 }
 
 .leaflet-tooltip.gis-tooltip {
-  background: var(--color-slate-900);
-  color: #fff;
-  border: 0;
-  border-radius: 4px;
-  padding: 3px 7px;
+  background: #fff;
+  color: var(--color-slate-700);
+  border: 1px solid var(--color-slate-200);
+  border-radius: 6px;
+  padding: 5px 8px;
   font-size: 11px;
-  font-weight: 500;
-  box-shadow: 0 2px 8px rgb(15 23 42 / 0.25);
+  line-height: 1.35;
+  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.18);
 }
 .leaflet-tooltip-top.gis-tooltip::before {
-  border-top-color: var(--color-slate-900);
+  border-top-color: #fff;
 }
 .leaflet-tooltip-bottom.gis-tooltip::before {
-  border-bottom-color: var(--color-slate-900);
+  border-bottom-color: #fff;
 }
 .leaflet-tooltip-left.gis-tooltip::before {
-  border-left-color: var(--color-slate-900);
+  border-left-color: #fff;
 }
 .leaflet-tooltip-right.gis-tooltip::before {
-  border-right-color: var(--color-slate-900);
+  border-right-color: #fff;
+}
+.gis-tip__title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-slate-900);
+  white-space: nowrap;
+}
+.gis-tip__meta {
+  color: var(--color-slate-500);
+  white-space: nowrap;
+}
+
+.leaflet-popup.gis-popup .leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+}
+.leaflet-popup.gis-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+  overflow: hidden;
+}
+.leaflet-popup.gis-popup a.leaflet-popup-close-button {
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font: 400 18px/22px var(--font-sans);
+  color: var(--color-slate-400);
+}
+.leaflet-popup.gis-popup a.leaflet-popup-close-button:hover {
+  background: var(--color-slate-100);
+  color: var(--color-slate-700);
 }
 
 /* Trace + fault line styling */
@@ -272,22 +304,147 @@
   stroke-dasharray: 4, 6;
 }
 
-/* Equipment markers */
-.gis-equipment-marker {
+/* Map markers (see features/map/markerIcons.ts) */
+.gis-marker,
+.gis-label-anchor {
+  background: none;
+  border: 0;
+}
+.gis-pin {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  color: #fff;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.35),
+    0 2px 6px rgb(15 23 42 / 0.2);
   transition:
     transform 120ms ease-out,
-    filter 120ms ease-out;
-  cursor: pointer;
+    box-shadow 120ms ease-out;
 }
-.gis-equipment-marker:hover {
-  transform: scale(1.1);
-  z-index: 1000 !important;
+.gis-pin svg {
+  display: block;
+  flex-shrink: 0;
 }
-.gis-equipment-marker.selected {
-  transform: scale(1.15);
-  filter: drop-shadow(0 0 0 2px var(--color-blue-500)) drop-shadow(0 2px 6px rgb(37 99 235 / 0.45));
-  z-index: 1001 !important;
+.gis-pin--square {
+  border-radius: 7px;
 }
-.gis-equipment-marker.faulty {
-  filter: drop-shadow(0 0 4px rgb(220 38 38 / 0.75));
+.gis-pin--minor {
+  background: #fff;
+  color: var(--pin-color);
+  border-color: var(--pin-color);
+  border-width: 1.5px;
+}
+.gis-pin--customer {
+  border-width: 1.5px;
+}
+.gis-pin--fault {
+  border-radius: 7px;
+}
+.gis-pin__status {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid #fff;
+  border-radius: 9999px;
+}
+.gis-pin__text {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+.leaflet-marker-icon.leaflet-interactive:hover .gis-pin {
+  transform: scale(1.12);
+}
+.gis-pin.is-selected {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px var(--color-blue-600),
+    0 4px 12px rgb(37 99 235 / 0.4);
+}
+.gis-pin.is-traced {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px #10b981,
+    0 2px 8px rgb(5 150 105 / 0.35);
+}
+.gis-pin.is-planned {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.gis-pin.is-faulty::after,
+.gis-pin--fault::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--pin-color, #dc2626);
+  animation: gis-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.gis-pin.is-faulty::after {
+  border-color: #dc2626;
+}
+@keyframes gis-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.gis-label {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--color-slate-800);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.2);
+  pointer-events: none;
+}
+
+.gis-gps {
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+.gis-gps__dot,
+.gis-gps__pulse {
+  position: absolute;
+  border-radius: 9999px;
+}
+.gis-gps__dot {
+  inset: 4px;
+  background: #2563eb;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.4);
+}
+.gis-gps__pulse {
+  inset: 0;
+  background: rgb(37 99 235 / 0.35);
+  animation: gis-pulse 1.8s ease-out infinite;
+}
+
+.gis-map--drawing .leaflet-container,
+.gis-map--drawing .leaflet-container.leaflet-grab {
+  cursor: crosshair;
+}
+.gis-map--drawing .leaflet-container.leaflet-dragging {
+  cursor: grabbing;
 }

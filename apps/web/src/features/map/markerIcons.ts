@@ -6,6 +6,7 @@ import { Bike, Flag, House, type LucideIcon, TriangleAlert } from 'lucide-react'
 import type { Customer, Equipment, EquipmentCategory, EquipmentStatus, EquipmentType, Fault } from '@fibergis/shared';
 
 import { equipmentIcon } from '../../components/ui/icons';
+import { type EquipmentLayerKey, equipmentLayerKey } from './layerFilters';
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -31,22 +32,6 @@ export function iconSvg(Icon: LucideIcon, size: number, strokeWidth = 2): string
 /* ------------------------------------------------------------------ */
 /* Equipment classification                                            */
 /* ------------------------------------------------------------------ */
-
-export type EquipmentLayerKey = 'olt' | 'odf' | 'fdms' | 'fdt' | 'fat' | 'splitters' | 'poles' | 'manholes' | 'cableTv';
-
-export function equipmentLayerKey(eq: Pick<Equipment, 'type' | 'category'>): EquipmentLayerKey | null {
-  const t = eq.type;
-  if (t === 'OLT') return 'olt';
-  if (eq.category === 'Cable TV Infrastructure' || t.startsWith('CATV') || t === 'Cable TV Headend') return 'cableTv';
-  if (t === 'ODF' || t === 'Fiber Patch Panel') return 'odf';
-  if (t === 'FDMS' || t === 'Fiber Distribution Cabinet') return 'fdms';
-  if (t === 'FDT') return 'fdt';
-  if (t === 'FAT' || t.includes('Terminal Box') || t === 'Distribution Point') return 'fat';
-  if (t === 'Fiber Splitter') return 'splitters';
-  if (t.includes('Pole')) return 'poles';
-  if (t === 'Manhole' || t === 'Handhole' || t === 'Underground Chamber') return 'manholes';
-  return null;
-}
 
 const CENTRAL_OFFICE_TYPES: EquipmentType[] = ['OLT', 'ODF', 'Fiber Patch Panel', 'Core Switch', 'Router', 'Firewall'];
 const SUPPORT_TYPES: EquipmentType[] = [
@@ -181,7 +166,7 @@ export function equipmentMarkerIcon(
     const fill = isMinor ? '' : `background:${color};`;
     return L.divIcon({
       html: `<div class="gis-pin ${shape} ${stateClasses(state, eq.status)}" style="--pin-color:${color};${fill}width:${size}px;height:${size}px">${glyph}${status}</div>`,
-      className: 'gis-marker',
+      className: 'gis-marker gis-marker--equipment',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
       tooltipAnchor: [0, -size / 2 - 2],

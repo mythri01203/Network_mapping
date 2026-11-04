@@ -24,6 +24,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/shared';
 
 import { cn, equipmentIcon, Switch } from '../../components/ui';
+import { EQUIPMENT_DRAG_TYPE, isTypingTarget } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteCable, deleteEquipment } from '../../stores/networkActions';
 import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
@@ -59,13 +60,6 @@ const CATEGORY_TINT: Record<string, string> = {
   'Cable TV Infrastructure': 'bg-orange-50 text-orange-700 ring-orange-100',
   Custom: 'bg-slate-100 text-slate-700 ring-slate-200',
 };
-
-function isTyping(target: EventTarget | null) {
-  const el = target as HTMLElement | null;
-  return (
-    !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
-  );
-}
 
 function useOutsideClose(open: boolean, setOpen: (v: boolean) => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -284,7 +278,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                     type="button"
                     draggable
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('application/fiber-equipment-type', c.type);
+                      e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, c.type);
                       e.dataTransfer.effectAllowed = 'copy';
                     }}
                     onClick={() => onPick(c)}
@@ -486,7 +480,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return;
       const h = handlers.current;
       const k = e.key.toLowerCase();
       if (k === 'v') h.selectTool();
@@ -632,7 +626,7 @@ export function MapModeBar({
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return;
+      if (isTypingTarget(e.target)) return;
       const k = keys.current;
       if (e.key === 'Escape') {
         e.preventDefault();

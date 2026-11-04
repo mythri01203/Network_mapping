@@ -16,6 +16,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { cn } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
+import type { OltFilter } from './layerFilters';
 
 type Basemap = 'google_streets' | 'google_satellite' | 'osm';
 
@@ -197,8 +198,6 @@ export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onReset
     </div>
   );
 }
-
-export type OltFilter = 'All' | 'GPON' | 'EPON';
 
 export function OltFilterControl({
   value,

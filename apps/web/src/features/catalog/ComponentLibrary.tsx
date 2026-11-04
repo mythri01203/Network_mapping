@@ -6,6 +6,7 @@ import type { CableType, EquipmentType } from '@fibergis/shared';
 
 import { OltChassisIcon } from '../../components/icons/OltChassisIcon';
 import { UtilityPoleIcon } from '../../components/icons/UtilityPoleIcon';
+import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -309,7 +310,7 @@ export const ComponentLibrary: React.FC = () => {
   });
 
   const handleDragStart = (e: React.DragEvent, type: EquipmentType) => {
-    e.dataTransfer.setData('application/fiber-equipment-type', type);
+    e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, type);
     e.dataTransfer.effectAllowed = 'copy';
   };
 
