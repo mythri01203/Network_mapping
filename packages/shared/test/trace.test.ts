@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import {
+  type TraceData,
+  budgetStatusFor,
+  collectDownstream,
+  findServingOlt,
+  traceCable,
+  traceEquipment,
+} from '../src/domain/trace';
+import { cable, equipment } from './fixtures';
+
+const data: TraceData = {
+  equipments: [
+    equipment({ id: 'OLT-01', type: 'OLT', category: 'Central Office' }),
+    equipment({ id: 'FDT-01', type: 'FDT' }),
+    equipment({ id: 'FAT-01', type: 'FAT' }),
+    equipment({ id: 'OLT-02', type: 'OLT', category: 'Central Office' }),
+  ],
+  cables: [
+    cable({
+      id: 'FEED-1',
+      type: 'Main Feeder Fiber',
+      startEquipmentId: 'OLT-01',
+      endEquipmentId: 'FDT-01',
+      lengthMeters: 2000,
+    }),
+    cable({ id: 'DIST-1', startEquipmentId: 'FDT-01', endEquipmentId: 'FAT-01', lengthMeters: 500 }),
+    cable({ id: 'BACKHAUL', startEquipmentId: 'OLT-02', endEquipmentId: 'OLT-01' }),
+  ],
+  splitters: [],
+  closures: [],
+  customers: [],
+  faults: [],
+};
+
+describe('budgetStatusFor', () => {
+  it('maps Rx power to a budget status', () => {
+    expect(budgetStatusFor(undefined)).toBe('Unknown');
+    expect(budgetStatusFor(Number.NaN)).toBe('Unknown');
+    expect(budgetStatusFor(-20)).toBe('Pass');
+    expect(budgetStatusFor(-26)).toBe('Warning');
+    expect(budgetStatusFor(-29)).toBe('Fail');
+  });
+});
+
+describe('findServingOlt', () => {
+  it('walks trunk cables back to the OLT', () => {
+    const { olt, hops } = findServingOlt('FAT-01', data);
+    expect(olt?.id).toBe('OLT-01');
+    expect(hops.map((h) => h.cable.id)).toEqual(['FEED-1', 'DIST-1']);
+  });
+
+  it('never follows inter-OLT backhaul', () => {
+    expect(findServingOlt('OLT-01', data).hops).toEqual([]);
+  });
+});
+
+describe('collectDownstream', () => {
+  it('includes every downstream cable and equipment', () => {
+    const result = collectDownstream('FDT-01', data);
+    expect(result.cableIds).toContain('DIST-1');
+    expect(result.equipmentIds).toContain('FAT-01');
+    expect(result.cableIds).not.toContain('FEED-1');
+  });
+});
+
+describe('traceEquipment', () => {
+  it('builds an OLT-first path with length and loss', () => {
+    const fat = data.equipments.find((e) => e.id === 'FAT-01')!;
+    const result = traceEquipment(fat, data);
+    expect(result.nodes[0].id).toBe('OLT-01');
+    expect(result.cableIds).toEqual(expect.arrayContaining(['FEED-1', 'DIST-1']));
+    expect(result.summary.totalLengthMeters).toBe(2500);
+    expect(result.summary.totalLossDb).toBeGreaterThan(0);
+  });
+});
+
+describe('traceCable', () => {
+  it('traces a cable back to its OLT', () => {
+    const result = traceCable(data.cables[1], data);
+    expect(result.summary.kind).toBe('cable');
+    expect(result.nodes.some((n) => n.id === 'OLT-01')).toBe(true);
+  });
+});

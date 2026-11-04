@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type NetworkZone } from '../../types/network';
+import type { NetworkZone } from '@fibergis/shared';
 import { MapPin, PlusCircle, Trash2 } from 'lucide-react';
 
 export const ZoneManagementView: React.FC = () => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { getFiberColor } from '../../constants/colorStandards';
+import { getFiberColor } from '@fibergis/shared';
 
 export const CableInventoryView: React.FC = () => {
   const { cables, setSelectedObject, setActiveMainView, flyToLocation, setIsCableWizardOpen, setIsBottomPanelOpen } =

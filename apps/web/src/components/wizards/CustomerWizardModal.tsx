@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { estimateRxForSplitter, budgetStatusFor } from '../../lib/trace';
+import { estimateRxForSplitter, budgetStatusFor } from '@fibergis/shared';
 import { X, Users, Check } from 'lucide-react';
 
 const isCustomerTerminalType = (type: string) =>

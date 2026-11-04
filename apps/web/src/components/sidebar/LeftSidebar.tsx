@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useNetwork } from '../../context/NetworkContext';
-import type { MainView } from '../../types/network';
+import type { MainView } from '../../types/ui';
 import { Popover, MenuItem, MenuLabel, MenuSeparator, cn } from '../ui';
 import { VIEW_META } from './navigation';
 

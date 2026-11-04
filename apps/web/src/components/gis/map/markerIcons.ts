@@ -2,14 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import L from 'leaflet';
 import { Bike, Flag, House, TriangleAlert, type LucideIcon } from 'lucide-react';
-import type {
-  Customer,
-  Equipment,
-  EquipmentCategory,
-  EquipmentStatus,
-  EquipmentType,
-  Fault,
-} from '../../../types/network';
+import type { Customer, Equipment, EquipmentCategory, EquipmentStatus, EquipmentType, Fault } from '@fibergis/shared';
 import { equipmentIcon } from '../../ui/icons';
 
 export function escapeHtml(value: unknown): string {

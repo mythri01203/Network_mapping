@@ -1,11 +1,17 @@
-import { type Equipment, type OpticalPowerInfo } from '../types/network';
+import type { SignalLevel } from '../model/enums';
+import type { Equipment, OpticalPowerInfo } from '../model/types';
 
-function classifyRx(rx: number, warn: number, critical: number): OpticalPowerInfo['signalLevel'] {
+/** Classifies a received optical power reading against warning/critical thresholds (dBm). */
+export function classifyRxPower(rx: number, warn: number, critical: number): SignalLevel {
   if (rx <= critical) return 'Critical';
   if (rx <= warn) return 'Warning';
   return 'Normal';
 }
 
+/**
+ * Returns the stored optical power reading, or a deterministic simulated sample for demo data.
+ * Only OLTs get simulated Tx/Rx values; other equipment reports `Unavailable`.
+ */
 export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
   if (eq.opticalPower) return eq.opticalPower;
 
@@ -42,7 +48,7 @@ export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
     lastUpdated: '2026-11-02 09:40 IST',
     txPowerDbm: tx,
     rxPowerDbm: rx,
-    signalLevel: classifyRx(rx, rxWarn, rxCritical),
+    signalLevel: classifyRxPower(rx, rxWarn, rxCritical),
     txMinDbm: txMin,
     txMaxDbm: txMax,
     rxMinDbm: rxMin,
@@ -50,11 +56,4 @@ export function simulatedOpticalPower(eq: Equipment): OpticalPowerInfo {
     rxCriticalDbm: rxCritical,
     history,
   };
-}
-
-export function powerStatusColor(level: OpticalPowerInfo['signalLevel']) {
-  if (level === 'Normal') return 'bg-emerald-500';
-  if (level === 'Warning') return 'bg-amber-400';
-  if (level === 'Critical') return 'bg-rose-500';
-  return 'bg-slate-400';
 }

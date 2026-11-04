@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { STANDARD_12_COLORS } from '../../constants/colorStandards';
+import { STANDARD_12_COLORS } from '@fibergis/shared';
 import { X, BookOpen, Map, ShieldCheck } from 'lucide-react';
 
 export const HelpModal: React.FC = () => {

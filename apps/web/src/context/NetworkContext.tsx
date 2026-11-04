@@ -14,14 +14,33 @@ import {
   type TracePathNode,
   type EquipmentImage,
   type ImageAnnotation,
-  type MainView,
   type NetworkZone,
   type NetworkDocument,
   type CatalogComponent,
   type EquipmentPort,
   type FiberCore,
   type SpliceRecord,
-} from '../types/network';
+  generateLogicalPorts,
+  summarizePorts,
+  setPortUsage,
+  nextSequentialId,
+  uniqueId,
+  equipmentIdPrefix,
+  cableIdPrefix,
+  polylineLengthMeters,
+  type TraceData,
+  type TraceResult,
+  type TraceSummary,
+  traceCustomer,
+  traceEquipment,
+  traceCable,
+  collectDownstream,
+  estimateRxForSplitter,
+  getFiberColor,
+  getTubeNumber,
+} from '@fibergis/shared';
+import type { MainView } from '../types/ui';
+import { escapeXml } from '../lib/xml';
 import {
   SAMPLE_EQUIPMENT,
   SAMPLE_CABLES,
@@ -34,26 +53,6 @@ import {
   SAMPLE_ZONES,
   SAMPLE_DOCUMENTS,
 } from '../data/sampleNetwork';
-import { generateLogicalPorts, summarizePorts, setPortUsage } from '../lib/ports';
-import {
-  nextSequentialId,
-  uniqueId,
-  equipmentIdPrefix,
-  cableIdPrefix,
-  escapeXml,
-  polylineLengthMeters,
-} from '../lib/ids';
-import {
-  type TraceData,
-  type TraceResult,
-  type TraceSummary,
-  traceCustomer,
-  traceEquipment,
-  traceCable,
-  collectDownstream,
-  estimateRxForSplitter,
-} from '../lib/trace';
-import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
 
 /**
  * Bump whenever the bundled sample network changes shape so stale browser data

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type Equipment } from '../../types/network';
+import type { Equipment } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, Trash2, Camera } from 'lucide-react';
 
 export const EquipmentInventoryView: React.FC = () => {

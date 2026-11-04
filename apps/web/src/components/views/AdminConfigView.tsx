@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type UserRole } from '../../types/network';
-import { STANDARD_12_COLORS, type FiberColorDef } from '../../constants/colorStandards';
+import { type UserRole, STANDARD_12_COLORS, type FiberColorDef } from '@fibergis/shared';
 import { Download, Upload, Search, Check, X, Layers } from 'lucide-react';
 
 export const AdminConfigView: React.FC = () => {

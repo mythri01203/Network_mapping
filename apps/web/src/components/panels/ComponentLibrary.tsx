@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type EquipmentType, type CableType } from '../../types/network';
+import type { EquipmentType, CableType } from '@fibergis/shared';
 import { Box, Search, ChevronLeft, ChevronRight, GripVertical, Plus, BookOpen } from 'lucide-react';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';

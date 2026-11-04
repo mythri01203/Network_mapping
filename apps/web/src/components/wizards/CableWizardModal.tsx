@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type CableType, type RouteStatus } from '../../types/network';
+import type { CableType, RouteStatus } from '@fibergis/shared';
 import { X, ChevronRight, ChevronLeft, Check, Cable as CableIcon, MapPin, CheckCircle2 } from 'lucide-react';
 
 export const CableWizardModal: React.FC = () => {

@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useNetwork } from '../../context/NetworkContext';
-import type { CoreStatus } from '../../types/network';
+import type { CoreStatus } from '@fibergis/shared';
 import { Tabs, Select, IconButton, Button, Badge, StatusBadge, EmptyState, ProgressBar, cn, cableColor } from '../ui';
 
 type Tab = 'cores' | 'trace' | 'audit';

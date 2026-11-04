@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import { useNetwork } from '../../context/NetworkContext';
-import { type Equipment, type EquipmentType } from '../../types/network';
-import { CABLE_TYPE_COLORS } from '../../constants/colorStandards';
+import type { Equipment, EquipmentType } from '@fibergis/shared';
+import { cableStyle } from '../../theme/network';
 import { BikerModePanel } from '../biker/BikerModePanel';
 import { Activity, Zap, X, Grid, Cpu } from 'lucide-react';
 import { getOltChassisSvgString, OltChassisIcon } from '../common/OltChassisIcon';
@@ -543,7 +543,7 @@ export const GISMap: React.FC = () => {
       const isSelected = selectedObject?.type === 'cable' && selectedObject.data.id === cable.id;
       const isTraced = activeTraceCableIds.includes(cable.id);
 
-      const styleDef = CABLE_TYPE_COLORS[cable.type] || { stroke: '#0284c7', strokeWidth: 3.5 };
+      const styleDef = cableStyle(cable.type);
 
       // Background halo for trace or selection
       if (isTraced || isSelected) {

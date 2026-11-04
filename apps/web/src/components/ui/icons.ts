@@ -29,7 +29,7 @@ import {
   Wifi,
   type LucideIcon,
 } from 'lucide-react';
-import type { CableType, EquipmentType } from '../../types/network';
+import type { EquipmentType } from '@fibergis/shared';
 
 export const EQUIPMENT_ICONS: Record<EquipmentType, LucideIcon> = {
   OLT: Server,
@@ -76,21 +76,6 @@ export const EQUIPMENT_ICONS: Record<EquipmentType, LucideIcon> = {
 
 export function equipmentIcon(type: string | undefined | null): LucideIcon {
   return (type && EQUIPMENT_ICONS[type as EquipmentType]) || Box;
-}
-
-/** Restrained, print-safe palette for cable classes (map strokes, legends, chips). */
-export const CABLE_TYPE_COLORS: Record<CableType, string> = {
-  'Main Feeder Fiber': '#1d4ed8',
-  'Distribution Fiber': '#0891b2',
-  'Drop Fiber': '#16a34a',
-  'Aerial Fiber': '#7c3aed',
-  'Underground Fiber': '#475569',
-  'Coaxial Cable': '#c2410c',
-  'Custom Cable': '#64748b',
-};
-
-export function cableColor(type: string | undefined | null): string {
-  return (type && CABLE_TYPE_COLORS[type as CableType]) || '#64748b';
 }
 
 export const CableIcon = Cable;

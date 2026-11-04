@@ -23,4 +23,5 @@ export type { KeyValueItem } from './Layout';
 export { Tabs } from './Tabs';
 export type { TabItem } from './Tabs';
 export { Popover, MenuItem, MenuLabel, MenuSeparator } from './Popover';
-export { EQUIPMENT_ICONS, equipmentIcon, CABLE_TYPE_COLORS, cableColor, CableIcon } from './icons';
+export { EQUIPMENT_ICONS, equipmentIcon, CableIcon } from './icons';
+export { cableColor } from '../../theme/network';

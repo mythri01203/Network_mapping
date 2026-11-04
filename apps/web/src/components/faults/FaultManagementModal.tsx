@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type Fault } from '../../types/network';
+import type { Fault } from '@fibergis/shared';
 import { X, AlertTriangle, Users, MapPin, CheckCircle2, Send, Plus } from 'lucide-react';
 
 export const FaultManagementModal: React.FC = () => {

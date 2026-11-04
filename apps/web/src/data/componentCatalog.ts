@@ -1,4 +1,4 @@
-import { type CatalogComponent } from '../types/network';
+import type { CatalogComponent } from '@fibergis/shared';
 
 export const BUILT_IN_COMPONENTS: CatalogComponent[] = [
   // Central Office Equipment

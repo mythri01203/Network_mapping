@@ -1,13 +1,5 @@
-import {
-  type Cable,
-  type Customer,
-  type Equipment,
-  type Fault,
-  type JointClosure,
-  type Splitter,
-  type TracePathNode,
-} from '../types/network';
-import { polylineLengthMeters } from './ids';
+import type { Cable, Customer, Equipment, Fault, JointClosure, Splitter, TracePathNode } from '../model/types';
+import { polylineLengthMeters } from './geo';
 
 // Planning values for a GPON downstream (1490 nm) optical link budget.
 export const FIBER_ATTENUATION_DB_PER_KM = 0.35;

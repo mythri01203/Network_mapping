@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useNetwork } from '../../context/NetworkContext';
-import type { UserRole } from '../../types/network';
+import type { UserRole } from '@fibergis/shared';
 import {
   IconButton,
   Popover,

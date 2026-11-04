@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { generateLogicalPorts, summarizePorts } from '../../lib/ports';
+import { generateLogicalPorts, summarizePorts, type LogicalPortStatus, type PonTechnology } from '@fibergis/shared';
 import { PORT_STATUS_STYLE } from '../../data/componentCatalog';
-import { type LogicalPortStatus, type PonTechnology } from '../../types/network';
 import { X, Cpu, Radio, HelpCircle, Table, Grid } from 'lucide-react';
 
 export const PortManagerModal: React.FC = () => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { simulatedOpticalPower } from '../../lib/opticalPower';
+import { simulatedOpticalPower } from '@fibergis/shared';
 import { OltChassisIcon } from '../common/OltChassisIcon';
 import { UtilityPoleIcon } from '../common/UtilityPoleIcon';
 import {

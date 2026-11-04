@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type WorkOrder } from '../../types/network';
+import type { WorkOrder } from '@fibergis/shared';
 import { Kanban, List, PlusCircle, Search, HardHat } from 'lucide-react';
 
 export const OperationsHubView: React.FC = () => {

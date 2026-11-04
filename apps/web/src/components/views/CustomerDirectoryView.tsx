@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type Customer } from '../../types/network';
+import type { Customer } from '@fibergis/shared';
 import { Search, Download, PlusCircle, MapPin, GitFork } from 'lucide-react';
 
 export const CustomerDirectoryView: React.FC = () => {

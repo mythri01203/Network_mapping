@@ -1,4 +1,5 @@
-import { type Equipment, type EquipmentPort, type LogicalPortStatus } from '../types/network';
+import type { LogicalPortStatus } from '../model/enums';
+import type { Equipment, EquipmentPort } from '../model/types';
 
 export function portTypeForEquipment(type: string): string {
   if (type === 'OLT') return 'PON';

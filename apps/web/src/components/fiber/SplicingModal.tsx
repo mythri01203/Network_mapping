@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type SpliceRecord } from '../../types/network';
-import { getFiberColor } from '../../constants/colorStandards';
+import { type SpliceRecord, getFiberColor } from '@fibergis/shared';
 import { X, GitBranch, Trash2, Zap } from 'lucide-react';
 
 export const SplicingModal: React.FC = () => {

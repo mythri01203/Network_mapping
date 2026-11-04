@@ -21,8 +21,8 @@ import {
 } from 'lucide-react';
 import { useNetwork } from '../../../context/NetworkContext';
 import { BUILT_IN_COMPONENTS } from '../../../data/componentCatalog';
-import { CABLE_TYPE_COLORS } from '../../../constants/colorStandards';
-import type { CableType, CatalogComponent, EquipmentType } from '../../../types/network';
+import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/shared';
+import { cableStyle } from '../../../theme/network';
 import { cn, equipmentIcon, Switch } from '../../ui';
 import { formatDistance } from './markerIcons';
 
@@ -335,7 +335,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
 /* ------------------------------------------------------------------ */
 
 function CableSwatch({ type }: { type: string }) {
-  const style = CABLE_TYPE_COLORS[type] ?? CABLE_TYPE_COLORS['Custom Cable'];
+  const style = cableStyle(type);
   return (
     <svg width="28" height="10" viewBox="0 0 28 10" className="shrink-0">
       <line

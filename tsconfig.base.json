@@ -12,6 +12,9 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "paths": {
+      "@fibergis/shared": ["./packages/shared/src/index.ts"]
+    }
   }
 }

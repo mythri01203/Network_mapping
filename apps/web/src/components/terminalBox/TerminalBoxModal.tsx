@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type EquipmentImage, type ImageAnnotation } from '../../types/network';
+import type { EquipmentImage, ImageAnnotation } from '@fibergis/shared';
 import { X, Camera, Upload, Trash2, Crosshair } from 'lucide-react';
 
 export const TerminalBoxModal: React.FC = () => {

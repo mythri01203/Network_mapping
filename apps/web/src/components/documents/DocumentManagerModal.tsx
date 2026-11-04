@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNetwork } from '../../context/NetworkContext';
-import { type NetworkDocument } from '../../types/network';
+import type { NetworkDocument } from '@fibergis/shared';
 import { FileText, Search, Download, Trash2, PlusCircle, FileCheck, X } from 'lucide-react';
 
 export const DocumentManagerModal: React.FC = () => {

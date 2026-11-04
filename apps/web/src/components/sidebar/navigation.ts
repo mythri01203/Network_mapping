@@ -12,7 +12,7 @@ import {
   Settings2,
   type LucideIcon,
 } from 'lucide-react';
-import type { MainView } from '../../types/network';
+import type { MainView } from '../../types/ui';
 
 export interface ViewMeta {
   label: string;

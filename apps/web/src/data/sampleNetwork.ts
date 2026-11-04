@@ -9,8 +9,9 @@ import {
   type AuditLog,
   type NetworkZone,
   type NetworkDocument,
-} from '../types/network';
-import { getFiberColor, getTubeNumber } from '../constants/colorStandards';
+  getFiberColor,
+  getTubeNumber,
+} from '@fibergis/shared';
 
 // Helper to generate fiber cores
 function generateCores(count: number, usedCount: number, reservedCount = 2, damagedCount = 1) {
