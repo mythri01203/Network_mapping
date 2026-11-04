@@ -34,6 +34,9 @@ import {
 } from 'lucide-react';
 import { getOltChassisSvgString, OltChassisIcon } from '../common/OltChassisIcon';
 import { getUtilityPoleSvgString, UtilityPoleIcon } from '../common/UtilityPoleIcon';
+import { MapToolbar, MapModeBar } from './map/MapToolbar';
+import { MapControls, OltFilterControl } from './map/MapControls';
+import { categoryForType } from './map/markerIcons';
 
 // Generate custom SVG icon for each equipment type
 const createCustomMarkerIcon = (type: EquipmentType, status: string, isSelected: boolean, isTraced: boolean, technology?: string) => {
@@ -905,11 +908,7 @@ export const GISMap: React.FC = () => {
           type: selectedEquipmentTypeToAdd,
           lat,
           lng,
-          category: selectedEquipmentTypeToAdd.includes('CATV') || selectedEquipmentTypeToAdd.includes('Amplifier')
-            ? 'Cable TV Infrastructure'
-            : selectedEquipmentTypeToAdd.includes('Pole') || selectedEquipmentTypeToAdd.includes('Manhole')
-            ? 'Supporting Infrastructure'
-            : 'Fiber Distribution'
+          category: categoryForType(selectedEquipmentTypeToAdd)
         });
         if (created) {
           setSelectedObject({ type: 'equipment', data: created });
@@ -1202,11 +1201,7 @@ export const GISMap: React.FC = () => {
       type,
       lat: latlng.lat,
       lng: latlng.lng,
-      category: type.includes('CATV') || type.includes('Amplifier')
-        ? 'Cable TV Infrastructure'
-        : type.includes('Pole') || type.includes('Manhole')
-        ? 'Supporting Infrastructure'
-        : 'Fiber Distribution'
+      category: categoryForType(type)
     });
 
     if (created) {
@@ -1223,316 +1218,36 @@ export const GISMap: React.FC = () => {
       {/* Map Container */}
       <div ref={mapContainerRef} className="w-full h-full" />
 
-      {/* Sleek Floating Top Action Bar (Google Maps Style - Horizontal, Clean, Friendly) */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] flex items-center gap-2 max-w-[95%]">
-        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 p-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {/* 1. Select / Pan Tool */}
-          <button
-            onClick={() => { setActiveTool('select'); setActiveDrawingPoints([]); setMeasuringPoints([]); }}
-            title="Move & Select Items on Map"
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              activeTool === 'select'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <MousePointer className="w-4 h-4" />
-            <span>{uiMode === 'simple' ? 'Select / Move' : 'Select'}</span>
-          </button>
+      {/* Map toolbar */}
+      <MapToolbar isBikerMode={isBikerMode} onToggleBikerMode={() => setIsBikerMode(!isBikerMode)} />
 
-          {/* 2. My Location (GPS Center & Asset Saving) */}
-          <button
-            onClick={handleGetCurrentLocation}
-            disabled={isLocating}
-            title="Find & Center on My Real GPS Location (Save as Project Start or Network Hub)"
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              isLocating
-                ? 'bg-blue-100 text-blue-700 animate-pulse'
-                : 'bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-200/80'
-            }`}
-          >
-            <Compass className={`w-4 h-4 text-blue-600 ${isLocating ? 'animate-spin' : ''}`} />
-            <span>{isLocating ? 'Locating...' : '📍 My Location'}</span>
-          </button>
+      <MapModeBar
+        distanceMeters={cumulativeDistance}
+        snapTargetName={snapTarget?.name ?? null}
+        autoPole={autoAddPolesOnDraw}
+        onAutoPoleChange={setAutoAddPolesOnDraw}
+        onAddPole={handleAddPoleAtCurrentPoint}
+        onFinish={handleFinishDrawingCable}
+        onCancel={handleCancelDrawing}
+      />
 
+      <MapControls
+        onZoomIn={() => mapInstanceRef.current?.zoomIn()}
+        onZoomOut={() => mapInstanceRef.current?.zoomOut()}
+        onLocate={handleGetCurrentLocation}
+        isLocating={isLocating}
+        onResetView={() => mapInstanceRef.current?.flyTo([12.9385, 77.6275], 16)}
+      />
 
-          {/* 4. Add Equipment (Visual Catalog Modal) */}
-          <button
-            onClick={() => setIsComponentCatalogOpen(true)}
-            title="Browse and place network equipment (OLT, ODF, FDMS, FAT, Pole, Splitter)"
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Equipment</span>
-          </button>
-
-          {/* 5. Add Customer */}
-          <button
-            onClick={() => setIsCustomerWizardOpen(true)}
-            title="Register and connect new subscriber home"
-            className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
-          >
-            <Users className="w-4 h-4 text-sky-600" />
-            <span className="hidden sm:inline">Add Customer</span>
-          </button>
-
-          {/* 6. Measure Distance */}
-          <button
-            onClick={() => { setActiveTool('measure'); setMeasuringPoints([]); }}
-            title="Measure Road Distance in Meters/Km"
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              activeTool === 'measure'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <Ruler className="w-4 h-4 text-amber-600" />
-            <span className="hidden sm:inline">Measure</span>
-          </button>
-
-          {/* 7. Undo & Redo */}
-          <div className="flex items-center border-l border-slate-200 pl-1.5 ml-0.5 gap-0.5">
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              title="Undo Last Action (Ctrl+Z)"
-              className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-            >
-              <Undo2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              title="Redo Action (Ctrl+Y)"
-              className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-            >
-              <Redo2 className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* 8. Delete Selected Asset / Cable */}
-          {selectedObject && (
-            <button
-              onClick={() => {
-                if (selectedObject.type === 'cable') {
-                  deleteCable(selectedObject.data.id);
-                  setSelectedObject(null);
-                } else if (selectedObject.type === 'equipment') {
-                  deleteEquipment(selectedObject.data.id);
-                  setSelectedObject(null);
-                }
-              }}
-              title={`Delete Selected ${selectedObject.type}: ${selectedObject.data.name || selectedObject.data.id}`}
-              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors animate-in fade-in"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span className="hidden sm:inline">Delete</span>
-            </button>
-          )}
-
-          {/* 9. Bike GPS Navigation for Field Technicians */}
-          <button
-            onClick={() => setIsBikerMode(!isBikerMode)}
-            title="Field Technician Motorcycle Road Navigation"
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              isBikerMode
-                ? 'bg-orange-600 text-white shadow-sm ring-2 ring-orange-300'
-                : 'bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200/80'
-            }`}
-          >
-            <Bike className="w-4 h-4 text-orange-600" />
-            <span>Bike GPS</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Drawing Active Banner (Top Center) */}
-      {(activeTool === 'draw_cable' || activeTool === 'measure' || activeTool === 'add_equipment') && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-4 animate-in fade-in slide-in-from-top-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-xs font-semibold">
-              {activeTool === 'draw_cable'
-                ? `Drawing ${selectedCableTypeToDraw} (${activeDrawingPoints.length} points | ${cumulativeDistance}m)`
-                : activeTool === 'measure'
-                ? `Measuring Distance: ${cumulativeDistance} meters (${(cumulativeDistance / 1000).toFixed(2)} km)`
-                : `Click map to place ${selectedEquipmentTypeToAdd}`}
-            </span>
-          </div>
-
-          {snapTarget && (
-            <div className="bg-emerald-500/20 text-emerald-300 text-[11px] font-medium px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1">
-              <Crosshair className="w-3 h-3" /> Snapped to {snapTarget.name}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 border-l border-slate-700 pl-3">
-            {activeTool === 'draw_cable' && (
-              <>
-                {/* Particular Button: Add Pole while drawing wire */}
-                <button
-                  onClick={handleAddPoleAtCurrentPoint}
-                  title="Place a Utility Pole at the last wire point (Keyboard Shortcut: P)"
-                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
-                  <span>+ Add Pole at Point</span>
-                </button>
-
-                {/* Auto-Add Pole on Click Toggle */}
-                <button
-                  onClick={() => setAutoAddPolesOnDraw(!autoAddPolesOnDraw)}
-                  title="When turned ON, every click on the map drops a pole and runs the wire through it"
-                  className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 border ${
-                    autoAddPolesOnDraw
-                      ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold shadow-xs'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700'
-                  }`}
-                >
-                  <span className="text-[11px]">⚡ Auto-Pole:</span>
-                  <span className={`px-1 py-0.2 rounded text-[10px] font-mono ${autoAddPolesOnDraw ? 'bg-black text-amber-300' : 'bg-slate-700 text-slate-400'}`}>
-                    {autoAddPolesOnDraw ? 'ON' : 'OFF'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={handleFinishDrawingCable}
-                  disabled={activeDrawingPoints.length < 2}
-                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Finish & Save Route
-                </button>
-              </>
-            )}
-            <button
-              onClick={handleCancelDrawing}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
-            >
-              <XCircle className="w-3.5 h-3.5" /> Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Map Control Buttons (Bottom Right) */}
-      <div className="absolute bottom-6 right-4 z-[400] flex flex-col items-end gap-2">
-        {/* OLT Technology Filter Pill (Filter between EPON and GPON) */}
-        <div className="bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-slate-200/90 p-1 flex items-center gap-1 text-xs font-bold">
-          <span className="px-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">OLT Filter:</span>
-          <button
-            onClick={() => {
-              setOltTechFilter('All');
-              showToast('info', 'All OLTs Visible', 'Showing all OLT hubs on the map.');
-            }}
-            title="Show all OLTs on map"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-              oltTechFilter === 'All' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            All ({equipments.filter(e => e.type === 'OLT').length})
-          </button>
-          <button
-            onClick={() => {
-              setOltTechFilter('GPON');
-              showToast('info', 'Filtered GPON OLTs', `Displaying ${equipments.filter(e => e.type === 'OLT' && (e.technology || 'GPON') === 'GPON').length} GPON OLT hubs.`);
-            }}
-            title="Show only GPON OLTs (ITU-T G.984)"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
-              oltTechFilter === 'GPON'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>GPON ({equipments.filter(e => e.type === 'OLT' && (e.technology || 'GPON') === 'GPON').length})</span>
-          </button>
-          <button
-            onClick={() => {
-              setOltTechFilter('EPON');
-              showToast('info', 'Filtered EPON OLTs', `Displaying ${equipments.filter(e => e.type === 'OLT' && e.technology === 'EPON').length} EPON OLT hubs.`);
-            }}
-            title="Show only EPON OLTs (IEEE 802.3ah)"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
-              oltTechFilter === 'EPON'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-            <span>EPON ({equipments.filter(e => e.type === 'OLT' && e.technology === 'EPON').length})</span>
-          </button>
-        </div>
-
-        {/* Map Type Switcher Pill (Google Maps / Google Satellite / OSM) */}
-        <div className="bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-slate-200 p-1 flex items-center gap-1 text-xs font-bold">
-          <button
-            onClick={() => setMapTileProvider('google_streets')}
-            title="Google Maps Road & Street View"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-              mapTileProvider === 'google_streets' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <span>🗺️ Google Map</span>
-          </button>
-          <button
-            onClick={() => setMapTileProvider('google_satellite')}
-            title="Google Maps Satellite Hybrid View"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-              mapTileProvider === 'google_satellite' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <span>🛰️ Satellite</span>
-          </button>
-          <button
-            onClick={() => setMapTileProvider('osm')}
-            title="OpenStreetMap Standard Layer"
-            className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-              mapTileProvider === 'osm' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <span>🌐 OSM</span>
-          </button>
-        </div>
-
-        <div className="bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-slate-200/80 p-1 flex flex-col gap-1">
-          <button
-            onClick={handleGetCurrentLocation}
-            disabled={isLocating}
-            title="Find My Location (GPS)"
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-          >
-            <Compass className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => mapInstanceRef.current?.zoomIn()}
-            title="Zoom In"
-            className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => mapInstanceRef.current?.zoomOut()}
-            title="Zoom Out"
-            className="p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <Minus className="w-4 h-4" />
-          </button>
-        </div>
-
-        <button
-          onClick={() => mapInstanceRef.current?.flyTo([12.9385, 77.6275], 16)}
-          title="Center Network View"
-          className="p-2.5 bg-white/95 backdrop-blur-md text-slate-700 hover:bg-slate-100 rounded-xl shadow-lg border border-slate-200/80 transition-colors"
-        >
-          <Navigation className="w-4 h-4 text-blue-600" />
-        </button>
-      </div>
-
-      {/* Snapping info badge (Bottom Left) */}
-      <div className="absolute bottom-6 left-4 z-[400] hidden sm:flex items-center gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-lg shadow-sm border border-slate-200 text-[11px] text-slate-600">
-        <Crosshair className="w-3.5 h-3.5 text-emerald-600" />
-        <span>Smart Snapping Active &bull; Leaflet GIS</span>
-      </div>
+      <OltFilterControl
+        value={oltTechFilter}
+        onChange={setOltTechFilter}
+        counts={{
+          All: equipments.filter(e => e.type === 'OLT').length,
+          GPON: equipments.filter(e => e.type === 'OLT' && (e.technology || 'GPON') === 'GPON').length,
+          EPON: equipments.filter(e => e.type === 'OLT' && e.technology === 'EPON').length,
+        }}
+      />
 
       {/* On-Map Floating OLT Quick-Action Modal Popup */}
       {activeOltModal && (
@@ -1744,71 +1459,6 @@ export const GISMap: React.FC = () => {
                 <div className="font-extrabold text-[13px]">Manage 16 PON Ports</div>
                 <div className="text-[10px] text-slate-500 font-normal">Check sockets & optical dBm</div>
               </div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Active Filter Banner if GPON or EPON filter is active */}
-      {oltTechFilter !== 'All' && (
-        <div className="absolute top-18 left-1/2 -translate-x-1/2 z-[400] bg-slate-900/90 backdrop-blur-md text-white px-3.5 py-1.5 rounded-full shadow-lg border border-slate-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <span className={`w-2 h-2 rounded-full ${oltTechFilter === 'GPON' ? 'bg-blue-400' : 'bg-purple-400'} animate-pulse`}></span>
-          <span>Filtering: <strong>{oltTechFilter} OLTs Only</strong></span>
-          <button
-            onClick={() => setOltTechFilter('All')}
-            className="ml-1 bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors"
-          >
-            Show All OLTs ✕
-          </button>
-        </div>
-      )}
-
-      {/* Floating Direct Wire Action Card for 1-Click Wire Deletion */}
-      {selectedObject && selectedObject.type === 'cable' && (
-        <div className="absolute top-20 right-6 z-[450] bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-red-500/40 p-3.5 max-w-sm animate-in fade-in zoom-in-95">
-          <div className="flex items-center justify-between gap-3 mb-1.5">
-            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5" />
-              Selected Wire Route
-            </span>
-            <button
-              onClick={() => setSelectedObject(null)}
-              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
-              title="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="text-sm font-bold text-slate-900 truncate">
-            {selectedObject.data.name || selectedObject.data.id}
-          </div>
-          <div className="text-[11px] text-slate-500 mb-3 flex items-center gap-2">
-            <span>{selectedObject.data.type}</span>
-            <span>&bull;</span>
-            <span>{selectedObject.data.fiberCount || 24} Cores</span>
-            <span>&bull;</span>
-            <span className="font-semibold text-slate-700">{Math.round(selectedObject.data.lengthMeters || 0)}m</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                const id = selectedObject.data.id;
-                deleteCable(id);
-                setSelectedObject(null);
-                showToast('success', 'Wire Route Deleted', 'Successfully removed the wire from the network.');
-              }}
-              className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-500 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-red-500/20 transition-all"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete Wire Route</span>
-            </button>
-            <button
-              onClick={() => {
-                setIsRightPanelOpen(true);
-              }}
-              className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
-            >
-              Inspect
             </button>
           </div>
         </div>

@@ -316,10 +316,10 @@ interface NetworkContextType {
   // CRUD & Operations
   addEquipment: (item: Partial<Equipment> & { name: string; type: EquipmentType; lat: number; lng: number }) => Equipment | null;
   updateEquipment: (item: Equipment, options?: { silent?: boolean }) => void;
-  deleteEquipment: (id: string) => boolean;
+  deleteEquipment: (id: string, options?: { skipConfirm?: boolean }) => boolean;
   addCable: (item: Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] }) => Cable | null;
   updateCable: (item: Cable, options?: { silent?: boolean }) => void;
-  deleteCable: (id: string) => boolean;
+  deleteCable: (id: string, options?: { skipConfirm?: boolean }) => boolean;
   allocateFiberCore: (cableId: string, coreNumber: number, customerId?: string, equipmentId?: string, portName?: string) => boolean;
   connectCustomerToPort: (customerData: Partial<Customer>) => Customer | null;
   uploadEquipmentPhoto: (equipmentId: string, photo: Partial<EquipmentImage>) => void;
@@ -756,7 +756,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       return false;
     }
     setClosures(prev => prev.map(c => c.id === closureId ? { ...c, splices: [...c.splices, splice] } : c));
-    showToast('success', 'Splice Recorded', `${splice.inputCableId} core ${splice.inputCore} â†’ ${splice.outputCableId} core ${splice.outputCore}`);
+    showToast('success', 'Splice Recorded', `${splice.inputCableId} core ${splice.inputCore} → ${splice.outputCableId} core ${splice.outputCore}`);
     return true;
   };
 
@@ -824,7 +824,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
         profile: 'driving',
         limitation: 'Road-aligned navigation path (distinct from underground/aerial fiber lines)'
       });
-      showToast('info', 'Biker Road Route Ready', `Navigating to ${dests[dests.length - 1]?.name || dests[dests.length - 1]?.id} Â· ${(totalMeters / 1000).toFixed(2)} km Â· ~${Math.ceil(durationSeconds / 60)} min`);
+      showToast('info', 'Biker Road Route Ready', `Navigating to ${dests[dests.length - 1]?.name || dests[dests.length - 1]?.id} · ${(totalMeters / 1000).toFixed(2)} km · ~${Math.ceil(durationSeconds / 60)} min`);
     };
 
     const points = [origin, ...dests];
@@ -889,7 +889,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     setBikerRoute(null);
   };
 
-  const deleteEquipment = (id: string): boolean => {
+  const deleteEquipment = (id: string, options?: { skipConfirm?: boolean }): boolean => {
     const target = equipments.find(e => e.id === id);
     if (!target) {
       showToast('error', 'Equipment Missing', `Equipment ${id} was not found.`);
@@ -904,13 +904,13 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
     const dependentCustomers = customers.filter(c => c.terminalBoxId === id || c.oltId === id);
     if (dependentCustomers.length > 0) {
-      showToast('error', 'Cannot Delete Equipment', `${id} serves ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', â€¦' : ''}). Move or disconnect them first.`);
+      showToast('error', 'Cannot Delete Equipment', `${id} serves ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', …' : ''}). Move or disconnect them first.`);
       return false;
     }
 
     const ownedSplitters = splitters.filter(s => s.terminalBoxId === id);
     const splitterNote = ownedSplitters.length > 0 ? ` Its ${ownedSplitters.length} splitter(s) will also be removed.` : '';
-    if (!window.confirm(`Delete equipment ${id} (${target.name})?${splitterNote} You can undo this with Ctrl+Z.`)) return false;
+    if (!options?.skipConfirm && !window.confirm(`Delete equipment ${id} (${target.name})?${splitterNote} You can undo this with Ctrl+Z.`)) return false;
 
     setEquipments(prev => prev.filter(e => e.id !== id));
     if (ownedSplitters.length > 0) {
@@ -972,7 +972,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     showToast('success', isCoax ? 'Coaxial Cable Created' : 'Fiber Cable Created', `Mapped ${newCable.name} (${newCable.lengthMeters} m, ${newCable.fiberCount} ${isCoax ? 'conductor' : 'cores'})`);
     logAudit(
       'CABLE_CREATED',
-      `Added ${newCable.type} ${newCable.id} (${newCable.lengthMeters} m)${newCable.startEquipmentId || newCable.endEquipmentId ? ` ${newCable.startEquipmentId ?? '?'} â†’ ${newCable.endEquipmentId ?? '?'}` : ''}`,
+      `Added ${newCable.type} ${newCable.id} (${newCable.lengthMeters} m)${newCable.startEquipmentId || newCable.endEquipmentId ? ` ${newCable.startEquipmentId ?? '?'} → ${newCable.endEquipmentId ?? '?'}` : ''}`,
       newCable.id,
       'Cable'
     );
@@ -988,7 +988,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  const deleteCable = (id: string): boolean => {
+  const deleteCable = (id: string, options?: { skipConfirm?: boolean }): boolean => {
     const target = cables.find(c => c.id === id);
     if (!target) {
       showToast('error', 'Cable Missing', `Cable ${id} was not found.`);
@@ -997,7 +997,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     const dependentCustomers = customers.filter(c => c.feederCableId === id || c.distributionCableId === id || c.dropCableId === id);
     if (dependentCustomers.length > 0) {
-      showToast('error', 'Cannot Delete Cable', `${id} carries service for ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', â€¦' : ''}). Re-route them first.`);
+      showToast('error', 'Cannot Delete Cable', `${id} carries service for ${dependentCustomers.length} customer(s) (${dependentCustomers.slice(0, 5).map(c => c.id).join(', ')}${dependentCustomers.length > 5 ? ', …' : ''}). Re-route them first.`);
       return false;
     }
     const feedingSplitters = splitters.filter(s => s.inputPort.connectedCableId === id);
@@ -1014,7 +1014,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({ children })
       coresInUse > 0 ? `${coresInUse} core(s) are marked In Use.` : '',
       affectedClosures.length > 0 ? `Splices in ${affectedClosures.map(c => c.id).join(', ')} will be removed.` : ''
     ].filter(Boolean).join(' ');
-    if (!window.confirm(`Delete cable ${id} and its core inventory? ${warnings} You can undo this with Ctrl+Z.`.trim())) return false;
+    if (!options?.skipConfirm && !window.confirm(`Delete cable ${id} and its core inventory? ${warnings} You can undo this with Ctrl+Z.`.trim())) return false;
 
     setCables(prev => prev.filter(c => c.id !== id));
     if (affectedClosures.length > 0) {
