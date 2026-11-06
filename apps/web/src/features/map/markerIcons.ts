@@ -5,7 +5,7 @@ import { Bike, Flag, House, type LucideIcon, TriangleAlert } from 'lucide-react'
 
 import type { Customer, Equipment, EquipmentCategory, EquipmentStatus, EquipmentType, Fault } from '@fibergis/shared';
 
-import { equipmentIcon } from '../../components/ui/icons';
+import { equipmentArtUrl } from '../../components/icons/equipmentArt';
 import { type EquipmentLayerKey, equipmentLayerKey } from './layerFilters';
 
 export function escapeHtml(value: unknown): string {
@@ -150,9 +150,9 @@ function stateClasses(state: MarkerState, status?: string): string {
 }
 
 export function equipmentMarkerSize(eq: Pick<Equipment, 'type' | 'category'>): number {
-  if (eq.type === 'OLT') return 32;
+  if (eq.type === 'OLT') return 38;
   const layer = equipmentLayerKey(eq);
-  return layer === 'poles' || layer === 'manholes' ? 20 : 28;
+  return layer === 'poles' || layer === 'manholes' ? 26 : 34;
 }
 
 export function equipmentMarkerIcon(
@@ -161,21 +161,20 @@ export function equipmentMarkerIcon(
 ): L.DivIcon {
   const layer = equipmentLayerKey(eq);
   const isMinor = layer === 'poles' || layer === 'manholes';
-  const isOlt = eq.type === 'OLT';
   const color = equipmentColor(eq);
   const key = `eq:${eq.type}:${eq.category}:${eq.technology ?? ''}:${eq.status}:${state.selected ? 1 : 0}${state.traced ? 1 : 0}`;
 
   return cached(key, () => {
     const size = equipmentMarkerSize(eq);
-    const glyph = iconSvg(equipmentIcon(eq.type), isOlt ? 17 : isMinor ? 11 : 15, isMinor ? 2.25 : 2);
-    const shape = isOlt ? 'gis-pin--square' : isMinor ? 'gis-pin--minor' : '';
+    const artSize = size - 6;
+    const art = `<img src="${equipmentArtUrl(eq.type)}" width="${artSize}" height="${artSize}" alt="" draggable="false">`;
+    const shape = isMinor ? 'gis-pin--minor' : '';
     const status =
       eq.status !== 'Active' && eq.status !== 'Planned'
         ? `<span class="gis-pin__status" style="background:${STATUS_COLORS[eq.status] ?? STATUS_COLORS.Active}"></span>`
         : '';
-    const fill = isMinor ? '' : `background:${color};`;
     return L.divIcon({
-      html: `<div class="gis-pin ${shape} ${stateClasses(state, eq.status)}" style="--pin-color:${color};${fill}width:${size}px;height:${size}px">${glyph}${status}</div>`,
+      html: `<div class="gis-pin gis-pin--device ${shape} ${stateClasses(state, eq.status)}" style="--pin-color:${color};width:${size}px;height:${size}px">${art}${status}</div>`,
       className: 'gis-marker gis-marker--equipment',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],

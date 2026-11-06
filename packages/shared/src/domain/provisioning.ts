@@ -1,13 +1,84 @@
-import type { Cable, Customer, Equipment } from '../model/types';
+import type { SplitterRatio } from '../model/enums';
+import type { Cable, Customer, Equipment, Splitter } from '../model/types';
 import { type CommandContext, type CommandResult, fail, type NetworkData, notice, sameId, succeed } from './command';
 import { buildCores } from './defaults';
 import { polylineLengthMeters } from './geo';
 import { nextSequentialId, uniqueId } from './ids';
 import { setPortUsage } from './ports';
 import { isoDate } from './time';
-import { estimateRxForSplitter, RX_WARNING_DBM } from './trace';
+import { estimateRxForSplitter, findUpstreamChain, RX_WARNING_DBM } from './trace';
 
 export type CustomerDraft = Partial<Customer>;
+
+/** Equipment a subscriber's drop cable can terminate on. */
+export const isCustomerTerminal = (type: string) =>
+  type === 'FAT' || type.includes('Terminal Box') || type === 'Distribution Point';
+
+const SPLITTER_INSERTION_LOSS_DB: Record<SplitterRatio, number> = {
+  '1:2': 3.5,
+  '1:4': 7.2,
+  '1:8': 10.5,
+  '1:16': 14,
+  '1:32': 17.5,
+  '1:64': 21,
+};
+
+export interface SplitterDraft {
+  id?: string;
+  name?: string;
+  terminalBoxId: string;
+  ratio: SplitterRatio;
+}
+
+/** Installs a splitter in a terminal box so that subscribers can be provisioned on its output ports. */
+export function createSplitter(data: NetworkData, draft: SplitterDraft): CommandResult<Splitter> {
+  const terminal = data.equipment.find((e) => e.id === draft.terminalBoxId);
+  if (!terminal) return fail('Terminal Not Found', `Terminal box ${draft.terminalBoxId} does not exist.`);
+
+  const id =
+    draft.id?.trim() ||
+    nextSequentialId(
+      'SPL-',
+      data.splitters.map((s) => s.id),
+      2,
+    );
+  if (data.splitters.some((s) => sameId(s.id, id))) {
+    return fail('Duplicate Splitter ID', `Splitter ${id} already exists.`);
+  }
+
+  const outputCount = Number(draft.ratio.split(':')[1]);
+  const feedCable = findUpstreamChain(terminal.id, data).at(-1)?.cable;
+  const created: Splitter = {
+    id,
+    name: draft.name?.trim() || `${draft.ratio} PLC Splitter (${terminal.id})`,
+    terminalBoxId: terminal.id,
+    ratio: draft.ratio,
+    insertionLossDb: SPLITTER_INSERTION_LOSS_DB[draft.ratio],
+    status: 'Active',
+    inputPort: { id: `${id}-IN`, connectedCableId: feedCable?.id },
+    outputPorts: Array.from({ length: outputCount }, (_, i) => ({
+      portNumber: i + 1,
+      label: `OUT-${String(i + 1).padStart(2, '0')}`,
+      status: 'Available' as const,
+    })),
+  };
+
+  return succeed(
+    created,
+    { splitters: [...data.splitters, created] },
+    {
+      notice: notice('success', 'Splitter Installed', `Added ${created.ratio} splitter ${id} to ${terminal.id}.`),
+      audit: [
+        {
+          action: 'SPLITTER_CREATED',
+          details: `Installed ${created.ratio} splitter ${id} in ${terminal.id}`,
+          assetId: terminal.id,
+          assetType: 'Equipment',
+        },
+      ],
+    },
+  );
+}
 
 /** Returns `preferred` when it is free, else the first unused address in the 100.64.0.0/10 CGNAT pool. */
 export function allocateIpAddress(customers: Customer[], preferred?: string): string {

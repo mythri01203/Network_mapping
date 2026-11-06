@@ -4,8 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { EquipmentCategory, EquipmentType } from '@fibergis/shared';
 
-import { OltChassisIcon } from '../../components/icons/OltChassisIcon';
-import { UtilityPoleIcon } from '../../components/icons/UtilityPoleIcon';
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { addCatalogComponent } from '../../stores/networkActions';
@@ -120,17 +119,7 @@ export const ComponentCatalogModal: React.FC = () => {
               onClick={() => place(String(item.type))}
               className="p-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 cursor-pointer flex items-center gap-3"
             >
-              {String(item.type) === 'OLT' ? (
-                <OltChassisIcon width={44} height={23} className="shrink-0" />
-              ) : String(item.type).includes('Pole') ? (
-                <UtilityPoleIcon width={28} height={36} className="shrink-0" />
-              ) : (
-                <div
-                  className={`w-10 h-10 rounded-lg ${item.iconBg} text-white flex items-center justify-center text-[10px] font-bold shrink-0`}
-                >
-                  {String(item.type).slice(0, 3).toUpperCase()}
-                </div>
-              )}
+              <EquipmentIllustration type={String(item.type)} size={40} className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-xs text-slate-800 truncate">{item.name}</div>
                 <div className="text-[11px] text-slate-500 line-clamp-2">{item.description}</div>

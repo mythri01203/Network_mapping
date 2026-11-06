@@ -152,7 +152,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       }
 
       const { target, point } = snap(e.latlng);
-      setSnapTarget(target);
+      // Only routes join equipment. New equipment snapping would land hidden on top of its neighbour.
+      setSnapTarget(store.activeTool === 'add_equipment' ? null : target);
 
       if (store.activeTool === 'draw_cable') {
         store.setDrawingPoints((prev) => [...prev, point]);
@@ -162,6 +163,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       } else if (store.activeTool === 'add_equipment' && store.equipmentTypeToAdd) {
         const type = store.equipmentTypeToAdd;
         const tpl = store.equipmentDraftTemplate;
+        // A click on a marker reports the marker's position, so read the pointer itself.
+        const { lat: placeLat, lng: placeLng } = map.mouseEventToLatLng(e.originalEvent);
         const isPole = type.includes('Pole');
         const defaultName = isPole
           ? nextPoleName(useNetworkStore.getState().equipment)
@@ -174,8 +177,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
         const created = addEquipment({
           name,
           type,
-          lat: point[0],
-          lng: point[1],
+          lat: placeLat,
+          lng: placeLng,
           category: tpl?.category || categoryForType(type),
           totalPorts,
           availablePorts: totalPorts,
@@ -183,7 +186,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
           ...tpl,
         });
         if (created) {
-          showToast('success', `${type} Placed`, `Added ${created.name} at [${point[0].toFixed(5)}, ${point[1].toFixed(5)}].`);
+          showToast('success', `${type} Placed`, `Added ${created.name} at [${placeLat.toFixed(5)}, ${placeLng.toFixed(5)}].`);
           ui.select({ type: 'equipment', data: created });
           ui.setPanelOpen('right', true);
           store.setActiveTool('select');
@@ -201,7 +204,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       if (tool !== 'draw_cable' && tool !== 'measure' && tool !== 'add_equipment') return;
       const { target, point } = snap(e.latlng);
       setPointer(point);
-      setSnapTarget((prev) => (prev?.id === target?.id ? prev : target));
+      const shownTarget = tool === 'add_equipment' ? null : target;
+      setSnapTarget((prev) => (prev?.id === shownTarget?.id ? prev : shownTarget));
     };
 
     const onMouseOut = () => setPointer(null);

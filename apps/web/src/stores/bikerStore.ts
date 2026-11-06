@@ -5,7 +5,6 @@ import { type GpsRoute, type LatLng, polylineLengthMeters } from '@fibergis/shar
 import { estimateRoadRoute, fetchRoadRoute, type RoadRoute, type RouteStop } from '../lib/routing';
 import { useMapStore } from './mapStore';
 import { addGpsRoute } from './networkActions';
-import { useNetworkStore } from './networkStore';
 import { showToast } from './toastStore';
 import { type SelectedObject, useUiStore } from './uiStore';
 
@@ -21,6 +20,8 @@ export interface BikerRoute {
   profile: 'driving';
   /** Plain-language caveat shown with the route (source and accuracy). */
   limitation: string;
+  /** Where the route actually starts. */
+  originName: string;
 }
 
 export type GpsTrackingStatus = 'idle' | 'recording' | 'paused' | 'stopped';
@@ -72,6 +73,16 @@ interface BikerState {
 
 let watchId: number | null = null;
 let timerId: ReturnType<typeof setInterval> | null = null;
+/** Time of the last recorded point, used to reject impossible speeds. */
+let lastPointTime = 0;
+/** The next point follows a pause, so the ride between them is not part of the recorded distance. */
+let resumeGap = false;
+
+/** Faster than any real ride (about 150 km/h), so such a move must be a bad GPS reading. */
+const MAX_PLAUSIBLE_SPEED_MPS = 42;
+const GPS_FIX_TIMEOUT_MS = 5000;
+/** Also covers a location permission prompt the user never answers. */
+const GPS_FIX_GIVE_UP_MS = 8000;
 
 const stopWatchAndTimer = () => {
   if (watchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -112,42 +123,44 @@ function locationOf(selection: SelectedObject | null): BikerWaypoint | null {
   }
 }
 
-/**
- * Route origin, first match wins: the selected object, an OLT, any other
- * equipment, then the project start point. Fallback to map center so it never fails.
- */
-function resolveOrigin(destination: BikerWaypoint): BikerWaypoint {
-  const { equipment, projectStartPoint } = useNetworkStore.getState();
-  const hubs = [...equipment.filter((e) => e.type === 'OLT'), ...equipment.filter((e) => e.type !== 'OLT')];
-  const candidates: (BikerWaypoint | null)[] = [
-    locationOf(useUiStore.getState().selectedObject),
-    ...hubs.map(({ id, name, lat, lng }) => ({ id, name: name || id, lat, lng })),
-    projectStartPoint
-      ? { id: 'PROJECT-START', name: 'Project start point', lat: projectStartPoint[0], lng: projectStartPoint[1] }
-      : null,
-  ];
+/** A one-off reading of the device position, or null when it is unavailable or denied. */
+function readDevicePosition(): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const giveUp = setTimeout(() => resolve(null), GPS_FIX_GIVE_UP_MS);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(giveUp);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        clearTimeout(giveUp);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: GPS_FIX_TIMEOUT_MS, maximumAge: 30_000 },
+    );
+  });
+}
+
+/** Route origin, first match wins: the rider's GPS position, the selected object, then the map center. */
+async function resolveOrigin(destination: BikerWaypoint): Promise<{ origin: BikerWaypoint | null; usedGps: boolean }> {
   const isElsewhere = (c: BikerWaypoint) =>
     c.id !== destination.id && (c.lat !== destination.lat || c.lng !== destination.lng);
-  const found = candidates.find((c): c is BikerWaypoint => c !== null && isElsewhere(c));
-  if (found) return found;
 
-  const live = useBikerStore.getState().livePosition;
-  if (live && (live.lat !== destination.lat || live.lng !== destination.lng)) {
-    return {
-      id: 'ORIGIN-LIVE-GPS',
-      name: 'Field Technician GPS',
-      lat: live.lat,
-      lng: live.lng,
-    };
+  const { trackingStatus, livePosition } = useBikerStore.getState();
+  const gps = trackingStatus === 'recording' && livePosition ? livePosition : await readDevicePosition();
+  if (gps) {
+    const rider = { id: 'ORIGIN-GPS', name: 'Your GPS location', lat: gps.lat, lng: gps.lng };
+    if (isElsewhere(rider)) return { origin: rider, usedGps: true };
   }
 
-  const vp = useMapStore.getState().viewport;
-  return {
-    id: 'ORIGIN-GPS',
-    name: 'Current Operator Location',
-    lat: vp.lat,
-    lng: vp.lng,
-  };
+  const { viewport } = useMapStore.getState();
+  const candidates: (BikerWaypoint | null)[] = [
+    locationOf(useUiStore.getState().selectedObject),
+    { id: 'ORIGIN-MAP-CENTER', name: 'Map center', lat: viewport.lat, lng: viewport.lng },
+  ];
+  const origin = candidates.find((c): c is BikerWaypoint => c !== null && isElsewhere(c)) ?? null;
+  return { origin, usedGps: false };
 }
 
 const formatTrip = (route: RoadRoute) =>
@@ -158,12 +171,15 @@ export const useBikerStore = create<BikerState>()((set, get) => {
 
   const plan = async (stops: BikerWaypoint[]) => {
     const destination = stops[stops.length - 1];
-    const origin = stops[0] ? resolveOrigin(stops[0]) : null;
-    if (!destination || !origin) {
-      showToast('warning', 'No Route Origin', 'Select a starting asset or add an OLT before planning a route.');
+    if (!destination) return;
+    const request = ++latestRequest;
+    const { origin, usedGps } = await resolveOrigin(stops[0]);
+    if (request !== latestRequest) return;
+    if (!origin) {
+      showToast('warning', 'No Route Origin', 'Turn on GPS, select a starting item, or move the map before planning.');
       return;
     }
-    const request = ++latestRequest;
+    if (!usedGps) showToast('warning', 'GPS Unavailable', `The route starts from ${origin.name} instead of your location.`);
     const path = [origin, ...stops];
     const route = (await fetchRoadRoute(path)) ?? estimateRoadRoute(path);
     if (request !== latestRequest) return;
@@ -179,12 +195,90 @@ export const useBikerStore = create<BikerState>()((set, get) => {
         steps: route.steps,
         profile: 'driving',
         limitation: ROUTE_LIMITATIONS[route.source],
+        originName: origin.name,
       },
     });
     showToast(
       'info',
       route.source === 'road' ? 'Road Route Planned' : 'Estimated Route Ready',
       `${formatTrip(route)} to ${destination.name}`,
+    );
+  };
+
+  /** Runs the elapsed timer and GPS watch. Both run only while recording. */
+  const startRecordingSensors = () => {
+    stopWatchAndTimer();
+
+    timerId = setInterval(() => {
+      set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
+    }, 1000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+
+        // Always update live position marker so operator sees their location on map
+        set({
+          livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
+          gpsAccuracy: accuracy,
+          gpsError: null,
+        });
+
+        // Discard excessive noise (> 120m) for polyline route recording
+        if (accuracy > 120 && get().trackedCoordinates.length > 0) {
+          set({
+            gpsError: `Moderate GPS accuracy (±${Math.round(accuracy)}m). Recording will refine outdoors with clear sky view.`,
+          });
+          return;
+        }
+
+        const currentCoords = get().trackedCoordinates;
+        let addedKm = 0;
+        if (currentCoords.length > 0) {
+          const last = currentCoords[currentCoords.length - 1];
+          const deltaMeters = polylineLengthMeters([last, [latitude, longitude]]);
+
+          // Noise / Stationary filter: require at least 3m displacement to append a point
+          if (deltaMeters < 3) return;
+
+          if (!resumeGap) {
+            // Measured from the last recorded point, so a signal gap only delays the next point.
+            const secondsSinceLastPoint = Math.max(1, (pos.timestamp - lastPointTime) / 1000);
+            if (deltaMeters / secondsSinceLastPoint > MAX_PLAUSIBLE_SPEED_MPS) {
+              set({ gpsError: 'Ignored anomalous GPS location jump.' });
+              return;
+            }
+            addedKm = deltaMeters / 1000;
+          }
+        }
+
+        resumeGap = false;
+        lastPointTime = pos.timestamp;
+        set((s) => ({
+          trackedCoordinates: [...currentCoords, [latitude, longitude]],
+          distanceKm: s.distanceKm + addedKm,
+        }));
+
+        // Smoothly pan map to follow the rider
+        useMapStore.getState().flyTo(latitude, longitude, 18);
+      },
+      (err) => {
+        let msg = 'GPS positioning error.';
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = 'GPS permission denied. Please enable location permissions in browser settings.';
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          msg = 'GPS signal lost or unavailable.';
+        } else if (err.code === err.TIMEOUT) {
+          msg = 'GPS acquisition timed out. Reconnecting...';
+        }
+        set({ gpsError: msg });
+        showToast('error', 'GPS Signal Notice', msg);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 1000,
+      },
     );
   };
 
@@ -243,119 +337,32 @@ export const useBikerStore = create<BikerState>()((set, get) => {
         return;
       }
 
-      stopWatchAndTimer();
-
       set({
         trackingStatus: 'recording',
         isBikerMode: true,
         activeBikerTab: 'gps_track',
         gpsError: null,
       });
-
-      // Start elapsed timer
-      timerId = setInterval(() => {
-        if (get().trackingStatus === 'recording') {
-          set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
-        }
-      }, 1000);
-
-      // Start position watch
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-
-          // Always update live position marker so operator sees their location on map
-          set({
-            livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
-            gpsAccuracy: accuracy,
-            gpsError: null,
-          });
-
-          // Discard excessive noise (> 120m) for polyline route recording
-          if (accuracy > 120 && get().trackedCoordinates.length > 0) {
-            set({
-              gpsError: `Moderate GPS accuracy (±${Math.round(accuracy)}m). Recording will refine outdoors with clear sky view.`,
-            });
-            return;
-          }
-
-          const currentCoords = get().trackedCoordinates;
-          if (currentCoords.length > 0) {
-            const last = currentCoords[currentCoords.length - 1];
-            const deltaMeters = polylineLengthMeters([last, [latitude, longitude]]);
-
-            // Noise / Stationary filter: require at least 3m displacement to append a point
-            if (deltaMeters < 3) {
-              set({
-                livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
-                gpsAccuracy: accuracy,
-                gpsError: null,
-              });
-              return;
-            }
-
-            // Anomaly filter: ignore unrealistic velocity jumps (> 150 km/h / 42 m/s over short intervals)
-            const timeDiffSec = Math.max(1, (pos.timestamp - (get().livePosition?.timestamp ?? pos.timestamp)) / 1000);
-            if (deltaMeters / timeDiffSec > 42) {
-              set({ gpsAccuracy: accuracy, gpsError: 'Ignored anomalous GPS location jump.' });
-              return;
-            }
-          }
-
-          const nextCoords: LatLng[] = [...currentCoords, [latitude, longitude]];
-          const nextDistKm = polylineLengthMeters(nextCoords) / 1000;
-
-          set({
-            livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
-            trackedCoordinates: nextCoords,
-            distanceKm: nextDistKm,
-            gpsAccuracy: accuracy,
-            gpsError: null,
-          });
-
-          // Smoothly pan map to follow the rider
-          useMapStore.getState().flyTo(latitude, longitude, 18);
-        },
-        (err) => {
-          let msg = 'GPS positioning error.';
-          if (err.code === err.PERMISSION_DENIED) {
-            msg = 'GPS permission denied. Please enable location permissions in browser settings.';
-          } else if (err.code === err.POSITION_UNAVAILABLE) {
-            msg = 'GPS signal lost or unavailable.';
-          } else if (err.code === err.TIMEOUT) {
-            msg = 'GPS acquisition timed out. Reconnecting...';
-          }
-          set({ gpsError: msg });
-          showToast('error', 'GPS Signal Notice', msg);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 1000,
-        },
-      );
+      startRecordingSensors();
 
       showToast('success', 'Bike Tracking Started', 'Recording actual GPS route points.');
     },
 
     pauseLiveTracking: () => {
-      if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-      }
+      stopWatchAndTimer();
       set({ trackingStatus: 'paused' });
       showToast('info', 'GPS Tracking Paused', 'Route recording is paused.');
     },
 
     resumeLiveTracking: () => {
-      set({ trackingStatus: 'recording' });
-      if (timerId === null) {
-        timerId = setInterval(() => {
-          if (get().trackingStatus === 'recording') {
-            set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
-          }
-        }, 1000);
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        set({ gpsError: 'Geolocation API is not supported by your browser.' });
+        showToast('error', 'GPS Not Supported', 'Your browser does not support Geolocation.');
+        return;
       }
+      resumeGap = true;
+      set({ trackingStatus: 'recording', gpsError: null });
+      startRecordingSensors();
       showToast('success', 'GPS Tracking Resumed', 'Continuing route recording.');
     },
 

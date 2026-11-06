@@ -29,13 +29,12 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { CableType, Equipment, EquipmentType } from '@fibergis/shared';
 
-import { focusFor } from '../../app/mapFocus';
 import { useBikerStore } from '../../stores/bikerStore';
 import { useMapStore } from '../../stores/mapStore';
 import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
-import { selectionLabel, useUiStore } from '../../stores/uiStore';
+import { useUiStore } from '../../stores/uiStore';
 import { nextPoleName } from '../map/sketch/poleNaming';
 
 type SplitRatio = '1:2' | '1:4' | '1:8' | '1:16' | '1:32' | 'ratio_90_10';
@@ -142,7 +141,6 @@ export const BikerModePanel: React.FC = () => {
     })),
   );
 
-  const selectedObject = useUiStore((s) => s.selectedObject);
   const select = useUiStore((s) => s.select);
   const setPanelOpen = useUiStore((s) => s.setPanelOpen);
   const setModalOpen = useUiStore((s) => s.setModalOpen);
@@ -286,12 +284,6 @@ export const BikerModePanel: React.FC = () => {
   }, [allAssets, query, filterType]);
 
   if (!isBikerMode) return null;
-
-  const selectedFocus = selectedObject ? focusFor(selectedObject) : null;
-  const origin =
-    selectedObject && selectedFocus
-      ? { lat: selectedFocus.lat, lng: selectedFocus.lng, name: selectionLabel(selectedObject) }
-      : { lat: viewport.lat, lng: viewport.lng, name: 'Current Operator Center' };
 
   return (
     <div className="absolute top-4 right-4 z-[450] w-96 max-w-[calc(100%-2rem)] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-orange-500/40 overflow-hidden flex flex-col max-h-[88vh] animate-in fade-in slide-in-from-right-4 select-none">
@@ -1004,7 +996,12 @@ export const BikerModePanel: React.FC = () => {
             <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between text-[11px]">
               <div>
                 <span className="text-slate-400 font-semibold block text-[10px] uppercase">Departure Origin</span>
-                <span className="font-bold text-slate-200">{origin.name}</span>
+                <span className="font-bold text-slate-200">{bikerRoute?.originName ?? 'Your GPS location'}</span>
+                {!bikerRoute && (
+                  <span className="block text-[10px] text-slate-400">
+                    If GPS is off: the selected item, then the map center
+                  </span>
+                )}
               </div>
               <span className="text-[10px] text-orange-400 font-mono bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">
                 Starting Point

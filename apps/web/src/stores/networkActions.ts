@@ -16,6 +16,7 @@ import type {
   NetworkDocument,
   NetworkZone,
   SpliceRecord,
+  Splitter,
   WorkOrder,
 } from '@fibergis/shared';
 import * as domain from '@fibergis/shared';
@@ -112,6 +113,9 @@ export const removeSplice = (closureId: string, spliceId: string) => {
 };
 
 // --- Customers, faults & work orders -------------------------------------------------------------
+
+export const addSplitter = (draft: domain.SplitterDraft): Splitter | null =>
+  run((data) => domain.createSplitter(data, draft))?.value ?? null;
 
 export const connectCustomerToPort = (draft: domain.CustomerDraft): Customer | null =>
   run((data, ctx) => domain.provisionCustomer(data, draft, ctx))?.value.customer ?? null;

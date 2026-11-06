@@ -1,5 +1,5 @@
 import type { CableType } from '../model/enums';
-import type { Cable } from '../model/types';
+import type { Cable, Equipment } from '../model/types';
 import {
   type CommandContext,
   type CommandResult,
@@ -13,11 +13,25 @@ import {
 import { buildCores, defaultFiberCount, isLatLngPair } from './defaults';
 import { polylineLengthMeters } from './geo';
 import { cableIdPrefix, nextSequentialId } from './ids';
+import { buildOltPonPorts } from './oltConfig';
 import { isoDate } from './time';
 
 export type CableDraft = Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] };
 
 const coreLabel = (coreNumber: number) => coreNumber.toString().padStart(2, '0');
+
+/** Cores for a new cable. Reserved and damaged cores come from the top, so core 1 upward stay free. */
+export function buildCoresWithCapacity(count: number, reserved = 0, damaged = 0) {
+  return buildCores(count).map((core) => {
+    if (core.coreNumber > count - reserved) {
+      return { ...core, status: 'Reserved' as const, remarks: 'Reserved at installation' };
+    }
+    if (core.coreNumber > count - reserved - damaged) {
+      return { ...core, status: 'Damaged' as const, remarks: 'Damaged at installation' };
+    }
+    return core;
+  });
+}
 
 export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandContext = {}): CommandResult<Cable> {
   const id =
@@ -37,6 +51,14 @@ export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandCo
     if (endpoint && !data.equipment.some((e) => e.id === endpoint)) {
       return fail('Invalid Endpoint', `Endpoint equipment ${endpoint} does not exist.`);
     }
+  }
+
+  // A cable leaving an OLT port is that port's feeder, which is how a trace finds the serving PON.
+  const startOlt = data.equipment.find((e) => e.id === draft.startEquipmentId && e.type === 'OLT');
+  const ponPorts = startOlt && draft.startPortName ? buildOltPonPorts(startOlt) : undefined;
+  const pon = ponPorts?.find((p) => p.id === draft.startPortName);
+  if (pon?.connectedFeederCableId) {
+    return fail('PON Port In Use', `${pon.id} on ${startOlt!.id} already feeds cable ${pon.connectedFeederCableId}.`);
   }
 
   const isCoax = draft.type === 'Coaxial Cable';
@@ -60,9 +82,24 @@ export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandCo
     created.startEquipmentId || created.endEquipmentId
       ? ` ${created.startEquipmentId ?? '?'} → ${created.endEquipmentId ?? '?'}`
       : '';
+  const equipment: Equipment[] | undefined =
+    startOlt && ponPorts && pon
+      ? data.equipment.map((e) =>
+          e.id !== startOlt.id
+            ? e
+            : {
+                ...e,
+                ponPorts: ponPorts.map((p) => (p.id === pon.id ? { ...p, connectedFeederCableId: id } : p)),
+                logicalPorts: e.logicalPorts?.map((p) =>
+                  p.portNumber === pon.portNumber ? { ...p, connectedCableId: id } : p,
+                ),
+              },
+        )
+      : undefined;
+
   return succeed(
     created,
-    { cables: [...data.cables, created] },
+    { cables: [...data.cables, created], ...(equipment ? { equipment } : {}) },
     {
       notice: notice(
         'success',
@@ -132,11 +169,29 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
     .filter(Boolean)
     .join(' ');
   const affected = new Set(affectedClosures.map((c) => c.id));
+  const feedsPon = (e: Equipment) => e.ponPorts?.some((p) => p.connectedFeederCableId === id);
 
   return succeed(
     target,
     {
       cables: data.cables.filter((c) => c.id !== id),
+      ...(data.equipment.some(feedsPon)
+        ? {
+            equipment: data.equipment.map((e) =>
+              feedsPon(e)
+                ? {
+                    ...e,
+                    ponPorts: e.ponPorts?.map((p) =>
+                      p.connectedFeederCableId === id ? { ...p, connectedFeederCableId: undefined } : p,
+                    ),
+                    logicalPorts: e.logicalPorts?.map((p) =>
+                      p.connectedCableId === id ? { ...p, connectedCableId: undefined } : p,
+                    ),
+                  }
+                : e,
+            ),
+          }
+        : {}),
       ...(affected.size > 0
         ? {
             closures: data.closures.map((c) =>

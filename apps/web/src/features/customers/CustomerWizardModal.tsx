@@ -2,16 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Users, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { budgetStatusFor, estimateRxForSplitter } from '@fibergis/shared';
+import { budgetStatusFor, estimateRxForSplitter, isCustomerTerminal, SPLITTER_RATIOS, type SplitterRatio } from '@fibergis/shared';
 
 import { useMapStore } from '../../stores/mapStore';
-import { connectCustomerToPort } from '../../stores/networkActions';
+import { addSplitter, connectCustomerToPort } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
-
-const isCustomerTerminalType = (type: string) =>
-  type === 'FAT' || type.includes('Terminal Box') || type === 'Distribution Point';
 
 const newOntSerial = () => `HWTC-ONT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
@@ -51,11 +48,9 @@ export const CustomerWizardModal: React.FC = () => {
   );
   const [plan, setPlan] = useState('FTTH Ultra 300 Mbps');
 
-  // Only terminals that actually host a splitter can serve a subscriber.
-  const availableTerminals = useMemo(
-    () => equipments.filter((e) => isCustomerTerminalType(e.type) && splitters.some((s) => s.terminalBoxId === e.id)),
-    [equipments, splitters],
-  );
+  // A terminal without a splitter is still listed: its splitter can be added right here.
+  const availableTerminals = useMemo(() => equipments.filter((e) => isCustomerTerminal(e.type)), [equipments]);
+  const [newSplitterRatio, setNewSplitterRatio] = useState<SplitterRatio>('1:8');
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
   const [selectedPortNumber, setSelectedPortNumber] = useState<number | null>(null);
@@ -275,7 +270,7 @@ export const CustomerWizardModal: React.FC = () => {
                   onChange={(e) => selectTerminal(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
-                  {availableTerminals.length === 0 && <option value="">No terminal with a splitter</option>}
+                  {availableTerminals.length === 0 && <option value="">Place a terminal box on the map first</option>}
                   {availableTerminals.map((term) => (
                     <option key={term.id} value={term.id}>
                       {term.name} ({term.id})
@@ -302,6 +297,40 @@ export const CustomerWizardModal: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {selectedTerminal && terminalSplitters.length === 0 && (
+              <div className="flex items-end gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-semibold text-amber-900 mb-1">
+                    {selectedTerminal.id} has no splitter yet. Choose a split ratio:
+                  </label>
+                  <select
+                    value={newSplitterRatio}
+                    onChange={(e) => setNewSplitterRatio(e.target.value as SplitterRatio)}
+                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg outline-none focus:border-blue-500"
+                  >
+                    {SPLITTER_RATIOS.map((ratio) => (
+                      <option key={ratio} value={ratio}>
+                        {ratio}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const created = addSplitter({ terminalBoxId: selectedTerminal.id, ratio: newSplitterRatio });
+                    if (created) {
+                      setSelectedSplitterId(created.id);
+                      setSelectedPortNumber(1);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                >
+                  Add splitter
+                </button>
+              </div>
+            )}
 
             {/* Visual Output Port Selector */}
             {activeSplitter && (

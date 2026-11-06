@@ -22,9 +22,12 @@ import { useShallow } from 'zustand/react/shallow';
 
 import {
   buildOltLogicalPorts,
+  buildOltPonPorts,
+  type CableType,
   type Equipment,
   type EquipmentPort,
   generateOltDescription,
+  isCustomerTerminal,
   type OltConfig,
   type SplitterRatio,
   STANDARD_PORT_COLORS,
@@ -32,7 +35,7 @@ import {
 } from '@fibergis/shared';
 
 import { useMapStore } from '../../stores/mapStore';
-import { updateEquipment } from '../../stores/networkActions';
+import { addSplitter, updateEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -72,10 +75,11 @@ export const OltConfigModal: React.FC = () => {
     })),
   );
 
-  const { allEquipment, allCables } = useNetworkStore(
+  const { allEquipment, allCables, networkSplitters } = useNetworkStore(
     useShallow((s) => ({
       allEquipment: s.equipment,
       allCables: s.cables,
+      networkSplitters: s.splitters,
     })),
   );
 
@@ -111,6 +115,7 @@ export const OltConfigModal: React.FC = () => {
   const [newSplitterRatio, setNewSplitterRatio] = useState<SplitterRatio>('1:8');
   const [newSplitterPonPort, setNewSplitterPonPort] = useState('PON-01');
   const [newSplitterColor, setNewSplitterColor] = useState('Blue');
+  const [newSplitterTerminalId, setNewSplitterTerminalId] = useState('');
 
   // Cable drawing form
   const [cablePonPort, setCablePonPort] = useState('PON-01');
@@ -224,15 +229,17 @@ export const OltConfigModal: React.FC = () => {
   const handleAddSplitter = () => {
     const targetRatioPreset = SPLITTER_RATIO_PRESETS.find((p) => p.ratio === newSplitterRatio) || SPLITTER_RATIO_PRESETS[2];
     const newId = `SPL-${technology}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const destination = newSplitterTerminalId ? ` → ${newSplitterTerminalId}` : '';
 
     const newSplItem = {
       id: newId,
-      name: `${newSplitterRatio} Optical Splitter (${newSplitterPonPort})`,
+      name: `${newSplitterRatio} Optical Splitter (${newSplitterPonPort}${destination})`,
       ratio: newSplitterRatio,
       inPort: 'IN-01',
       parentPonPort: newSplitterPonPort,
       outPortsCount: targetRatioPreset.outputs,
       color: newSplitterColor,
+      targetEquipmentId: newSplitterTerminalId || undefined,
     };
 
     setSplitters((prev) => [...prev, newSplItem]);
@@ -240,24 +247,47 @@ export const OltConfigModal: React.FC = () => {
   };
 
   const handleRemoveSplitter = (id: string) => {
+    if (networkSplitters.some((s) => s.id === id)) {
+      showToast('warning', 'Splitter Installed', `${id} is already installed in a terminal box and stays in the network.`);
+      return;
+    }
     setSplitters((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleStartCableDrawing = () => {
+    const linkedPon = allEquipment
+      .find((e) => e.id === olt.id)
+      ?.ponPorts?.find((p) => p.id === cablePonPort)?.connectedFeederCableId;
+    if (linkedPon) {
+      showToast('error', 'PON Port In Use', `${cablePonPort} already feeds cable ${linkedPon}. Choose another port.`);
+      return;
+    }
+    // The cable needs the saved PON ports, and drawing closes this dialog.
+    if (!saveConfig()) return;
     closeOltConfigModal();
 
-    // Prepare draft cable
-    useMapStore.getState().setActiveTool('draw_cable');
-    useMapStore.getState().setCableTypeToDraw(cableType as any);
+    const map = useMapStore.getState();
+    map.setCableTypeToDraw(cableType as CableType);
+    map.setCableDraftDefaults({
+      startEquipmentId: olt.id,
+      endEquipmentId: cableTargetEqId || undefined,
+      startPortName: cablePonPort,
+      endPortName: cableTargetPort,
+      fiberCount: cableCoreCount,
+      colorHex: cableColorHex,
+    });
+    map.setDrawingPoints([[olt.lat, olt.lng]]);
+    map.setActiveTool('draw_cable');
 
     showToast(
       'info',
       'Cable Route Drawing Active',
-      `Click starting point near ${name} (${cablePonPort}) and trace path to target equipment.`,
+      `The route starts at ${name} (${cablePonPort}). Click along the path, finish on the destination, then press Enter.`,
     );
   };
 
-  const handleSave = () => {
+  /** Writes the form to the network. Returns `false` if validation failed. */
+  const saveConfig = (): boolean => {
     const validation = validateOltConfig({
       technology,
       totalPorts,
@@ -269,10 +299,29 @@ export const OltConfigModal: React.FC = () => {
 
     if (!validation.valid) {
       showToast('error', 'Validation Error', validation.errors.join(' '));
-      return;
+      return false;
     }
 
-    const logicalPorts: EquipmentPort[] = buildOltLogicalPorts(oltId, totalPorts, technology, portColorMap);
+    // Edit the live record: other work may have changed this OLT since the dialog opened.
+    const current = allEquipment.find((e) => e.id === olt.id) ?? olt;
+    const stranded = current.ponPorts?.find(
+      (p) => p.portNumber > totalPorts && (p.connectedFeederCableId || p.connectedCustomersCount > 0),
+    );
+    if (stranded) {
+      showToast('error', 'PON Port In Use', `${stranded.id} is still connected, so the OLT needs at least ${stranded.portNumber} ports.`);
+      return false;
+    }
+
+    const ponPorts = buildOltPonPorts({ ...current, technology, portColorMap }, totalPorts);
+    const usedPons = ponPorts.filter((p) => p.status === 'Active').length;
+    const logicalPorts: EquipmentPort[] = buildOltLogicalPorts(oltId, totalPorts, technology, portColorMap).map((port) => {
+      const pon = ponPorts.find((p) => p.portNumber === port.portNumber);
+      return {
+        ...port,
+        status: pon?.status === 'Active' ? 'Used' : pon?.status === 'Faulty' ? 'Damaged' : port.status,
+        connectedCableId: pon?.connectedFeederCableId,
+      };
+    });
 
     const oltConfigData: OltConfig = {
       technology,
@@ -283,24 +332,33 @@ export const OltConfigModal: React.FC = () => {
     };
 
     const updatedOlt: Equipment = {
-      ...olt,
-      name: name.trim() || olt.name,
+      ...current,
+      name: name.trim() || current.name,
       manufacturer,
       model,
       technology,
       totalPorts,
-      availablePorts: totalPorts,
-      area: area || olt.area,
-      street: street || olt.street,
+      usedPorts: usedPons,
+      availablePorts: totalPorts - usedPons,
+      area: area || current.area,
+      street: street || current.street,
       notes: generatedDescription,
       portColorMap,
       oltConfig: oltConfigData,
+      ponPorts,
       logicalPorts,
     };
 
     updateEquipment(updatedOlt);
+    splitters
+      .filter((s) => s.targetEquipmentId && !networkSplitters.some((n) => n.id === s.id))
+      .forEach((s) => addSplitter({ id: s.id, name: s.name, terminalBoxId: s.targetEquipmentId!, ratio: s.ratio }));
     showToast('success', 'OLT Configuration Saved', `Updated ${name} with ${technology} and ${totalPorts} PON ports.`);
-    closeOltConfigModal();
+    return true;
+  };
+
+  const handleSave = () => {
+    if (saveConfig()) closeOltConfigModal();
   };
 
   const handleCopyDescription = () => {
@@ -791,6 +849,24 @@ export const OltConfigModal: React.FC = () => {
                       ))}
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">Install in Terminal Box</label>
+                  <select
+                    value={newSplitterTerminalId}
+                    onChange={(e) => setNewSplitterTerminalId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="">Not installed yet (customers cannot use it)</option>
+                    {allEquipment
+                      .filter((e) => isCustomerTerminal(e.type))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name} ({e.id})
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div className="flex justify-end pt-1">

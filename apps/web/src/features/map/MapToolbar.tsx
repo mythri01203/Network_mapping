@@ -24,7 +24,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/shared';
 
-import { cn, equipmentIcon, Switch } from '../../components/ui';
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
+import { cn, Switch } from '../../components/ui';
 import { EQUIPMENT_DRAG_TYPE, isTypingTarget } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteCable, deleteEquipment } from '../../stores/networkActions';
@@ -33,6 +34,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { cableStyle } from '../../theme/network';
 import { BUILT_IN_COMPONENTS } from '../catalog/componentCatalog';
 import { formatDistance } from './markerIcons';
+import { placementTemplate } from './placement';
 
 const CABLE_TYPES: { type: CableType; hint: string }[] = [
   { type: 'Main Feeder Fiber', hint: 'OLT → FDMS backbone' },
@@ -270,7 +272,6 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                 </div>
               )}
               {g.items.map((c) => {
-                const Icon = equipmentIcon(c.type);
                 const selected = activeTool === 'add_equipment' && selectedEquipmentTypeToAdd === c.type;
                 return (
                   <button
@@ -279,6 +280,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, c.type);
+                      e.dataTransfer.setData('text/plain', JSON.stringify({ type: c.type, ...placementTemplate(c) }));
                       e.dataTransfer.effectAllowed = 'copy';
                     }}
                     onClick={() => onPick(c)}
@@ -293,7 +295,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                         CATEGORY_TINT[c.category] ?? CATEGORY_TINT.Custom,
                       )}
                     >
-                      <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <EquipmentIllustration type={c.type} size={30} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
@@ -404,6 +406,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
     activeTool,
     setActiveTool,
     setSelectedEquipmentTypeToAdd,
+    setEquipmentDraftTemplate,
     setSelectedCableTypeToDraw,
     setActiveDrawingPoints,
     setMeasuringPoints,
@@ -412,6 +415,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
       activeTool: s.activeTool,
       setActiveTool: s.setActiveTool,
       setSelectedEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
+      setEquipmentDraftTemplate: s.setEquipmentDraftTemplate,
       setSelectedCableTypeToDraw: s.setCableTypeToDraw,
       setActiveDrawingPoints: s.setDrawingPoints,
       setMeasuringPoints: s.setMeasuringPoints,
@@ -442,6 +446,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   const pickEquipment = (c: CatalogComponent) => {
     resetDrawing();
     setSelectedEquipmentTypeToAdd(c.type as EquipmentType);
+    setEquipmentDraftTemplate(placementTemplate(c));
     setActiveTool('add_equipment');
     closeMenu();
   };
@@ -642,7 +647,6 @@ export function MapModeBar({
 
   if (!active) return null;
 
-  const EqIcon = equipmentIcon(selectedEquipmentTypeToAdd);
   const points = activeTool === 'measure' ? measuringPoints.length : activeDrawingPoints.length;
 
   const undoPoint = () => {
@@ -659,7 +663,9 @@ export function MapModeBar({
         <div className="flex items-center gap-2.5">
           {activeTool === 'draw_cable' && <CableSwatch type={selectedCableTypeToDraw} />}
           {activeTool === 'measure' && <Ruler className="h-4 w-4 text-amber-300" />}
-          {activeTool === 'add_equipment' && <EqIcon className="h-4 w-4 text-sky-300" />}
+          {activeTool === 'add_equipment' && (
+            <EquipmentIllustration type={selectedEquipmentTypeToAdd} size={20} className="rounded bg-white p-px" />
+          )}
           <div className="leading-tight">
             <div className="text-[13px] font-semibold">
               {activeTool === 'draw_cable' && selectedCableTypeToDraw}

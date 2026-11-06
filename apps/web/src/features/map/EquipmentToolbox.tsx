@@ -24,6 +24,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { EquipmentCategory, EquipmentType } from '@fibergis/shared';
 
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { addCatalogComponent } from '../../stores/networkActions';
@@ -373,11 +374,17 @@ export const EquipmentToolbox: React.FC = () => {
                   title={`Click or drag to place ${item.name}`}
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 shrink-0" />
-                  <div
-                    className={`w-7 h-7 rounded-lg ${item.iconBg} flex items-center justify-center text-white shrink-0 shadow-xs`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                  </div>
+                  {item.isCustom ? (
+                    <div
+                      className={`w-8 h-8 rounded-lg ${item.iconBg} flex items-center justify-center text-white shrink-0 shadow-xs`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs">
+                      <EquipmentIllustration type={item.type} size={28} />
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition-colors">

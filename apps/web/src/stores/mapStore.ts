@@ -66,8 +66,19 @@ export const DEFAULT_LAYER_OPACITY: Record<string, number> = {
 type PointsUpdater = LatLng[] | ((prev: LatLng[]) => LatLng[]);
 const resolvePoints = (next: PointsUpdater, prev: LatLng[]) => (typeof next === 'function' ? next(prev) : next);
 
+/** Settings chosen before drawing that the cable wizard starts from. */
+export interface CableDraftDefaults {
+  startEquipmentId?: string;
+  endEquipmentId?: string;
+  startPortName?: string;
+  endPortName?: string;
+  fiberCount?: number;
+  colorHex?: string;
+}
+
 export interface MapState {
   activeTool: MapTool;
+  cableDraftDefaults: CableDraftDefaults | null;
   equipmentTypeToAdd: EquipmentType | null;
   equipmentDraftTemplate: Partial<Equipment> | null;
   cableTypeToDraw: CableType;
@@ -87,6 +98,7 @@ export interface MapState {
   setEquipmentTypeToAdd: (type: EquipmentType | null) => void;
   setEquipmentDraftTemplate: (template: Partial<Equipment> | null) => void;
   setCableTypeToDraw: (type: CableType) => void;
+  setCableDraftDefaults: (defaults: CableDraftDefaults | null) => void;
   setDrawingPoints: (points: PointsUpdater) => void;
   setMeasuringPoints: (points: PointsUpdater) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
@@ -106,6 +118,7 @@ export const useMapStore = create<MapState>()(
   persist(
     (set) => ({
       activeTool: 'select',
+      cableDraftDefaults: null,
       equipmentTypeToAdd: null,
       equipmentDraftTemplate: null,
       cableTypeToDraw: 'Main Feeder Fiber',
@@ -122,6 +135,7 @@ export const useMapStore = create<MapState>()(
       setEquipmentTypeToAdd: (equipmentTypeToAdd) => set({ equipmentTypeToAdd }),
       setEquipmentDraftTemplate: (equipmentDraftTemplate) => set({ equipmentDraftTemplate }),
       setCableTypeToDraw: (cableTypeToDraw) => set({ cableTypeToDraw }),
+      setCableDraftDefaults: (cableDraftDefaults) => set({ cableDraftDefaults }),
       setDrawingPoints: (points) => set((s) => ({ drawingPoints: resolvePoints(points, s.drawingPoints) })),
       setMeasuringPoints: (points) => set((s) => ({ measuringPoints: resolvePoints(points, s.measuringPoints) })),
       // A fresh object every call, so flying to the same spot twice still re-centres the map.
@@ -133,7 +147,7 @@ export const useMapStore = create<MapState>()(
       setLayerOpacity: (layer, opacity) =>
         set((s) => ({ layerOpacity: { ...s.layerOpacity, [layer]: Math.min(1, Math.max(0, opacity)) } })),
       setTileProvider: (tileProvider) => set({ tileProvider }),
-      resetSketches: () => set({ drawingPoints: [], measuringPoints: [] }),
+      resetSketches: () => set({ drawingPoints: [], measuringPoints: [], cableDraftDefaults: null }),
     }),
     {
       name: preferenceKey('map'),

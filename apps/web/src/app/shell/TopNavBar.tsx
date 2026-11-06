@@ -24,6 +24,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { UserRole } from '@fibergis/shared';
 
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import {
   cableColor,
   CableIcon,
@@ -384,7 +385,11 @@ export const TopNavBar: React.FC = () => {
                         )}
                         style={r.color ? { color: r.color } : undefined}
                       >
-                        <Icon size={15} strokeWidth={1.9} />
+                        {r.selection?.type === 'equipment' ? (
+                          <EquipmentIllustration type={r.selection.data.type} size={22} />
+                        ) : (
+                          <Icon size={15} strokeWidth={1.9} />
+                        )}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">

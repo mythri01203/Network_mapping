@@ -333,6 +333,15 @@
 .gis-pin--square {
   border-radius: 7px;
 }
+.gis-pin--device {
+  background: #fff;
+  border-color: var(--pin-color);
+  border-radius: 8px;
+}
+.gis-pin--device img {
+  display: block;
+  pointer-events: none;
+}
 .gis-pin--minor {
   background: #fff;
   color: var(--pin-color);

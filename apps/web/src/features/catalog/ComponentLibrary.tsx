@@ -4,8 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { CableType, EquipmentType } from '@fibergis/shared';
 
-import { OltChassisIcon } from '../../components/icons/OltChassisIcon';
-import { UtilityPoleIcon } from '../../components/icons/UtilityPoleIcon';
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -534,13 +533,7 @@ export const ComponentLibrary: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    {item.type === 'OLT' ? (
-                      <OltChassisIcon width={38} height={20} className="shrink-0" />
-                    ) : item.type.includes('Pole') ? (
-                      <UtilityPoleIcon width={22} height={28} className="shrink-0" />
-                    ) : (
-                      <span className="text-xl shrink-0">{item.emoji}</span>
-                    )}
+                    <EquipmentIllustration type={item.type} size={32} className="shrink-0" />
                     <div>
                       <div className="font-bold text-xs text-slate-900">{item.name}</div>
                       <div className="text-[10px] text-slate-500 leading-tight mt-0.5 line-clamp-1">
@@ -656,17 +649,7 @@ export const ComponentLibrary: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    {item.type === 'OLT' ? (
-                      <OltChassisIcon width={36} height={19} className="shrink-0" />
-                    ) : item.type.includes('Pole') ? (
-                      <UtilityPoleIcon width={22} height={28} className="shrink-0" />
-                    ) : (
-                      <div
-                        className={`w-8 h-8 rounded-lg ${item.iconBg} text-white flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs`}
-                      >
-                        {item.type.slice(0, 3)}
-                      </div>
-                    )}
+                    <EquipmentIllustration type={item.type} size={32} className="shrink-0" />
                     <div>
                       <div className="font-semibold text-xs text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
                         {item.name}

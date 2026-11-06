@@ -13,6 +13,7 @@ import {
 import type { ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { Badge, CableIcon, cn, EmptyState, equipmentIcon, IconButton, StatusBadge } from '../../components/ui';
 import { type SelectedObject, selectionLabel, useUiStore } from '../../stores/uiStore';
 import { CableInspector } from './CableInspector';
@@ -24,6 +25,8 @@ import { joinPresent } from './format';
 
 interface HeaderModel {
   icon: LucideIcon;
+  /** Equipment type whose illustration replaces the icon. */
+  illustration?: string;
   tint: string;
   kind: string;
   status?: string;
@@ -37,7 +40,8 @@ function headerFor(selection: SelectedObject): HeaderModel {
       const eq = selection.data;
       return {
         icon: equipmentIcon(eq.type),
-        tint: 'bg-blue-50 text-blue-700 ring-blue-100',
+        illustration: eq.type,
+        tint: 'bg-white text-blue-700 ring-slate-200',
         kind: eq.type,
         status: eq.status,
         tags: eq.technology ? [<Badge key="tech">{eq.technology}</Badge>] : [],
@@ -169,7 +173,11 @@ export function PropertiesPanel() {
               header.tint,
             )}
           >
-            <Icon size={18} strokeWidth={1.9} />
+            {header.illustration ? (
+              <EquipmentIllustration type={header.illustration} size={30} />
+            ) : (
+              <Icon size={18} strokeWidth={1.9} />
+            )}
           </span>
           <div className="min-w-0 flex-1">
             <h2

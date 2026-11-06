@@ -193,16 +193,20 @@ export const SpliceModal: React.FC = () => {
         [targetCoords[0], targetCoords[1]],
       ];
 
+      // A splitter is not map equipment: its cable starts at the box that hosts it.
+      const upstreamHostId = splitters.find((s) => s.id === currentUpstream.id)?.terminalBoxId;
       const createdCable = addCable({
         name: cableName,
         type: isCustomerTarget ? 'Drop Fiber' : 'Distribution Fiber',
-        startEquipmentId: currentUpstream.id,
+        startEquipmentId: isCustomerTarget ? currentUpstream.id : upstreamHostId || currentUpstream.id,
+        startPortName: currentUpstream.type === 'OLT' ? selectedPortId : undefined,
         endEquipmentId: target.id,
         coordinates: cableCoords,
         lengthMeters: distanceMeters,
         installationType: 'Aerial',
         routeStatus: 'Active',
       });
+      if (!createdCable) return; // addCable already reported why.
 
       // 2. If target is a subscriber customer/ONU, update logical assignment
       if (isCustomerTarget) {

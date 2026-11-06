@@ -151,7 +151,7 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 To experience the full prototype workflow:
 
 1. **Add Equipment:** Open Component Library (or click **Search Components**), drag or click **FAT Terminal Box** onto the GIS map.
-2. **Draw Cable:** Click **Draw Cable** on the floating toolbar, click points on the map with smart snapping to equipment, and complete the 6-step cable wizard.
+2. **Draw Cable:** Click **Draw Cable** on the floating toolbar, click points on the map with smart snapping to equipment, and confirm the type, endpoints and PON port in the cable form.
 3. **Assign Fiber Cores:** Click the cable, open the **Bottom Fiber Core Table**, and assign Core 1 (Blue) to a downstream terminal.
 4. **Manage Ports:** Select the OLT or FAT, click **Manage Ports (Visual Grid)** in the inspector to view and update used/available ports.
 5. **Configure Splitter:** Open **Fiber Splitters**, view 1:8 PLC schematic, input feeder signal, and output customer ports.

@@ -1,4 +1,29 @@
-import type { Equipment, EquipmentPort, OltConfig } from '../model/types';
+import type { Equipment, EquipmentPort, OltConfig, PonPort } from '../model/types';
+
+/**
+ * The PON ports of an OLT at the given size. Existing ports keep their connections;
+ * ports that do not exist yet start as Available.
+ */
+export function buildOltPonPorts(
+  olt: Pick<Equipment, 'ponPorts' | 'totalPorts' | 'technology' | 'portColorMap'>,
+  totalPorts: number = olt.ponPorts?.length || olt.totalPorts || 0,
+): PonPort[] {
+  return Array.from({ length: totalPorts }, (_, i) => {
+    const portNumber = i + 1;
+    const id = `PON-${String(portNumber).padStart(2, '0')}`;
+    const existing = olt.ponPorts?.find((p) => p.portNumber === portNumber);
+    const colorName = olt.portColorMap?.[existing?.id ?? id];
+    if (existing) return colorName ? { ...existing, colorName } : existing;
+    return {
+      id,
+      portNumber,
+      technology: olt.technology === 'EPON' ? 'EPON' : 'GPON',
+      status: 'Available',
+      colorName,
+      connectedCustomersCount: 0,
+    };
+  });
+}
 
 export interface StandardPortColor {
   number: number;
