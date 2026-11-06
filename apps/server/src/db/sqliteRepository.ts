@@ -37,7 +37,7 @@ const prepareStatements = (db: DatabaseSync) => ({
   counts: db.prepare('SELECT collection, COUNT(*) AS total FROM records GROUP BY collection'),
   upsert: db.prepare(
     `INSERT INTO records (collection, id, position, data, updated_at)
-       VALUES (?1, ?2, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?1), ?3, ?4)
+       VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?), ?, ?)
        ON CONFLICT (collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
   ),
   remove: db.prepare('DELETE FROM records WHERE collection = ? AND id = ?'),
@@ -101,7 +101,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
       let deleted = 0;
       for (const [collection, records] of this.entries(changes.upserts)) {
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, JSON.stringify(record), now);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now);
           upserted += 1;
         }
       }
@@ -121,7 +121,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
       for (const [collection, records] of this.entries(collections)) {
         this.statements.clear.run(collection);
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, JSON.stringify(record), now);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now);
         }
       }
       return this.bumpRevision();

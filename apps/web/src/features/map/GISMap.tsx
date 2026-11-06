@@ -11,6 +11,7 @@ import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { BikerModePanel } from '../field-work/BikerModePanel';
+import { EquipmentToolbox } from './EquipmentToolbox';
 import { oltFamily, type OltFilter } from './layerFilters';
 import { BikerRouteLayer } from './layers/BikerRouteLayer';
 import { CableLayer } from './layers/CableLayer';
@@ -41,14 +42,42 @@ export const GISMap: React.FC = () => {
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    const type = e.dataTransfer.getData(EQUIPMENT_DRAG_TYPE) as EquipmentType;
-    if (!map || !type) return;
+    const rawType = e.dataTransfer.getData(EQUIPMENT_DRAG_TYPE) as EquipmentType;
+    const rawPayload = e.dataTransfer.getData('text/plain');
+    if (!map || (!rawType && !rawPayload)) return;
     e.preventDefault();
     const { lat, lng } = map.mouseEventToLatLng(e.nativeEvent);
-    const created = addEquipment({ name: `New ${type}`, type, lat, lng, category: categoryForType(type) });
+
+    let name = `New ${rawType || 'Equipment'}`;
+    let type = rawType;
+    let totalPorts: number | undefined;
+
+    try {
+      if (rawPayload && rawPayload.startsWith('{')) {
+        const parsed = JSON.parse(rawPayload);
+        if (parsed.type) type = parsed.type;
+        if (parsed.name) name = parsed.name;
+        if (parsed.totalPorts) totalPorts = parsed.totalPorts;
+      }
+    } catch {
+      // ignore
+    }
+
+    const created = addEquipment({
+      name,
+      type: type || 'Outdoor Splitter',
+      lat,
+      lng,
+      category: categoryForType(type || 'Outdoor Splitter'),
+      totalPorts,
+      availablePorts: totalPorts,
+    });
     if (created) {
       useUiStore.getState().select({ type: 'equipment', data: created });
       useUiStore.getState().setPanelOpen('right', true);
+      if (created.type === 'OLT') {
+        useUiStore.getState().openOltConfigModal(created);
+      }
     }
   };
 
@@ -65,6 +94,7 @@ export const GISMap: React.FC = () => {
 
       {map && <MapOverlays map={map} oltFilter={oltFilter} />}
 
+      <EquipmentToolbox />
       <MapToolbar
         isBikerMode={isBikerMode}
         onToggleBikerMode={() => useBikerStore.getState().setBikerMode(!isBikerMode)}

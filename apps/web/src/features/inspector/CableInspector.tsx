@@ -1,9 +1,22 @@
-import { ArrowDown, FileText, GitMerge, Info, Layers, Route, Table2, Trash2, Waypoints } from 'lucide-react';
+import {
+  ArrowDown,
+  Check,
+  FileText,
+  Gauge,
+  GitMerge,
+  Info,
+  Layers,
+  Palette,
+  Route,
+  Table2,
+  Trash2,
+  Waypoints,
+} from 'lucide-react';
 
-import type { Cable } from '@fibergis/shared';
+import { type Cable, STANDARD_12_COLORS } from '@fibergis/shared';
 
 import { Button, KeyValueList } from '../../components/ui';
-import { deleteCable, traceNetworkPath } from '../../stores/networkActions';
+import { deleteCable, traceNetworkPath, updateCable } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { formatDate, formatLength, joinPresent, presentItems } from './format';
@@ -28,6 +41,105 @@ function Endpoint({ label, equipmentId }: { label: string; equipmentId?: string 
       </span>
       {equipment && <span className="shrink-0 text-[11px] text-slate-500">{equipment.type}</span>}
     </div>
+  );
+}
+
+function FiberLossSection({ lengthMeters }: { lengthMeters: number }) {
+  const km = lengthMeters / 1000;
+  const loss1310 = (km * 0.35).toFixed(2);
+  const loss1550 = (km * 0.20).toFixed(2);
+  const totalBudget1310 = (km * 0.35 + 0.5).toFixed(2);
+
+  return (
+    <InspectorSection title="Optical Fiber Loss" icon={Gauge} defaultOpen>
+      <div className="space-y-2 text-xs">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+            <span className="block text-[10px] uppercase text-slate-400">Loss @ 1310 nm</span>
+            <span className="text-base font-bold text-slate-900">{loss1310} dB</span>
+            <span className="mt-0.5 block text-[10px] text-slate-400">0.35 dB/km standard</span>
+          </div>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+            <span className="block text-[10px] uppercase text-slate-400">Loss @ 1550 nm</span>
+            <span className="text-base font-bold text-slate-900">{loss1550} dB</span>
+            <span className="mt-0.5 block text-[10px] text-slate-400">0.20 dB/km standard</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-100 pt-1 text-[11px] text-slate-600">
+          <span>Est. Link Budget (incl. connectors):</span>
+          <span className="font-bold text-blue-700">{totalBudget1310} dB</span>
+        </div>
+      </div>
+    </InspectorSection>
+  );
+}
+
+function CableAppearanceSection({ cable }: { cable: Cable }) {
+  const currentColor = cable.colorHex || '#0284c7';
+  const currentThickness = cable.thickness ?? 4;
+
+  const setColor = (hex: string) => {
+    updateCable({ ...cable, colorHex: hex });
+  };
+
+  const setThickness = (val: number) => {
+    updateCable({ ...cable, thickness: val });
+  };
+
+  return (
+    <InspectorSection title="Appearance & Color Coding" icon={Palette} defaultOpen>
+      <div className="space-y-3 text-xs">
+        <div>
+          <span className="block text-[11px] font-semibold text-slate-700 mb-1.5">
+            Cable Color (TIA-598 Standard Palette)
+          </span>
+          <div className="grid grid-cols-6 gap-1.5">
+            {STANDARD_12_COLORS.map((col) => {
+              const isSelected = currentColor.toLowerCase() === col.hex.toLowerCase();
+              return (
+                <button
+                  key={col.hex}
+                  type="button"
+                  onClick={() => setColor(col.hex)}
+                  className={`group relative h-7 rounded-lg border flex items-center justify-center transition-all ${
+                    isSelected
+                      ? 'border-slate-900 ring-2 ring-blue-500 scale-105 shadow-sm'
+                      : 'border-slate-200 hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: col.hex }}
+                  title={`${col.number}. ${col.name} (${col.hex})`}
+                >
+                  {isSelected && <Check className="w-3.5 h-3.5" style={{ color: col.textColor }} />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-semibold text-slate-700">Cable Thickness</span>
+            <span className="font-mono text-slate-500 font-bold">{currentThickness}px</span>
+          </div>
+          <div className="flex gap-1.5">
+            {[2, 3, 4, 5, 6, 8].map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setThickness(w)}
+                className={`flex-1 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                  currentThickness === w
+                    ? 'bg-blue-600 border-blue-600 text-white font-bold'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {w}px
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </InspectorSection>
   );
 }
 
@@ -79,9 +191,13 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
         </div>
       </InspectorSection>
 
+      <CableAppearanceSection cable={cable} />
+
       <InspectorSection title="Fiber cores" icon={Layers} aside={`${cable.fiberCount} F`}>
         <CoreBreakdown cores={cable.cores} fiberCount={cable.fiberCount} />
       </InspectorSection>
+
+      {cable.cableCategory !== 'Coaxial' && <FiberLossSection lengthMeters={cable.lengthMeters} />}
 
       <InspectorSection title="Details" icon={Info} defaultOpen={detailed}>
         <KeyValueList items={details} />
@@ -100,6 +216,16 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
             label="Splice records"
             hint="Joints along this route"
             onClick={() => setModalOpen('splicing', true)}
+          />
+          <ActionRow
+            icon={Trash2}
+            label="Delete Wire / Cable"
+            hint="Remove this physical fiber line from the GIS map"
+            onClick={() => {
+              void deleteCable(cable.id);
+              useUiStore.getState().select(null);
+              useUiStore.getState().setPanelOpen('right', false);
+            }}
           />
         </ActionList>
       </InspectorSection>

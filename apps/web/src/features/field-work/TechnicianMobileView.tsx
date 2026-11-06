@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Camera, CheckCircle2, X } from 'lucide-react';
+import { Camera, CheckCircle2, Navigation, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { useBikerStore } from '../../stores/bikerStore';
 import { updateWorkOrderStatus, uploadEquipmentPhoto } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
@@ -113,18 +114,36 @@ export const TechnicianMobileView: React.FC = () => {
 
                   <div className="pt-2 border-t border-slate-700 flex items-center justify-between">
                     <span className="text-[10px] text-slate-400">{wo.scheduledDate}</span>
-                    {wo.status !== 'Completed' ? (
+                    <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => updateWorkOrderStatus(wo.id, 'Completed')}
-                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                        type="button"
+                        onClick={() => {
+                          const eq = equipments.find((e) => e.id === wo.equipmentId);
+                          if (eq) {
+                            setModalOpen('technicianMobile', false);
+                            useUiStore.getState().select({ type: 'equipment', data: eq });
+                            useBikerStore.getState().navigateTo({ id: eq.id, name: eq.name, lat: eq.lat, lng: eq.lng });
+                            useBikerStore.getState().setBikerMode(true);
+                            useBikerStore.getState().setActiveBikerTab('navigation');
+                          }
+                        }}
+                        className="px-2 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Mark Done
+                        <Navigation className="w-3.5 h-3.5" /> Navigate
                       </button>
-                    ) : (
-                      <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Finished
-                      </span>
-                    )}
+                      {wo.status !== 'Completed' ? (
+                        <button
+                          onClick={() => updateWorkOrderStatus(wo.id, 'Completed')}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Mark Done
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Finished
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

@@ -36,6 +36,10 @@ export const MODAL_IDS = [
   'componentCatalog',
   'portManager',
   'knowledge',
+  'spliceModal',
+  'fiberTrace',
+  'onuFleet',
+  'oltConfig',
 ] as const;
 export type ModalId = (typeof MODAL_IDS)[number];
 
@@ -59,10 +63,11 @@ export function knowledgeKeyFor(equipmentTypeOrId: string): string {
     [(k) => k.includes('odf'), 'odf'],
     [(k) => k.includes('fdms') || k.includes('distribution-cabinet'), 'fdms'],
     [(k) => k.includes('fat') || k.includes('terminal-box'), 'fat'],
-    [(k) => k.includes('splitter'), 'splitter'],
-    [(k) => k.includes('closure') || k.includes('joint'), 'joint-closure'],
-    [(k) => k.includes('pole'), 'telecom-pole'],
-    [(k) => k.includes('ont') || k.includes('onu'), 'ont'],
+    [(k) => k.includes('splitter') || k.includes('coupler'), 'splitter'],
+    [(k) => k.includes('closure') || k.includes('joint') || k.includes('splice') || k.includes('connector'), 'joint-closure'],
+    [(k) => k.includes('pole') || k.includes('loop'), 'telecom-pole'],
+    [(k) => k.includes('ont') || k.includes('onu') || k.includes('instrument'), 'ont'],
+    [(k) => k.includes('mikrotik') || k.includes('microtek'), 'olt'],
     [(k) => k.includes('receiver') || k.includes('node') || k.includes('catv'), 'optical-receiver'],
   ];
   return rules.find(([test]) => test(key))?.[1] ?? key;
@@ -74,6 +79,10 @@ export interface UiState {
   panels: Record<PanelId, boolean>;
   isSidebarCollapsed: boolean;
   selectedKnowledgeId: string | null;
+  selectedSpliceTarget: Equipment | Customer | null;
+  activeTraceTargetId: string | null;
+  pickingOnuCustomer: Customer | null;
+  selectedOltForConfig: Equipment | null;
   // Preferences (persisted)
   uiMode: UiMode;
   userRole: UserRole;
@@ -84,6 +93,13 @@ export interface UiState {
   setPanelOpen: (id: PanelId, open: Updater<boolean>) => void;
   setSidebarCollapsed: (collapsed: Updater<boolean>) => void;
   setSelectedKnowledgeId: (id: string | null) => void;
+  setSelectedSpliceTarget: (target: Equipment | Customer | null) => void;
+  openSpliceModal: (target: Equipment | Customer) => void;
+  setActiveTraceTargetId: (id: string | null) => void;
+  openFiberTrace: (targetId: string) => void;
+  openOltConfigModal: (olt: Equipment) => void;
+  closeOltConfigModal: () => void;
+  setPickingOnuCustomer: (customer: Customer | null) => void;
   openKnowledge: (equipmentTypeOrId: string) => void;
   setUiMode: (mode: UiMode) => void;
   setUserRole: (role: UserRole) => void;
@@ -99,6 +115,10 @@ export const useUiStore = create<UiState>()(
       panels: { left: false, right: false, bottom: false },
       isSidebarCollapsed: true,
       selectedKnowledgeId: null,
+      selectedSpliceTarget: null,
+      activeTraceTargetId: null,
+      pickingOnuCustomer: null,
+      selectedOltForConfig: null,
       uiMode: 'simple',
       userRole: 'Network Engineer',
       networkMode: 'All',
@@ -109,6 +129,29 @@ export const useUiStore = create<UiState>()(
       setSidebarCollapsed: (collapsed) =>
         set((s) => ({ isSidebarCollapsed: resolve(collapsed, s.isSidebarCollapsed) })),
       setSelectedKnowledgeId: (selectedKnowledgeId) => set({ selectedKnowledgeId }),
+      setSelectedSpliceTarget: (selectedSpliceTarget) => set({ selectedSpliceTarget }),
+      openSpliceModal: (target) =>
+        set((s) => ({
+          selectedSpliceTarget: target,
+          modals: { ...s.modals, spliceModal: true },
+        })),
+      setActiveTraceTargetId: (activeTraceTargetId) => set({ activeTraceTargetId }),
+      openFiberTrace: (targetId) =>
+        set((s) => ({
+          activeTraceTargetId: targetId,
+          modals: { ...s.modals, fiberTrace: true },
+        })),
+      openOltConfigModal: (olt) =>
+        set((s) => ({
+          selectedOltForConfig: olt,
+          modals: { ...s.modals, oltConfig: true },
+        })),
+      closeOltConfigModal: () =>
+        set((s) => ({
+          selectedOltForConfig: null,
+          modals: { ...s.modals, oltConfig: false },
+        })),
+      setPickingOnuCustomer: (pickingOnuCustomer) => set({ pickingOnuCustomer }),
       openKnowledge: (equipmentTypeOrId) =>
         set((s) => ({
           selectedKnowledgeId: knowledgeKeyFor(equipmentTypeOrId),

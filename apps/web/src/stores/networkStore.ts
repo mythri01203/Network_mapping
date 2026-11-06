@@ -10,6 +10,7 @@ import {
   type CommandContext,
   type CommandResult,
   type CommandSuccess,
+  type GpsRoute,
   formatLogTimestamp,
   isLatLngPair,
   type LatLng,
@@ -49,6 +50,7 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   zones: 'zones',
   documents: 'documents',
   catalog: 'custom_components',
+  gpsRoutes: 'gps_routes',
 };
 
 export const MAX_AUDIT_LOGS = 500;
@@ -111,6 +113,8 @@ export interface NetworkState extends NetworkSnapshot {
   replaceCollections: (collections: Partial<NetworkSnapshot>, projectStartPoint?: LatLng | null) => void;
   setProjectStartPoint: (point: LatLng | null) => void;
   addCatalogComponent: (item: CatalogComponent) => void;
+  addGpsRoute: (route: GpsRoute) => void;
+  deleteGpsRoute: (id: string) => void;
 }
 
 const isRecordArray = (value: unknown): boolean =>
@@ -289,6 +293,16 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     addCatalogComponent: (item) => {
       set((s) => ({ catalog: [...s.catalog.filter((c) => c.id !== item.id), item] }));
       showToast('success', 'Component Type Added', `${item.name} is now in the catalog.`);
+    },
+
+    addGpsRoute: (route) => {
+      set((s) => ({ gpsRoutes: [...(s.gpsRoutes || []).filter((r) => r.id !== route.id), route] }));
+      showToast('success', 'GPS Route Saved', `Route "${route.name}" (${route.distanceKm.toFixed(2)} km) saved.`);
+    },
+
+    deleteGpsRoute: (id) => {
+      set((s) => ({ gpsRoutes: (s.gpsRoutes || []).filter((r) => r.id !== id) }));
+      showToast('info', 'GPS Route Deleted', 'Route removed from saved tracks.');
     },
   };
 });

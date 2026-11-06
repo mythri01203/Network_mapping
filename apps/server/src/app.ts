@@ -81,6 +81,25 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
     });
   }
 
+  // Root route: return API status and guide the user to the web UI
+  app.get('/', async (_request, reply) => {
+    if (serveWeb) {
+      return reply.header('cache-control', 'no-cache').sendFile('index.html');
+    }
+    return reply.send({
+      service: 'FiberOps Network Mapping Backend API',
+      status: 'online',
+      message: 'The Fastify REST API is running. The web frontend application is running at http://localhost:5173',
+      endpoints: {
+        health: '/api/v1/health',
+        network: '/api/v1/network',
+        gpsRoutes: '/api/v1/gpsRoutes',
+        catalog: '/api/v1/catalog',
+      },
+      webApp: 'http://localhost:5173',
+    });
+  });
+
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0];
     const wantsPage = request.method === 'GET' || request.method === 'HEAD';

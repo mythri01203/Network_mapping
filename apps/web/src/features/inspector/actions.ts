@@ -9,6 +9,11 @@ export function navigateToSite(target: BikerWaypoint): void {
   const biker = useBikerStore.getState();
   biker.navigateTo(target);
   biker.setBikerMode(true);
+  biker.setActiveBikerTab('navigation');
+  if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+    window.history.pushState(null, '', '/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
 }
 
 /** OLTs and ODFs feed main fiber; everything else keeps the cable type the user last picked. */

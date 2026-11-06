@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import type {
   auditLogSchema,
+  cableCoreLinkSchema,
   cableSchema,
   catalogComponentSchema,
   customerSchema,
@@ -10,14 +11,19 @@ import type {
   equipmentSchema,
   faultSchema,
   fiberCoreSchema,
+  fiberTraceHopSchema,
+  gpsRouteSchema,
   imageAnnotationSchema,
   jointClosureSchema,
   latLngSchema,
   networkDocumentSchema,
   networkZoneSchema,
+  oltConfigSchema,
+  opticalPortSchema,
   opticalPowerInfoSchema,
   opticalPowerSampleSchema,
   ponPortSchema,
+  spliceMatrixEntrySchema,
   spliceRecordSchema,
   splitterPortSchema,
   splitterSchema,
@@ -45,6 +51,12 @@ export type Customer = z.infer<typeof customerSchema>;
 export type Fault = z.infer<typeof faultSchema>;
 export type WorkOrder = z.infer<typeof workOrderSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
+export type OpticalPort = z.infer<typeof opticalPortSchema>;
+export type SpliceMatrixEntry = z.infer<typeof spliceMatrixEntrySchema>;
+export type CableCoreLink = z.infer<typeof cableCoreLinkSchema>;
+export type FiberTraceHop = z.infer<typeof fiberTraceHopSchema>;
+export type GpsRoute = z.infer<typeof gpsRouteSchema>;
+export type OltConfig = z.infer<typeof oltConfigSchema>;
 
 /** One hop of a computed OLT-to-customer path. Derived at runtime, never stored. */
 export interface TracePathNode {

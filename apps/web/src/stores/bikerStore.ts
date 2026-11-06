@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
-import type { LatLng } from '@fibergis/shared';
+import { type GpsRoute, type LatLng, polylineLengthMeters } from '@fibergis/shared';
 
 import { estimateRoadRoute, fetchRoadRoute, type RoadRoute, type RouteStop } from '../lib/routing';
 import { useMapStore } from './mapStore';
+import { addGpsRoute } from './networkActions';
 import { useNetworkStore } from './networkStore';
 import { showToast } from './toastStore';
 import { type SelectedObject, useUiStore } from './uiStore';
@@ -22,8 +23,21 @@ export interface BikerRoute {
   limitation: string;
 }
 
+export type GpsTrackingStatus = 'idle' | 'recording' | 'paused' | 'stopped';
+
+export interface LiveGpsPosition {
+  lat: number;
+  lng: number;
+  accuracy: number;
+  timestamp: number;
+}
+
+export type BikerTabId = 'survey' | 'gps_track' | 'navigation';
+
 interface BikerState {
   isBikerMode: boolean;
+  activeBikerTab: BikerTabId;
+  setActiveBikerTab: (tab: BikerTabId) => void;
   waypoints: BikerWaypoint[];
   route: BikerRoute | null;
   setBikerMode: (on: boolean) => void;
@@ -32,7 +46,43 @@ interface BikerState {
   /** Plans a fresh route to a single destination and centres the map on it. */
   navigateTo: (stop: BikerWaypoint) => void;
   clearRoute: () => void;
+
+  // Module 1: Live GPS Tracking
+  trackingStatus: GpsTrackingStatus;
+  livePosition: LiveGpsPosition | null;
+  trackedCoordinates: LatLng[];
+  distanceKm: number;
+  elapsedSeconds: number;
+  gpsAccuracy: number | null;
+  gpsError: string | null;
+  startLocationName: string;
+  savedRoutesModalOpen: boolean;
+  activeSavedRoute: GpsRoute | null;
+
+  startLiveTracking: () => void;
+  pauseLiveTracking: () => void;
+  resumeLiveTracking: () => void;
+  stopLiveTracking: () => void;
+  saveLiveRoute: (name: string, notes?: string) => GpsRoute | null;
+  clearLiveRoute: () => void;
+  loadSavedRoute: (route: GpsRoute) => void;
+  clearActiveSavedRoute: () => void;
+  setSavedRoutesModalOpen: (open: boolean) => void;
 }
+
+let watchId: number | null = null;
+let timerId: ReturnType<typeof setInterval> | null = null;
+
+const stopWatchAndTimer = () => {
+  if (watchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  if (timerId !== null) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+};
 
 const ROUTE_LIMITATIONS: Record<RoadRoute['source'], string> = {
   road: 'OSRM driving profile; not a verified motorcycle route',
@@ -63,10 +113,10 @@ function locationOf(selection: SelectedObject | null): BikerWaypoint | null {
 }
 
 /**
- * Route origin, first match wins: the selected object, an OLT (the usual dispatch point), any other
- * equipment, then the project start point. The destination itself is never used as its own origin.
+ * Route origin, first match wins: the selected object, an OLT, any other
+ * equipment, then the project start point. Fallback to map center so it never fails.
  */
-function resolveOrigin(destination: BikerWaypoint): BikerWaypoint | null {
+function resolveOrigin(destination: BikerWaypoint): BikerWaypoint {
   const { equipment, projectStartPoint } = useNetworkStore.getState();
   const hubs = [...equipment.filter((e) => e.type === 'OLT'), ...equipment.filter((e) => e.type !== 'OLT')];
   const candidates: (BikerWaypoint | null)[] = [
@@ -78,14 +128,32 @@ function resolveOrigin(destination: BikerWaypoint): BikerWaypoint | null {
   ];
   const isElsewhere = (c: BikerWaypoint) =>
     c.id !== destination.id && (c.lat !== destination.lat || c.lng !== destination.lng);
-  return candidates.find((c): c is BikerWaypoint => c !== null && isElsewhere(c)) ?? null;
+  const found = candidates.find((c): c is BikerWaypoint => c !== null && isElsewhere(c));
+  if (found) return found;
+
+  const live = useBikerStore.getState().livePosition;
+  if (live && (live.lat !== destination.lat || live.lng !== destination.lng)) {
+    return {
+      id: 'ORIGIN-LIVE-GPS',
+      name: 'Field Technician GPS',
+      lat: live.lat,
+      lng: live.lng,
+    };
+  }
+
+  const vp = useMapStore.getState().viewport;
+  return {
+    id: 'ORIGIN-GPS',
+    name: 'Current Operator Location',
+    lat: vp.lat,
+    lng: vp.lng,
+  };
 }
 
 const formatTrip = (route: RoadRoute) =>
   `${(route.distanceMeters / 1000).toFixed(2)} km · ~${Math.max(1, Math.ceil(route.durationSeconds / 60))} min`;
 
 export const useBikerStore = create<BikerState>()((set, get) => {
-  // Each plan gets an id so a slow response can't overwrite a newer route.
   let latestRequest = 0;
 
   const plan = async (stops: BikerWaypoint[]) => {
@@ -99,7 +167,10 @@ export const useBikerStore = create<BikerState>()((set, get) => {
     const path = [origin, ...stops];
     const route = (await fetchRoadRoute(path)) ?? estimateRoadRoute(path);
     if (request !== latestRequest) return;
-
+    if (!route) {
+      showToast('warning', 'Route Not Found', 'Could not compute road directions between these points.');
+      return;
+    }
     set({
       route: {
         coordinates: route.coordinates,
@@ -112,34 +183,254 @@ export const useBikerStore = create<BikerState>()((set, get) => {
     });
     showToast(
       'info',
-      route.source === 'road' ? 'Road Route Ready' : 'Estimated Route Ready',
-      `To ${destination.name} · ${formatTrip(route)}. The dashed orange line is the road route, not a fiber cable.`,
+      route.source === 'road' ? 'Road Route Planned' : 'Estimated Route Ready',
+      `${formatTrip(route)} to ${destination.name}`,
     );
   };
 
   return {
     isBikerMode: false,
+    activeBikerTab: 'survey',
+    setActiveBikerTab: (activeBikerTab) => set({ activeBikerTab }),
     waypoints: [],
     route: null,
 
-    setBikerMode: (isBikerMode) => set({ isBikerMode }),
+    // Module 1: Live GPS Tracking initial state
+    trackingStatus: 'idle',
+    livePosition: null,
+    trackedCoordinates: [],
+    distanceKm: 0,
+    elapsedSeconds: 0,
+    gpsAccuracy: null,
+    gpsError: null,
+    startLocationName: 'Operator Starting Point',
+    savedRoutesModalOpen: false,
+    activeSavedRoute: null,
+
+    setBikerMode: (on) => {
+      set({ isBikerMode: on });
+      if (!on) {
+        stopWatchAndTimer();
+        if (get().trackingStatus === 'recording') {
+          set({ trackingStatus: 'paused' });
+        }
+      }
+    },
 
     addWaypoint: (stop) => {
-      const current = get().waypoints;
-      const waypoints = current.some((p) => p.id === stop.id) ? current : [...current, stop];
-      set({ waypoints });
-      void plan(waypoints);
+      if (get().waypoints.some((w) => w.id === stop.id)) return;
+      const next = [...get().waypoints, stop];
+      set({ waypoints: next });
+      void plan(next);
     },
 
     navigateTo: (stop) => {
-      set({ waypoints: [stop] });
+      set({ waypoints: [stop], isBikerMode: true, activeBikerTab: 'navigation' });
       void plan([stop]);
       useMapStore.getState().flyTo(stop.lat, stop.lng, 16);
     },
 
     clearRoute: () => {
       latestRequest++;
-      set({ waypoints: [], route: null });
+      set({ route: null, waypoints: [] });
     },
+
+    // Module 1: GPS Live Tracking Methods
+    startLiveTracking: () => {
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        set({ gpsError: 'Geolocation API is not supported by your browser.' });
+        showToast('error', 'GPS Not Supported', 'Your browser does not support Geolocation.');
+        return;
+      }
+
+      stopWatchAndTimer();
+
+      set({
+        trackingStatus: 'recording',
+        isBikerMode: true,
+        activeBikerTab: 'gps_track',
+        gpsError: null,
+      });
+
+      // Start elapsed timer
+      timerId = setInterval(() => {
+        if (get().trackingStatus === 'recording') {
+          set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
+        }
+      }, 1000);
+
+      // Start position watch
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+
+          // Always update live position marker so operator sees their location on map
+          set({
+            livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
+            gpsAccuracy: accuracy,
+            gpsError: null,
+          });
+
+          // Discard excessive noise (> 120m) for polyline route recording
+          if (accuracy > 120 && get().trackedCoordinates.length > 0) {
+            set({
+              gpsError: `Moderate GPS accuracy (±${Math.round(accuracy)}m). Recording will refine outdoors with clear sky view.`,
+            });
+            return;
+          }
+
+          const currentCoords = get().trackedCoordinates;
+          if (currentCoords.length > 0) {
+            const last = currentCoords[currentCoords.length - 1];
+            const deltaMeters = polylineLengthMeters([last, [latitude, longitude]]);
+
+            // Noise / Stationary filter: require at least 3m displacement to append a point
+            if (deltaMeters < 3) {
+              set({
+                livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
+                gpsAccuracy: accuracy,
+                gpsError: null,
+              });
+              return;
+            }
+
+            // Anomaly filter: ignore unrealistic velocity jumps (> 150 km/h / 42 m/s over short intervals)
+            const timeDiffSec = Math.max(1, (pos.timestamp - (get().livePosition?.timestamp ?? pos.timestamp)) / 1000);
+            if (deltaMeters / timeDiffSec > 42) {
+              set({ gpsAccuracy: accuracy, gpsError: 'Ignored anomalous GPS location jump.' });
+              return;
+            }
+          }
+
+          const nextCoords: LatLng[] = [...currentCoords, [latitude, longitude]];
+          const nextDistKm = polylineLengthMeters(nextCoords) / 1000;
+
+          set({
+            livePosition: { lat: latitude, lng: longitude, accuracy, timestamp: pos.timestamp },
+            trackedCoordinates: nextCoords,
+            distanceKm: nextDistKm,
+            gpsAccuracy: accuracy,
+            gpsError: null,
+          });
+
+          // Smoothly pan map to follow the rider
+          useMapStore.getState().flyTo(latitude, longitude, 18);
+        },
+        (err) => {
+          let msg = 'GPS positioning error.';
+          if (err.code === err.PERMISSION_DENIED) {
+            msg = 'GPS permission denied. Please enable location permissions in browser settings.';
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            msg = 'GPS signal lost or unavailable.';
+          } else if (err.code === err.TIMEOUT) {
+            msg = 'GPS acquisition timed out. Reconnecting...';
+          }
+          set({ gpsError: msg });
+          showToast('error', 'GPS Signal Notice', msg);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 1000,
+        },
+      );
+
+      showToast('success', 'Bike Tracking Started', 'Recording actual GPS route points.');
+    },
+
+    pauseLiveTracking: () => {
+      if (timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      set({ trackingStatus: 'paused' });
+      showToast('info', 'GPS Tracking Paused', 'Route recording is paused.');
+    },
+
+    resumeLiveTracking: () => {
+      set({ trackingStatus: 'recording' });
+      if (timerId === null) {
+        timerId = setInterval(() => {
+          if (get().trackingStatus === 'recording') {
+            set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 }));
+          }
+        }, 1000);
+      }
+      showToast('success', 'GPS Tracking Resumed', 'Continuing route recording.');
+    },
+
+    stopLiveTracking: () => {
+      stopWatchAndTimer();
+      set({ trackingStatus: 'stopped' });
+      showToast('info', 'GPS Tracking Stopped', `Recorded ${get().trackedCoordinates.length} GPS points (${get().distanceKm.toFixed(2)} km).`);
+    },
+
+    saveLiveRoute: (name: string, notes?: string) => {
+      const coords = get().trackedCoordinates;
+      if (coords.length < 2) {
+        showToast('warning', 'Route Too Short', 'Need at least 2 GPS coordinates to save a completed route.');
+        return null;
+      }
+
+      const routeId = `GPS-BIKE-${Date.now().toString(36).toUpperCase()}`;
+      const now = new Date().toISOString();
+      const route: GpsRoute = {
+        id: routeId,
+        name: name.trim() || `Bike Route ${new Date().toLocaleDateString()}`,
+        travelMode: 'bike',
+        startTime: now,
+        endTime: now,
+        durationSeconds: get().elapsedSeconds,
+        distanceKm: get().distanceKm,
+        coordinates: coords,
+        accuracyMeters: get().gpsAccuracy ?? undefined,
+        status: 'completed',
+        startLocationName: get().startLocationName,
+        notes: notes || `Recorded via Bike Mode live GPS with ${coords.length} coordinates`,
+      };
+
+      addGpsRoute(route);
+      stopWatchAndTimer();
+      set({
+        trackingStatus: 'idle',
+        trackedCoordinates: [],
+        distanceKm: 0,
+        elapsedSeconds: 0,
+        activeSavedRoute: route,
+      });
+
+      return route;
+    },
+
+    clearLiveRoute: () => {
+      stopWatchAndTimer();
+      set({
+        trackingStatus: 'idle',
+        livePosition: null,
+        trackedCoordinates: [],
+        distanceKm: 0,
+        elapsedSeconds: 0,
+        gpsAccuracy: null,
+        gpsError: null,
+        activeSavedRoute: null,
+      });
+      showToast('info', 'Track Cleared', 'Live GPS route track reset.');
+    },
+
+    loadSavedRoute: (route: GpsRoute) => {
+      set({
+        activeSavedRoute: route,
+        savedRoutesModalOpen: false,
+      });
+      if (route.coordinates.length > 0) {
+        const center = route.coordinates[Math.floor(route.coordinates.length / 2)];
+        useMapStore.getState().flyTo(center[0], center[1], 16);
+      }
+      showToast('success', 'Loaded Route', `Displaying saved route "${route.name}".`);
+    },
+
+    clearActiveSavedRoute: () => set({ activeSavedRoute: null }),
+
+    setSavedRoutesModalOpen: (open: boolean) => set({ savedRoutesModalOpen: open }),
   };
 });

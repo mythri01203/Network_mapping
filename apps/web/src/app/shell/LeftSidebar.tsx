@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Radio,
   Route,
   Smartphone,
   Split,
@@ -142,7 +143,11 @@ export const LeftSidebar: React.FC = () => {
     {
       label: 'Fiber Tools',
       items: [
-        tool('trace', 'Route Trace', Route, () => setModalOpen('routeTrace', true), { simple: true }),
+        tool('onuFleet', 'ONU Fleet', Radio, () => setModalOpen('onuFleet', true), {
+          count: customers.length || undefined,
+          simple: true,
+        }),
+        tool('trace', 'Route Trace', Route, () => setModalOpen('fiberTrace', true), { simple: true }),
         tool('fat', 'Terminal Boxes', Box, () => setModalOpen('terminalBox', true), {
           count: fatCount || undefined,
           simple: true,

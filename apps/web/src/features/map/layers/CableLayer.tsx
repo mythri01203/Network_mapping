@@ -30,9 +30,11 @@ const SELECT_LINE = '#1d4ed8';
 
 function lineStyle(cable: Cable, selected: boolean, traced: boolean, layerOpacity: number): L.PathOptions {
   const style = cableStyle(cable.type);
+  const color = traced ? TRACE_LINE : selected ? SELECT_LINE : cable.colorHex || style.stroke;
+  const weight = cable.thickness ?? (selected ? style.strokeWidth + 2 : style.strokeWidth);
   return {
-    color: traced ? TRACE_LINE : selected ? SELECT_LINE : style.stroke,
-    weight: selected ? style.strokeWidth + 2 : style.strokeWidth,
+    color,
+    weight,
     dashArray: style.dashArray,
     opacity: (cable.status === 'Damaged' ? 0.6 : 0.95) * layerOpacity,
     lineCap: 'round',

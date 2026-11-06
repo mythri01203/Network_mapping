@@ -6,6 +6,7 @@ import { ComponentCatalogModal } from '../features/catalog/ComponentCatalogModal
 import { CustomerWizardModal } from '../features/customers/CustomerWizardModal';
 import { DocumentManagerModal } from '../features/documents/DocumentManagerModal';
 import { FaultManagementModal } from '../features/faults/FaultManagementModal';
+import { SavedRoutesModal } from '../features/field-work/SavedRoutesModal';
 import { TechnicianMobileView } from '../features/field-work/TechnicianMobileView';
 import { HelpModal } from '../features/help/HelpModal';
 import { EquipmentKnowledgeModal } from '../features/knowledge/EquipmentKnowledgeModal';
@@ -15,7 +16,11 @@ import { SplitterPortModal } from '../features/ports/SplitterPortModal';
 import { TerminalBoxModal } from '../features/ports/TerminalBoxModal';
 import { CapacityDashboardModal } from '../features/reports/CapacityDashboardModal';
 import { ReportsModal } from '../features/reports/ReportsModal';
+import { OnuFleetModal } from '../features/customers/OnuFleetModal';
+import { OltConfigModal } from '../features/equipment/OltConfigModal';
+import { SpliceModal } from '../features/splicing/SpliceModal';
 import { SplicingModal } from '../features/splicing/SplicingModal';
+import { FiberTraceModal } from '../features/trace/FiberTraceModal';
 import { RouteTraceModal } from '../features/trace/RouteTraceModal';
 import { useUiStore } from '../stores/uiStore';
 
@@ -36,9 +41,14 @@ export const ModalHost: React.FC = () => {
       <TerminalBoxModal />
       <SplitterPortModal />
       <SplicingModal />
+      <SpliceModal />
       <RouteTraceModal />
+      <FiberTraceModal />
+      <OnuFleetModal />
+      <OltConfigModal />
       <FaultManagementModal />
       <TechnicianMobileView />
+      <SavedRoutesModal />
       <CapacityDashboardModal />
       <ReportsModal />
       <HelpModal />

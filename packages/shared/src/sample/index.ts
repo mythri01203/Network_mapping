@@ -28,6 +28,7 @@ export function createSampleNetwork(): NetworkSnapshot {
     zones: SAMPLE_ZONES,
     documents: SAMPLE_DOCUMENTS,
     catalog: [],
+    gpsRoutes: [],
   };
   return JSON.parse(JSON.stringify(snapshot)) as NetworkSnapshot;
 }

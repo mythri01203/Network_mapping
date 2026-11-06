@@ -20,6 +20,8 @@ export interface MarkerLayerOptions {
   interactive?: boolean;
   pane?: string;
   onClick?: (id: string, event: L.LeafletMouseEvent) => void;
+  draggable?: boolean;
+  onDragEnd?: (id: string, latlng: L.LatLng) => void;
 }
 
 interface Entry {
@@ -41,13 +43,15 @@ function applyLabel(marker: L.Marker, label: string | undefined) {
  * rebuilding the whole layer whenever anything changes. Callers should memoise `specs`.
  */
 export function useMarkerLayer(map: L.Map, specs: readonly MarkerSpec[], options: MarkerLayerOptions = {}) {
-  const { interactive = true, pane } = options;
+  const { interactive = true, pane, draggable = false } = options;
   const group = useLayerGroup(map);
   const entries = useRef(new Map<string, Entry>());
   const onClick = useRef(options.onClick);
+  const onDragEnd = useRef(options.onDragEnd);
 
   useEffect(() => {
     onClick.current = options.onClick;
+    onDragEnd.current = options.onDragEnd;
   });
 
   useEffect(() => {
@@ -66,14 +70,21 @@ export function useMarkerLayer(map: L.Map, specs: readonly MarkerSpec[], options
           interactive,
           keyboard: interactive,
           riseOnHover: interactive,
+          draggable,
           // Let clicks reach the map so drawing tools can snap onto the marker's position.
-          bubblingMouseEvents: true,
+          bubblingMouseEvents: !draggable,
           ...(pane ? { pane } : {}),
         });
         const created: Entry = { marker, spec };
         if (spec.tooltip) marker.bindTooltip(spec.tooltip, TOOLTIP_OPTIONS);
         marker.on('add', () => applyLabel(marker, created.spec.label));
         if (interactive) marker.on('click', (e) => onClick.current?.(spec.id, e));
+        if (draggable) {
+          marker.on('dragend', () => {
+            const latlng = marker.getLatLng();
+            onDragEnd.current?.(spec.id, latlng);
+          });
+        }
         current.set(spec.id, created);
         group.addLayer(marker);
         continue;

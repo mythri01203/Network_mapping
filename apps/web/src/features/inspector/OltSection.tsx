@@ -3,8 +3,9 @@ import { Activity, Network, Radio } from 'lucide-react';
 import { type Equipment, opticalPowerFor, PON_TECHNOLOGIES, type PonPort, type PonTechnology } from '@fibergis/shared';
 
 import { OltChassisIcon } from '../../components/icons/OltChassisIcon';
-import { Badge, type BadgeTone, cn, KeyValueList, Select, StatusBadge } from '../../components/ui';
+import { Badge, type BadgeTone, Button, cn, KeyValueList, Select, StatusBadge } from '../../components/ui';
 import { traceNetworkPath, updateEquipment } from '../../stores/networkActions';
+import { useUiStore } from '../../stores/uiStore';
 import { formatDateTime, formatDbm, joinPresent, rxBudget, SIGNAL_TONES } from './format';
 import { PON_TECHNOLOGY_SPECS } from './ponTechnology';
 import { InspectorSection, Metric } from './sections';
@@ -31,20 +32,29 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-        <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-slate-900">
-          <OltChassisIcon width={76} height={40} status={olt.status} technology={olt.technology} />
-        </div>
-        <div className="min-w-0 text-xs text-slate-500">
-          <div className="truncate text-[13px] font-medium text-slate-900">
-            {joinPresent([olt.manufacturer, olt.model]) ?? 'Model not recorded'}
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50/50">
+        <div className="flex items-center gap-3">
+          <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-slate-900">
+            <OltChassisIcon width={76} height={40} status={olt.status} technology={olt.technology} />
           </div>
-          <div>
-            {ponPorts.length} PON ports
-            {olt.ponCardsCount !== undefined && ` · ${olt.ponCardsCount} cards`}
+          <div className="min-w-0 text-xs text-slate-500">
+            <div className="truncate text-[13px] font-bold text-slate-900">
+              {joinPresent([olt.manufacturer, olt.model]) ?? 'Model not recorded'}
+            </div>
+            <div className="font-medium text-slate-700">
+              {ponPorts.length} PON ports · <span className="text-sky-700 font-bold">{olt.technology || 'GPON'}</span>
+            </div>
+            <div>{subscribers} subscribers</div>
           </div>
-          <div>{subscribers} subscribers</div>
         </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => useUiStore.getState().openOltConfigModal(olt)}
+          className="text-xs shrink-0"
+        >
+          Edit Specs
+        </Button>
       </div>
 
       <InspectorSection title="PON technology" icon={Radio}>

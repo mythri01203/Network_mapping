@@ -78,6 +78,7 @@ export const equipmentPortSchema = z.object({
   /** Slot/card/port address, e.g. "0/1/1". */
   slotCardPort: z.string().optional(),
   status: logicalPortStatusSchema,
+  color: z.string().optional(),
   connectedEquipmentId: z.string().optional(),
   connectedSplitterId: z.string().optional(),
   connectedCableId: z.string().optional(),
@@ -153,6 +154,8 @@ export const ponPortSchema = z.object({
   slotCardPort: z.string().optional(),
   technology: ponTechnologySchema.optional(),
   status: z.enum(PON_PORT_STATUSES),
+  color: z.string().optional(),
+  colorName: z.string().optional(),
   connectedFeederCableId: z.string().optional(),
   connectedSplitterId: z.string().optional(),
   connectedCustomersCount: z.number().int().nonnegative(),
@@ -161,6 +164,37 @@ export const ponPortSchema = z.object({
   txPowerDbm: z.number().optional(),
   rxPowerDbm: z.number().optional(),
   lastUpdated: isoDate.optional(),
+});
+
+export const oltSplitterConfigItemSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  ratio: splitterRatioSchema,
+  inPort: z.string(),
+  parentPonPort: z.string().optional(),
+  outPortsCount: z.number().int().positive(),
+  color: z.string().optional(),
+  targetEquipmentId: z.string().optional(),
+});
+
+export const oltCableConfigItemSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  ponPort: z.string(),
+  targetEquipmentId: z.string().optional(),
+  targetPort: z.string().optional(),
+  coreCount: z.number().int().positive().optional(),
+  colorHex: z.string().optional(),
+  lengthMeters: z.number().optional(),
+});
+
+export const oltConfigSchema = z.object({
+  technology: z.enum(['EPON', 'GPON']),
+  ponPortCount: z.number().int().positive(),
+  portColors: z.record(z.string(), z.string()).optional(),
+  splitters: z.array(oltSplitterConfigItemSchema).optional(),
+  cables: z.array(oltCableConfigItemSchema).optional(),
+  description: z.string().optional(),
 });
 
 export const equipmentSchema = z.object({
@@ -176,6 +210,8 @@ export const equipmentSchema = z.object({
   buildingName: z.string().optional(),
   status: equipmentStatusSchema,
   technology: ponTechnologySchema.optional(),
+  portColorMap: z.record(z.string(), z.string()).optional(),
+  oltConfig: oltConfigSchema.optional(),
   manufacturer: z.string().optional(),
   model: z.string().optional(),
   serialNumber: z.string().optional(),
@@ -238,6 +274,10 @@ export const cableSchema = z.object({
   coordinates: z.array(latLngSchema),
   startEquipmentId: z.string().optional(),
   endEquipmentId: z.string().optional(),
+  startPortName: z.string().optional(),
+  endPortName: z.string().optional(),
+  colorHex: z.string().optional(),
+  thickness: z.number().positive().optional(),
   cores: z.array(fiberCoreSchema),
   cableCategory: z.enum(CABLE_CATEGORIES),
 });
@@ -377,4 +417,87 @@ export const auditLogSchema = z.object({
   details: z.string(),
   assetId: z.string(),
   assetType: z.enum(AUDIT_ASSET_TYPES),
+});
+
+/** Logical optical port schema for port-to-port optical connectivity. */
+export const opticalPortSchema = z.object({
+  id,
+  name: z.string(),
+  type: z.enum(['Inbound', 'Outbound', 'PassThrough']),
+  connectorType: z.enum(['SC/APC', 'SC/UPC', 'LC/APC', 'LC/UPC']).optional(),
+  status: z.enum(['Available', 'Occupied', 'Reserved', 'Faulty']),
+  wavelengthNm: z.number().int().positive().optional(),
+  powerLevelDbm: z.number().optional(),
+  connectedEquipmentId: z.string().optional(),
+  connectedPortId: z.string().optional(),
+  connectedCableId: z.string().optional(),
+  connectedCore: z.number().int().positive().optional(),
+});
+
+/** Logical inbound splice connection entry. */
+export const spliceMatrixEntrySchema = z.object({
+  id,
+  targetEquipmentId: z.string(),
+  upstreamEquipmentId: z.string(),
+  upstreamPortId: z.string().optional(),
+  upstreamPortName: z.string().optional(),
+  distanceMeters: z.number().nonnegative(),
+  coreNumber: z.number().int().positive(),
+  coreColorName: z.string(),
+  coreColorHex: z.string(),
+  splicingType: z.enum(['Direct Drop', 'Loose Tube']),
+  lossDb: z.number().nonnegative(),
+  timestamp: isoDate,
+});
+
+/** Individual fiber core link assignment. */
+export const cableCoreLinkSchema = z.object({
+  cableId: z.string(),
+  cableName: z.string(),
+  coreNumber: z.number().int().positive(),
+  tubeNumber: z.number().int().positive().optional(),
+  colorName: z.string(),
+  colorHex: z.string(),
+  upstreamEndpointId: z.string().optional(),
+  downstreamEndpointId: z.string().optional(),
+  status: z.enum(['In Use', 'Available', 'Reserved', 'Damaged']),
+});
+
+/** One hop along an end-to-end traced optical path. */
+export const fiberTraceHopSchema = z.object({
+  index: z.number().int().nonnegative(),
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  status: z.enum(['Normal', 'Warning', 'Faulty']),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  portId: z.string().optional(),
+  portName: z.string().optional(),
+  coreNumber: z.number().int().positive().optional(),
+  coreColorName: z.string().optional(),
+  coreColorHex: z.string().optional(),
+  hopDistanceMeters: z.number().nonnegative(),
+  cumulativeDistanceMeters: z.number().nonnegative(),
+  hopLossDb: z.number(),
+  cumulativeLossDb: z.number(),
+  details: z.string().optional(),
+  equipmentType: z.string().optional(),
+  splitRatio: z.string().optional(),
+});
+
+/** Saved live GPS tracked route from Bike Mode. */
+export const gpsRouteSchema = z.object({
+  id,
+  name: z.string().min(1),
+  travelMode: z.literal('bike'),
+  startTime: isoDate,
+  endTime: isoDate.optional(),
+  durationSeconds: z.number().nonnegative(),
+  distanceKm: z.number().nonnegative(),
+  coordinates: z.array(z.tuple([latitude, longitude])),
+  accuracyMeters: z.number().optional(),
+  status: z.enum(['recording', 'paused', 'completed']),
+  startLocationName: z.string().optional(),
+  notes: z.string().optional(),
 });

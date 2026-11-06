@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   type LucideIcon,
   MousePointer2,
+  Radio,
   Redo2,
   Ruler,
   Search,
@@ -530,6 +531,15 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
             setModalOpen('customerWizard', true);
           }}
         />
+        <ToolButton
+          icon={Radio}
+          label="ONU Fleet"
+          showLabel
+          onClick={() => {
+            closeMenu();
+            setModalOpen('onuFleet', true);
+          }}
+        />
 
         <Divider />
 
@@ -698,6 +708,17 @@ export function MapModeBar({
               title="Remove last point"
             >
               <CornerUpLeft className="h-4 w-4" /> Undo point
+            </button>
+          )}
+          {activeTool === 'draw_cable' && (
+            <button
+              type="button"
+              onClick={() => setActiveDrawingPoints([])}
+              disabled={activeDrawingPoints.length === 0}
+              className={cn(darkBtn, 'text-rose-300 hover:bg-rose-500/20 hover:text-rose-200')}
+              title="Clear all points of the current drawn wire"
+            >
+              <Trash2 className="h-4 w-4" /> Clear wire
             </button>
           )}
           {activeTool === 'draw_cable' && (

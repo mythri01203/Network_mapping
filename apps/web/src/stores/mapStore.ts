@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { CableType, EquipmentType, LatLng } from '@fibergis/shared';
+import type { CableType, Equipment, EquipmentType, LatLng } from '@fibergis/shared';
 
 import { preferenceKey, preferenceStorage } from './persistStorage';
 
@@ -69,6 +69,7 @@ const resolvePoints = (next: PointsUpdater, prev: LatLng[]) => (typeof next === 
 export interface MapState {
   activeTool: MapTool;
   equipmentTypeToAdd: EquipmentType | null;
+  equipmentDraftTemplate: Partial<Equipment> | null;
   cableTypeToDraw: CableType;
   drawingPoints: LatLng[];
   measuringPoints: LatLng[];
@@ -84,6 +85,7 @@ export interface MapState {
 
   setActiveTool: (tool: MapTool) => void;
   setEquipmentTypeToAdd: (type: EquipmentType | null) => void;
+  setEquipmentDraftTemplate: (template: Partial<Equipment> | null) => void;
   setCableTypeToDraw: (type: CableType) => void;
   setDrawingPoints: (points: PointsUpdater) => void;
   setMeasuringPoints: (points: PointsUpdater) => void;
@@ -105,6 +107,7 @@ export const useMapStore = create<MapState>()(
     (set) => ({
       activeTool: 'select',
       equipmentTypeToAdd: null,
+      equipmentDraftTemplate: null,
       cableTypeToDraw: 'Main Feeder Fiber',
       drawingPoints: [],
       measuringPoints: [],
@@ -117,6 +120,7 @@ export const useMapStore = create<MapState>()(
 
       setActiveTool: (activeTool) => set({ activeTool }),
       setEquipmentTypeToAdd: (equipmentTypeToAdd) => set({ equipmentTypeToAdd }),
+      setEquipmentDraftTemplate: (equipmentDraftTemplate) => set({ equipmentDraftTemplate }),
       setCableTypeToDraw: (cableTypeToDraw) => set({ cableTypeToDraw }),
       setDrawingPoints: (points) => set((s) => ({ drawingPoints: resolvePoints(points, s.drawingPoints) })),
       setMeasuringPoints: (points) => set((s) => ({ measuringPoints: resolvePoints(points, s.measuringPoints) })),

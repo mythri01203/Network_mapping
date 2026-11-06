@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useOpenView } from '../../app/views';
 import { useBikerStore } from '../../stores/bikerStore';
-import { useMapStore } from '../../stores/mapStore';
 import { updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -14,7 +13,6 @@ export const FieldWorkView: React.FC = () => {
     useShallow((s) => ({ workOrders: s.workOrders, equipments: s.equipment })),
   );
   const setIsBikerMode = useBikerStore((s) => s.setBikerMode);
-  const flyToLocation = useMapStore((s) => s.flyTo);
   const { setSelectedObject, setModalOpen } = useUiStore(
     useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
   );
@@ -80,11 +78,12 @@ export const FieldWorkView: React.FC = () => {
                       if (eq) {
                         setSelectedObject({ type: 'equipment', data: eq });
                         openView('map');
-                        setIsBikerMode(true);
-                        flyToLocation(eq.lat, eq.lng, 18);
+                        useBikerStore.getState().navigateTo({ id: eq.id, name: eq.name, lat: eq.lat, lng: eq.lng });
+                        useBikerStore.getState().setBikerMode(true);
+                        useBikerStore.getState().setActiveBikerTab('navigation');
                       }
                     }}
-                    className="px-2.5 py-1.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-lg text-[11px] font-semibold flex items-center gap-1"
+                    className="px-2.5 py-1.5 bg-orange-50 text-orange-800 border border-orange-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 hover:bg-orange-100 transition-colors"
                   >
                     <MapPin className="w-3.5 h-3.5" /> Navigate
                   </button>

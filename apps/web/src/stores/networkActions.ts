@@ -11,6 +11,7 @@ import type {
   EquipmentImage,
   EquipmentPort,
   Fault,
+  GpsRoute,
   ImageAnnotation,
   NetworkDocument,
   NetworkZone,
@@ -115,6 +116,23 @@ export const removeSplice = (closureId: string, spliceId: string) => {
 export const connectCustomerToPort = (draft: domain.CustomerDraft): Customer | null =>
   run((data, ctx) => domain.provisionCustomer(data, draft, ctx))?.value.customer ?? null;
 
+export const updateCustomer = (customerId: string, patch: Partial<Customer>): boolean =>
+  run((data) => {
+    const idx = data.customers.findIndex((c) => c.id === customerId);
+    if (idx === -1) return domain.fail('Customer Missing', `Customer ${customerId} not found.`);
+    const updated = { ...data.customers[idx], ...patch };
+    const nextCustomers = [...data.customers];
+    nextCustomers[idx] = updated;
+    return domain.succeed(
+      updated,
+      { customers: nextCustomers },
+      {
+        notice: domain.notice('success', 'Customer Updated', `${updated.name} updated.`),
+        audit: [{ action: 'CUSTOMER_UPDATED', details: `Updated ${customerId}`, assetId: customerId, assetType: 'Customer' }],
+      },
+    );
+  }) !== null;
+
 export const recordNewFault = (draft: domain.FaultDraft): Fault | null =>
   run((data, ctx) => domain.reportFault(data, draft, ctx))?.value ?? null;
 
@@ -150,6 +168,9 @@ export const deleteDocument = (id: string) => {
 };
 
 export const addCatalogComponent = (item: CatalogComponent) => useNetworkStore.getState().addCatalogComponent(item);
+
+export const addGpsRoute = (route: GpsRoute) => useNetworkStore.getState().addGpsRoute(route);
+export const deleteGpsRoute = (id: string) => useNetworkStore.getState().deleteGpsRoute(id);
 
 export const logAudit = (action: string, details: string, assetId: string, assetType: AuditLog['assetType']) =>
   useNetworkStore.getState().logAudit({ action, details, assetId, assetType });

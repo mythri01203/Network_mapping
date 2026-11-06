@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Download, GitFork, MapPin, PlusCircle, Search } from 'lucide-react';
+import { Download, MapPin, PlusCircle, Radio, Route, Search } from 'lucide-react';
 
 import type { Customer } from '@fibergis/shared';
 
 import { useShowOnMap } from '../../app/views';
-import { traceNetworkPath } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -12,6 +11,7 @@ import { useUiStore } from '../../stores/uiStore';
 export const CustomerDirectoryView: React.FC = () => {
   const customers = useNetworkStore((s) => s.customers);
   const setModalOpen = useUiStore((s) => s.setModalOpen);
+  const openFiberTrace = useUiStore((s) => s.openFiberTrace);
   const showToast = useToastStore((s) => s.show);
   const showOnMap = useShowOnMap();
 
@@ -104,6 +104,14 @@ export const CustomerDirectoryView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setModalOpen('onuFleet', true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <Radio className="w-3.5 h-3.5 text-sky-600" />
+            <span>ONU Fleet Manager</span>
+          </button>
+
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
@@ -259,11 +267,11 @@ export const CustomerDirectoryView: React.FC = () => {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => traceNetworkPath(c.id)}
+                          onClick={() => openFiberTrace(c.id)}
                           className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Trace Complete Fiber Path"
+                          title="Trace Complete Fiber Path & Loss Budget"
                         >
-                          <GitFork className="w-3.5 h-3.5" />
+                          <Route className="w-3.5 h-3.5" />
                         </button>
 
                         <button

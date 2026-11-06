@@ -7,6 +7,7 @@ import {
   customerSchema,
   equipmentSchema,
   faultSchema,
+  gpsRouteSchema,
   jointClosureSchema,
   networkDocumentSchema,
   networkZoneSchema,
@@ -30,6 +31,7 @@ export const COLLECTION_SCHEMAS = {
   zones: networkZoneSchema,
   documents: networkDocumentSchema,
   catalog: catalogComponentSchema,
+  gpsRoutes: gpsRouteSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

@@ -1,10 +1,9 @@
-import { Activity, Info, Navigation, Route, Waypoints } from 'lucide-react';
+import { Activity, GitMerge, Info, Navigation, Route, Waypoints } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import type { Customer } from '@fibergis/shared';
 
 import { Badge, Button, cn, KeyValueList } from '../../components/ui';
-import { traceNetworkPath } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { navigateToSite } from './actions';
@@ -106,6 +105,8 @@ function ServicePath({ steps }: { steps: PathStep[] }) {
 export function CustomerInspector({ customer, detailed }: { customer: Customer; detailed: boolean }) {
   const steps = useServicePath(customer);
   const budget = rxBudget(customer.rxOpticalPowerDbm);
+  const openFiberTrace = useUiStore((s) => s.openFiberTrace);
+  const openSpliceModal = useUiStore((s) => s.openSpliceModal);
 
   const details = presentItems([
     { label: 'Service', value: customer.serviceType },
@@ -126,8 +127,11 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
     <InspectorLayout
       actions={
         <>
-          <Button variant="primary" size="sm" icon={Route} onClick={() => traceNetworkPath(customer.id)}>
+          <Button variant="primary" size="sm" icon={Route} onClick={() => openFiberTrace(customer.id)}>
             Trace service path
+          </Button>
+          <Button size="sm" icon={GitMerge} onClick={() => openSpliceModal(customer)}>
+            Splice
           </Button>
           <Button
             size="sm"

@@ -5,7 +5,7 @@ import type { Equipment, LatLng } from '@fibergis/shared';
 
 import { isTypingTarget } from '../../../lib/browser';
 import { useMapStore } from '../../../stores/mapStore';
-import { addEquipment } from '../../../stores/networkActions';
+import { addEquipment, updateCustomer } from '../../../stores/networkActions';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { showToast } from '../../../stores/toastStore';
 import { useUiStore } from '../../../stores/uiStore';
@@ -103,6 +103,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   const activeTool = useMapStore((s) => s.activeTool);
   const drawingPoints = useMapStore((s) => s.drawingPoints);
   const measuringPoints = useMapStore((s) => s.measuringPoints);
+  const pickingOnuCustomer = useUiStore((s) => s.pickingOnuCustomer);
+  const setPickingOnuCustomer = useUiStore((s) => s.setPickingOnuCustomer);
   const [trackedPointer, setPointer] = useState<LatLng | null>(null);
   const [trackedSnap, setSnapTarget] = useState<SnapTarget | null>(null);
   const [autoPole, setAutoPole] = useState(false);
@@ -132,6 +134,17 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       const store = useMapStore.getState();
       const ui = useUiStore.getState();
 
+      if (ui.pickingOnuCustomer) {
+        const cust = ui.pickingOnuCustomer;
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        updateCustomer(cust.id, { lat, lng });
+        ui.setPickingOnuCustomer(null);
+        showToast('success', 'ONU Location Set', `Positioned ${cust.name}'s ONU at [${lat.toFixed(4)}, ${lng.toFixed(4)}].`);
+        ui.openSpliceModal({ ...cust, lat, lng });
+        return;
+      }
+
       if (store.activeTool === 'select') {
         ui.select(null);
         ui.setPanelOpen('right', false);
@@ -148,17 +161,37 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
         store.setMeasuringPoints((prev) => [...prev, point]);
       } else if (store.activeTool === 'add_equipment' && store.equipmentTypeToAdd) {
         const type = store.equipmentTypeToAdd;
+        const tpl = store.equipmentDraftTemplate;
+        const isPole = type.includes('Pole');
+        const defaultName = isPole
+          ? nextPoleName(useNetworkStore.getState().equipment)
+          : type === 'Fiber Slack Loop'
+            ? 'Fiber Slack Loop (20m)'
+            : `New ${type}`;
+        const name = tpl?.name || defaultName;
+        const totalPorts = tpl?.totalPorts;
+
         const created = addEquipment({
-          name: `New ${type}`,
+          name,
           type,
           lat: point[0],
           lng: point[1],
-          category: categoryForType(type),
+          category: tpl?.category || categoryForType(type),
+          totalPorts,
+          availablePorts: totalPorts,
+          notes: tpl?.notes,
+          ...tpl,
         });
         if (created) {
+          showToast('success', `${type} Placed`, `Added ${created.name} at [${point[0].toFixed(5)}, ${point[1].toFixed(5)}].`);
           ui.select({ type: 'equipment', data: created });
           ui.setPanelOpen('right', true);
           store.setActiveTool('select');
+          store.setEquipmentTypeToAdd(null);
+          store.setEquipmentDraftTemplate(null);
+          if (created.type === 'OLT') {
+            ui.openOltConfigModal(created);
+          }
         }
       }
     };
@@ -230,14 +263,32 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   }, []);
 
   return (
-    <MapModeBar
-      distanceMeters={distanceMeters}
-      snapTargetName={snapTarget?.name ?? null}
-      autoPole={autoPole}
-      onAutoPoleChange={setAutoPole}
-      onAddPole={addPole}
-      onFinish={finish}
-      onCancel={cancel}
-    />
+    <>
+      {pickingOnuCustomer && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/95 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-sky-400/50 flex items-center gap-3 backdrop-blur-sm animate-in fade-in">
+          <div className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping" />
+          <div className="text-xs">
+            <span className="font-semibold text-sky-300">ONU Placement Mode:</span> Click map to drop pin for{' '}
+            <strong>{pickingOnuCustomer.name}</strong> ({pickingOnuCustomer.ontSerialNumber})
+          </div>
+          <button
+            type="button"
+            onClick={() => setPickingOnuCustomer(null)}
+            className="ml-3 px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-medium transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      <MapModeBar
+        distanceMeters={distanceMeters}
+        snapTargetName={snapTarget?.name ?? null}
+        autoPole={autoPole}
+        onAutoPoleChange={setAutoPole}
+        onAddPole={addPole}
+        onFinish={finish}
+        onCancel={cancel}
+      />
+    </>
   );
 }

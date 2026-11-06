@@ -6,14 +6,14 @@ export type EquipmentLayerKey = 'olt' | 'odf' | 'fdms' | 'fdt' | 'fat' | 'splitt
 
 export function equipmentLayerKey(eq: Pick<Equipment, 'type' | 'category'>): EquipmentLayerKey | null {
   const t = eq.type;
-  if (t === 'OLT') return 'olt';
+  if (t === 'OLT' || t === 'MikroTik Router') return 'olt';
   if (eq.category === 'Cable TV Infrastructure' || t.startsWith('CATV') || t === 'Cable TV Headend') return 'cableTv';
   if (t === 'ODF' || t === 'Fiber Patch Panel') return 'odf';
   if (t === 'FDMS' || t === 'Fiber Distribution Cabinet') return 'fdms';
   if (t === 'FDT') return 'fdt';
   if (t === 'FAT' || t.includes('Terminal Box') || t === 'Distribution Point') return 'fat';
-  if (t === 'Fiber Splitter') return 'splitters';
-  if (t.includes('Pole')) return 'poles';
+  if (t === 'Fiber Splitter' || t === 'Ratio Coupler' || t === 'Outdoor Splitter') return 'splitters';
+  if (t.includes('Pole') || t === 'Fiber Slack Loop') return 'poles';
   if (t === 'Manhole' || t === 'Handhole' || t === 'Underground Chamber') return 'manholes';
   return null;
 }

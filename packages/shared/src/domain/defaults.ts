@@ -11,6 +11,7 @@ const PASSIVE_INFRASTRUCTURE = new Set<string>([
   'Cable Tray',
   'Junction Point',
   'Building Entry Point',
+  'Fiber Slack Loop',
 ]);
 
 const SUBSCRIBER_DEVICES = new Set<string>(['ONT', 'ONU', 'Optical Modem', 'Customer Terminal']);
@@ -22,6 +23,11 @@ export function defaultPortCount(type: EquipmentType): number {
   if (type === 'FDMS' || type === 'Fiber Distribution Cabinet') return 96;
   if (type === 'ODF' || type === 'Fiber Patch Panel') return 48;
   if (type === 'OLT') return 16;
+  if (type === 'MikroTik Router') return 16;
+  if (type === 'Outdoor Splitter') return 8;
+  if (type === 'Ratio Coupler' || type === 'Optical Attenuator' || type === 'Optical Instrument') return 2;
+  if (type === 'Fiber Splice Joint') return 12;
+  if (type === 'Fiber Connector') return 1;
   if (SUBSCRIBER_DEVICES.has(type)) return 1;
   if (type.includes('Pole') || PASSIVE_INFRASTRUCTURE.has(type)) return 0;
   return 24;

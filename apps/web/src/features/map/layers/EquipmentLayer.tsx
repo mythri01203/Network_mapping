@@ -4,6 +4,8 @@ import type L from 'leaflet';
 import type { Equipment } from '@fibergis/shared';
 
 import { useMapStore } from '../../../stores/mapStore';
+import { updateEquipment } from '../../../stores/networkActions';
+import { showToast } from '../../../stores/toastStore';
 import { useTraceStore } from '../../../stores/traceStore';
 import { useUiStore } from '../../../stores/uiStore';
 import { equipmentLayerKey } from '../layerFilters';
@@ -69,7 +71,21 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
     [byId],
   );
 
-  useMarkerLayer(map, markers, { onClick });
+  const onDragEnd = useCallback(
+    (id: string, latlng: L.LatLng) => {
+      const eq = byId.get(id);
+      if (!eq) return;
+      updateEquipment({ ...eq, lat: latlng.lat, lng: latlng.lng });
+      showToast(
+        'info',
+        'Equipment Repositioned',
+        `Moved ${eq.name} to [${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}].`,
+      );
+    },
+    [byId],
+  );
+
+  useMarkerLayer(map, markers, { onClick, draggable: true, onDragEnd });
 
   const labels = useMemo<MarkerSpec[]>(() => {
     if (!showLabels || zoom < LABEL_MIN_ZOOM) return [];

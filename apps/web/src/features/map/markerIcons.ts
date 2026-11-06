@@ -33,7 +33,15 @@ export function iconSvg(Icon: LucideIcon, size: number, strokeWidth = 2): string
 /* Equipment classification                                            */
 /* ------------------------------------------------------------------ */
 
-const CENTRAL_OFFICE_TYPES: EquipmentType[] = ['OLT', 'ODF', 'Fiber Patch Panel', 'Core Switch', 'Router', 'Firewall'];
+const CENTRAL_OFFICE_TYPES: EquipmentType[] = [
+  'OLT',
+  'ODF',
+  'Fiber Patch Panel',
+  'Core Switch',
+  'Router',
+  'MikroTik Router',
+  'Firewall',
+];
 const SUPPORT_TYPES: EquipmentType[] = [
   'Manhole',
   'Handhole',
@@ -43,6 +51,7 @@ const SUPPORT_TYPES: EquipmentType[] = [
   'Cable Tray',
   'Building Entry Point',
   'Junction Point',
+  'Fiber Slack Loop',
 ];
 const CUSTOMER_TYPES: EquipmentType[] = [
   'ONT',
@@ -51,6 +60,7 @@ const CUSTOMER_TYPES: EquipmentType[] = [
   'Optical Modem',
   'Customer Terminal',
   'Set-Top Box',
+  'Optical Instrument',
 ];
 
 export function categoryForType(type: EquipmentType): EquipmentCategory {
