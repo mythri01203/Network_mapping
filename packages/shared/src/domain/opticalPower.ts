@@ -1,12 +1,13 @@
 import type { SignalLevel } from '../model/enums';
 import type { Equipment, OpticalPowerInfo } from '../model/types';
+import { DEFAULT_OPTICAL_SETTINGS } from './opticalSettings';
 import { RX_SENSITIVITY_DBM, RX_WARNING_DBM } from './trace';
 
-/** Typical class B+/C+ OLT transmitter launch power window (dBm). */
-export const OLT_TX_MIN_DBM = 1.5;
-export const OLT_TX_MAX_DBM = 7;
+/** Class B+/C+ OLT transmitter launch power window (dBm). */
+export const OLT_TX_MIN_DBM = DEFAULT_OPTICAL_SETTINGS.classes['GPON B+'].launchMinDbm ?? 1.5;
+export const OLT_TX_MAX_DBM = DEFAULT_OPTICAL_SETTINGS.classes['GPON C+'].launchMaxDbm ?? 7;
 /** Receiver overload point: anything hotter than this saturates a typical ONT/OLT receiver (dBm). */
-export const RX_OVERLOAD_DBM = -8;
+export const RX_OVERLOAD_DBM = DEFAULT_OPTICAL_SETTINGS.rx.overloadDbm;
 
 /**
  * Classifies a received optical power reading against warning/critical thresholds (dBm).

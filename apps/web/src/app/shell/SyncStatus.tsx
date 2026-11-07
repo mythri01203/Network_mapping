@@ -4,7 +4,7 @@ import { Cloud, CloudAlert, CloudOff, CloudUpload, Loader2, type LucideIcon, Ref
 import { syncEngine } from '../../api/syncEngine';
 import { cn, MenuItem, MenuSeparator, Popover } from '../../components/ui';
 import { requestConfirm } from '../../stores/confirmStore';
-import { type SyncPhase, useSyncStore } from '../../stores/syncStore';
+import { type RefusedRecord, type SyncPhase, useSyncStore } from '../../stores/syncStore';
 
 interface PhaseMeta {
   label: string;
@@ -60,8 +60,18 @@ const PHASES: Record<SyncPhase, PhaseMeta> = {
     icon: CloudAlert,
     tone: 'text-red-300',
     dot: 'bg-red-400',
-    description: 'The server refused some changes. They are kept in this browser until you retry or discard them.',
+    description: 'The server refused an item. Everything else was sent. It stays in this browser until you correct it, retry or discard it.',
   },
+};
+
+/** Shown instead of "Saved" when this browser could not store the latest changes. */
+const CACHE_FAILED: PhaseMeta = {
+  label: 'Not saved on phone',
+  icon: CloudAlert,
+  tone: 'text-red-300',
+  dot: 'bg-red-400',
+  description:
+    'Phone storage is full, so recent changes are not saved on this device. Stay connected until they reach the office, and do not close the app.',
 };
 
 function useNow(intervalMs: number): number {
@@ -93,8 +103,8 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 
 /** Navbar indicator for server sync, with details and recovery actions in a popover. */
 export function SyncStatus() {
-  const { phase, revision, pendingCount, lastSyncedAt, error } = useSyncStore();
-  const meta = PHASES[phase];
+  const { phase, revision, pendingCount, lastSyncedAt, error, refused, cacheWriteFailed } = useSyncStore();
+  const meta = cacheWriteFailed ? CACHE_FAILED : PHASES[phase];
   const Icon = meta.icon;
 
   return (
@@ -110,7 +120,7 @@ export function SyncStatus() {
           aria-label={`Sync status: ${meta.label}`}
           title={meta.description}
           className={cn(
-            'flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors',
+            'flex h-[48px] min-w-[48px] items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors md:h-8 md:min-w-0',
             meta.tone,
             open ? 'bg-slate-800' : 'hover:bg-slate-800',
           )}
@@ -128,6 +138,7 @@ export function SyncStatus() {
           pendingCount={pendingCount}
           lastSyncedAt={lastSyncedAt}
           error={error}
+          refused={refused}
           close={close}
         />
       )}
@@ -142,10 +153,11 @@ interface SyncDetailsProps {
   pendingCount: number;
   lastSyncedAt: number | null;
   error: string | null;
+  refused: RefusedRecord[];
   close: () => void;
 }
 
-function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error, close }: SyncDetailsProps) {
+function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error, refused, close }: SyncDetailsProps) {
   const now = useNow(10_000);
   const canRetry = phase === 'offline' || phase === 'error';
 
@@ -157,10 +169,21 @@ function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error,
           <span className="text-[13px] font-semibold text-slate-900">{meta.label}</span>
         </div>
         <p className="text-xs leading-relaxed text-slate-500">{meta.description}</p>
-        {error && (
-          <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs leading-relaxed text-red-700" role="status">
-            {error}
-          </p>
+        {refused.length > 0 ? (
+          <ul className="space-y-1 rounded-md bg-red-50 px-2 py-1.5 text-xs leading-relaxed text-red-700" role="status">
+            {refused.map((item) => (
+              <li key={`${item.collection}/${item.id}`}>
+                <span className="font-semibold">{item.label}</span> was not sent. {item.reason} Correct it, then tap Retry
+                now.
+              </li>
+            ))}
+          </ul>
+        ) : (
+          error && (
+            <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs leading-relaxed text-red-700" role="status">
+              {error}
+            </p>
+          )
         )}
         <div className="space-y-1 pt-1">
           <Detail label="Unsaved changes" value={pendingCount === 0 ? 'None' : pendingCount} />

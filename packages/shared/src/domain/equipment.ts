@@ -11,6 +11,7 @@ import {
   succeed,
 } from './command';
 import { defaultPortCount, isValidCoordinate } from './defaults';
+import { polylineLengthMeters } from './geo';
 import { equipmentIdPrefix, nextSequentialId, uniqueId } from './ids';
 import { generateLogicalPorts, summarizePorts } from './ports';
 import { isoDate } from './time';
@@ -45,11 +46,10 @@ export function createEquipment(
     ...draft,
     id,
     category: draft.category || 'Fiber Distribution',
-    area: draft.area || 'Metro Area',
-    street: draft.street || 'Main Street',
+    // Facts nobody has given stay blank; screens show "Not recorded".
+    area: draft.area || '',
+    street: draft.street || '',
     status: draft.status || 'Active',
-    manufacturer: draft.manufacturer || 'FiberOptics Global',
-    model: draft.model || 'Standard 2026',
     totalPorts,
     usedPorts,
     availablePorts: draft.availablePorts ?? totalPorts - usedPorts,
@@ -91,6 +91,62 @@ export function updateEquipment(data: NetworkData, item: Equipment): CommandResu
           action: 'EQUIPMENT_UPDATED',
           details: `Updated ${item.type} ${item.id}`,
           assetId: item.id,
+          assetType: 'Equipment',
+        },
+      ],
+    },
+  );
+}
+
+/**
+ * Moves equipment and the matching end of every cable connected to it, recalculating each cable's
+ * length, as one undoable step. Customers' houses stay where they are.
+ */
+export function moveEquipment(
+  data: NetworkData,
+  equipmentId: string,
+  lat: number,
+  lng: number,
+): CommandResult<{ equipment: Equipment; movedCableIds: string[] }> {
+  const eq = data.equipment.find((e) => e.id === equipmentId);
+  if (!eq) return fail('Equipment Missing', `Equipment ${equipmentId} was not found.`);
+  if (!isValidCoordinate(lat, lng)) {
+    return fail('Invalid Location', 'Equipment needs a valid latitude (-90..90) and longitude (-180..180).');
+  }
+
+  // A field point the office places by hand is no longer waiting for placement.
+  const moved: Equipment = {
+    ...eq,
+    lat,
+    lng,
+    locationMethod: 'map_pick',
+    locationAccuracyMeters: undefined,
+    locationSampleCount: undefined,
+    officeMustPlace: undefined,
+  };
+  const movedCableIds: string[] = [];
+  const cables = data.cables.map((cable) => {
+    const atStart = cable.startEquipmentId === equipmentId;
+    const atEnd = cable.endEquipmentId === equipmentId;
+    if ((!atStart && !atEnd) || cable.coordinates.length === 0) return cable;
+    const coordinates = cable.coordinates.map((point) => [...point] as [number, number]);
+    if (atStart) coordinates[0] = [lat, lng];
+    if (atEnd) coordinates[coordinates.length - 1] = [lat, lng];
+    movedCableIds.push(cable.id);
+    return { ...cable, coordinates, lengthMeters: Math.round(polylineLengthMeters(coordinates)) };
+  });
+
+  const cableNote = movedCableIds.length > 0 ? ` ${movedCableIds.length} connected cable(s) moved with it.` : '';
+  return succeed(
+    { equipment: moved, movedCableIds },
+    { equipment: replaceEquipment(data, moved), ...(movedCableIds.length > 0 ? { cables } : {}) },
+    {
+      notice: notice('info', 'Equipment Moved', `Moved ${eq.name}.${cableNote} Press Undo to put it back.`),
+      audit: [
+        {
+          action: 'EQUIPMENT_MOVED',
+          details: `Moved ${eq.type} ${eq.id} to [${lat.toFixed(5)}, ${lng.toFixed(5)}]${movedCableIds.length ? `; updated cables ${movedCableIds.join(', ')}` : ''}`,
+          assetId: eq.id,
           assetType: 'Equipment',
         },
       ],

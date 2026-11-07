@@ -159,7 +159,7 @@ export const RouteTraceModal: React.FC = () => {
                 </div>
                 <div className="tabular text-xs text-slate-500">
                   {activeTracePath.length} nodes · {formatLength(summary?.totalLengthMeters ?? 0)} ·{' '}
-                  {(summary?.totalLossDb ?? 0).toFixed(2)} dB loss
+                  {(summary?.totalLossDb ?? 0).toFixed(2)} dB estimated loss
                 </div>
               </div>
               {summary && (
@@ -167,9 +167,11 @@ export const RouteTraceModal: React.FC = () => {
                   status={summary.budgetStatus}
                   size="md"
                   label={
-                    summary.estimatedRxDbm !== undefined
-                      ? `Est. Rx ${summary.estimatedRxDbm.toFixed(1)} dBm · ${summary.budgetStatus}`
-                      : `Link budget: ${summary.budgetStatus}`
+                    !summary.pathComplete
+                      ? 'Path not complete'
+                      : summary.estimatedRxDbm !== undefined
+                        ? `Estimated Rx ${summary.estimatedRxDbm.toFixed(1)} dBm · ${summary.budgetStatus}`
+                        : 'Launch power not recorded'
                   }
                 />
               )}
@@ -179,16 +181,16 @@ export const RouteTraceModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <StatTile
                   label="OLT Tx power"
-                  value={<span className="font-mono text-base">{formatDbm(summary.txPowerDbm)}</span>}
+                  value={<span className="font-mono text-base">{formatDbm(summary.txPowerDbm) ?? 'Not recorded'}</span>}
                 />
                 <StatTile
                   label="Estimated Rx"
-                  value={<span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm)}</span>}
+                  value={<span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm) ?? 'Not recorded'}</span>}
                   tone={BUDGET_TILE_TONE[summary.budgetStatus] ?? 'default'}
                 />
                 <StatTile
                   label="Measured Rx"
-                  value={<span className="font-mono text-base">{formatDbm(summary.measuredRxDbm)}</span>}
+                  value={<span className="font-mono text-base">{formatDbm(summary.measuredRxDbm) ?? 'Not recorded'}</span>}
                 />
                 <StatTile
                   label="Downstream customers"

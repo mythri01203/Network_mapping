@@ -45,7 +45,7 @@ function headerFor(selection: SelectedObject): HeaderModel {
         kind: eq.type,
         status: eq.status,
         tags: eq.technology ? [<Badge key="tech">{eq.technology}</Badge>] : [],
-        location: joinPresent([eq.street, eq.area], ', '),
+        location: joinPresent([eq.street, eq.area], ', ') ?? 'Location details not recorded',
       };
     }
     case 'cable': {
@@ -106,7 +106,9 @@ function InspectorBody({ selection, detailed }: { selection: SelectedObject; det
   }
 }
 
-const PANEL_CLASS = 'z-20 flex w-[22rem] shrink-0 flex-col border-l border-slate-200 bg-white';
+/** A side panel from 768 px up. Below that, a full-screen sheet over the map. */
+const PANEL_CLASS =
+  'fixed inset-0 z-[1050] flex w-full flex-col bg-white md:static md:z-20 md:w-[22rem] md:shrink-0 md:border-l md:border-slate-200';
 
 /** Right-hand inspector for whatever is selected on the map. */
 export function PropertiesPanel() {
@@ -128,18 +130,30 @@ export function PropertiesPanel() {
         label="Open inspector"
         variant="secondary"
         onClick={() => setPanelOpen('right', true)}
-        className="absolute top-20 right-0 z-20 rounded-r-none border-r-0 shadow-sm"
+        className="absolute top-20 right-0 z-20 rounded-r-none border-r-0 shadow-sm max-md:hidden"
       />
     );
   }
 
   const collapse = (
-    <IconButton
-      icon={PanelRightClose}
-      label="Collapse inspector"
-      size="sm"
-      onClick={() => setPanelOpen('right', false)}
-    />
+    <>
+      <IconButton
+        icon={PanelRightClose}
+        label="Collapse inspector"
+        size="sm"
+        className="max-md:hidden"
+        onClick={() => setPanelOpen('right', false)}
+      />
+      {/* Phones get one large, obvious way back to the map. */}
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={() => setPanelOpen('right', false)}
+        className="flex h-[48px] w-[48px] items-center justify-center rounded-lg bg-slate-100 text-slate-700 md:hidden"
+      >
+        <X size={22} />
+      </button>
+    </>
   );
 
   if (!selection) {
@@ -201,7 +215,13 @@ export function PropertiesPanel() {
                 onClick={() => openKnowledge(selection.data.type)}
               />
             )}
-            <IconButton icon={X} label="Clear selection" size="sm" onClick={() => select(null)} />
+            <IconButton
+              icon={X}
+              label="Clear selection"
+              size="sm"
+              className="max-md:hidden"
+              onClick={() => select(null)}
+            />
             {collapse}
           </div>
         </div>

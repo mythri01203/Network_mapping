@@ -1,6 +1,12 @@
-import { type BudgetStatus, budgetStatusFor, type SignalLevel } from '@fibergis/shared';
+import { type BudgetStatus, budgetStatusFor, rxBandFor, type SignalLevel } from '@fibergis/shared';
 
 import type { BadgeTone, KeyValueItem } from '../../components/ui';
+
+export const NOT_RECORDED = 'Not recorded';
+
+/** A fact nobody has given shows as "Not recorded", never as a made-up value. */
+export const orNotRecorded = <T>(value: T | undefined | null | ''): T | string =>
+  value === undefined || value === null || value === '' ? NOT_RECORDED : value;
 
 /** Drops optional rows that have no value, so detail lists only show what is on record. */
 export const presentItems = (items: KeyValueItem[]): KeyValueItem[] =>
@@ -44,11 +50,14 @@ const RX_BUDGET: Record<BudgetStatus, { label: string; tone: BadgeTone; text: st
   Pass: { label: 'Within budget', tone: 'green', text: 'text-emerald-700' },
   Warning: { label: 'Marginal', tone: 'amber', text: 'text-amber-700' },
   Fail: { label: 'Below sensitivity', tone: 'red', text: 'text-red-700' },
-  Unknown: { label: 'No reading', tone: 'neutral', text: 'text-slate-500' },
+  Unknown: { label: NOT_RECORDED, tone: 'neutral', text: 'text-slate-500' },
 };
 
+const TOO_MUCH_LIGHT = { label: 'Too much light', tone: 'red' as BadgeTone, text: 'text-red-700' };
+
 /** Received-power assessment against the shared ONT/OLT power budget thresholds. */
-export const rxBudget = (rx: number | undefined) => RX_BUDGET[budgetStatusFor(rx)];
+export const rxBudget = (rx: number | undefined) =>
+  rxBandFor(rx) === 'too_much_light' ? TOO_MUCH_LIGHT : RX_BUDGET[budgetStatusFor(rx)];
 
 export const SIGNAL_TONES: Record<SignalLevel, BadgeTone> = {
   Normal: 'green',

@@ -84,6 +84,11 @@ export const CableTVView: React.FC = () => {
         </div>
       </div>
 
+      <div role="note" className="shrink-0 border-b border-amber-700 bg-amber-950/80 px-6 py-2 text-xs font-semibold text-amber-200">
+        Example values, not your network. No live connection. The schematic and levels below are a teaching example; only
+        the subscriber names come from your records.
+      </div>
+
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {activeTab === 'schematic' && (
@@ -326,7 +331,7 @@ export const CableTVView: React.FC = () => {
 
                     <div>
                       <span className="text-[10px] font-bold text-slate-400 uppercase">
-                        RF Signal Level / Telemetry
+                        RF Signal Level (example)
                       </span>
                       <div className="mt-1 bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-emerald-400 font-mono text-[11px]">
                         {selectedNode.rfLevel}
@@ -423,11 +428,9 @@ export const CableTVView: React.FC = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="text-base font-bold text-white">Active Set-Top Box (STB) Subscribers</h3>
-                  <p className="text-xs text-slate-400">Real-time RF signal level at customer television premises</p>
+                  <p className="text-xs text-slate-400">Cable TV customers on record. RF levels are not recorded yet.</p>
                 </div>
-                <span className="text-xs font-semibold text-slate-400">
-                  {catvCustomers.length} Cable TV Subscribers Connected
-                </span>
+                <span className="text-xs font-semibold text-slate-400">{catvCustomers.length} Cable TV customers on record</span>
               </div>
 
               <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
@@ -436,7 +439,7 @@ export const CableTVView: React.FC = () => {
                     <tr>
                       <th className="py-2.5 px-4">Customer</th>
                       <th className="py-2.5 px-4">Plan / Package</th>
-                      <th className="py-2.5 px-4">STB Serial Number</th>
+                      <th className="py-2.5 px-4">Device Serial</th>
                       <th className="py-2.5 px-4">Tap-Off Box</th>
                       <th className="py-2.5 px-4">RF Signal Level</th>
                       <th className="py-2.5 px-4">Status</th>
@@ -455,10 +458,10 @@ export const CableTVView: React.FC = () => {
                           <span className="font-semibold text-orange-400">{cust.plan}</span>
                         </td>
                         <td className="py-2.5 px-4 font-mono text-slate-300">
-                          {cust.ontSerialNumber.replace('ONT', 'STB')}
+                          {cust.ontSerialNumber || 'Not recorded'}
                         </td>
                         <td className="py-2.5 px-4 text-slate-300">{cust.terminalBoxId}</td>
-                        <td className="py-2.5 px-4 font-mono text-emerald-400 font-bold">66.4 dBµV</td>
+                        <td className="py-2.5 px-4 font-mono text-slate-400">Not recorded</td>
                         <td className="py-2.5 px-4">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
                             {cust.status}

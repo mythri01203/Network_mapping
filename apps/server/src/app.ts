@@ -12,6 +12,7 @@ import type { NetworkRepository } from './db/repository';
 import { HttpError } from './lib/errors';
 import { collectionRoutes } from './routes/collections';
 import { networkRoutes } from './routes/network';
+import { photoRoutes } from './routes/photos';
 import { routingRoutes } from './routes/routing';
 import { systemRoutes } from './routes/system';
 
@@ -63,6 +64,7 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
       await api.register(systemRoutes(repository));
       await api.register(networkRoutes(repository));
       await api.register(routingRoutes({ baseUrl: config.osrmUrl, timeoutMs: config.routingTimeoutMs, fetch }));
+      await api.register(photoRoutes({ dir: config.photosDir }));
       await api.register(collectionRoutes(repository));
     },
     { prefix: API_PREFIX },
@@ -95,6 +97,7 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
         network: '/api/v1/network',
         gpsRoutes: '/api/v1/gpsRoutes',
         catalog: '/api/v1/catalog',
+        photos: '/api/v1/photos/<id>',
       },
       webApp: 'http://localhost:5173',
     });

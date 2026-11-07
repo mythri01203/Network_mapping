@@ -27,7 +27,7 @@ export const SplicingModal: React.FC = () => {
   const [newLossDb, setNewLossDb] = useState<number>(0.02);
   const [newStatus, setNewStatus] = useState<SpliceRecord['status']>('Spliced');
   const [newTray, setNewTray] = useState<string>('Tray 1 (Primary Feeder)');
-  const [newTechnician, setNewTechnician] = useState<string>('Arun Varma (Lead Splicer)');
+  const [newTechnician, setNewTechnician] = useState<string>('');
 
   if (!isSplicingModalOpen) return null;
 
@@ -74,7 +74,7 @@ export const SplicingModal: React.FC = () => {
       outputCore: newOutCore,
       spliceLossDb: newLossDb,
       status: newStatus,
-      technician: newTechnician,
+      technician: newTechnician.trim() || 'Not recorded',
       date: new Date().toISOString().split('T')[0],
     };
 
@@ -96,7 +96,7 @@ export const SplicingModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">

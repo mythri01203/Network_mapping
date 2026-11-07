@@ -5,8 +5,9 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Cable, CableType, Equipment, RouteStatus } from '@fibergis/shared';
 import { buildCoresWithCapacity, buildOltPonPorts, defaultFiberCount, polylineLengthMeters } from '@fibergis/shared';
 
+import { requestConfirm } from '../../stores/confirmStore';
 import { useMapStore } from '../../stores/mapStore';
-import { addCable } from '../../stores/networkActions';
+import { addCable, logAudit } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -24,7 +25,12 @@ const CABLE_TYPES: Array<{ type: CableType; label: string; desc: string }> = [
 ];
 
 const CORE_COUNTS = [2, 4, 6, 8, 12, 24, 48, 96, 144, 288];
-const MODEL = 'SMF-28 Ultra 2026';
+
+type Installation = NonNullable<Cable['installationType']> | '';
+
+/** Only a type that says how it is installed decides it; otherwise it stays "Not recorded". */
+const installationFor = (type: CableType): Installation =>
+  type === 'Aerial Fiber' ? 'Aerial' : type === 'Underground Fiber' ? 'Underground' : '';
 
 const labelClass = 'block text-[11px] font-semibold text-slate-600 mb-1';
 const fieldClass =
@@ -53,15 +59,19 @@ export const CableWizardModal: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [cableId, setCableId] = useState('');
   const [cableName, setCableName] = useState('');
-  const [manufacturer, setManufacturer] = useState('Corning Optical');
-  const [installationType, setInstallationType] = useState<NonNullable<Cable['installationType']>>('Underground');
+  const [manufacturer, setManufacturer] = useState('');
+  const [installationType, setInstallationType] = useState<Installation>('');
   const [routeStatus, setRouteStatus] = useState<RouteStatus>('Active');
-  const [owner, setOwner] = useState('Metropolitan Fiber Corp');
+  const [owner, setOwner] = useState('');
+  // Where the drawn line touches equipment. Nothing is connected until the person says yes.
+  const [proposedStart, setProposedStart] = useState('');
+  const [proposedEnd, setProposedEnd] = useState('');
   const [remarks, setRemarks] = useState('');
   const [reservedCores, setReservedCores] = useState(0);
   const [damagedCores, setDamagedCores] = useState(0);
 
-  // Each new cable starts from what was drawn: snapped route ends and any OLT cable settings.
+  // Each new cable starts from what was chosen: ends a person picked are set, and ends the line
+  // merely touches are only proposed for the person to confirm.
   useEffect(() => {
     if (!isCableWizardOpen) return;
     const { cableDraftDefaults: defaults, cableTypeToDraw, drawingPoints } = useMapStore.getState();
@@ -69,9 +79,15 @@ export const CableWizardModal: React.FC = () => {
     const equipmentAt = (point?: [number, number]) =>
       point && allEquipment.find((e) => e.lat === point[0] && e.lng === point[1])?.id;
 
-    const start = defaults?.startEquipmentId ?? equipmentAt(drawingPoints[0]) ?? '';
+    const start = defaults?.startEquipmentId ?? '';
+    const end = defaults?.endEquipmentId ?? '';
+    const snappedStart = start ? undefined : equipmentAt(drawingPoints[0]);
     const snappedEnd = equipmentAt(drawingPoints[drawingPoints.length - 1]);
-    const end = (snappedEnd !== start ? snappedEnd : undefined) ?? defaults?.endEquipmentId ?? '';
+    setProposedStart(snappedStart ?? '');
+    setProposedEnd(!end && snappedEnd && snappedEnd !== (start || snappedStart) ? snappedEnd : '');
+    setManufacturer('');
+    setOwner('');
+    setInstallationType(installationFor(cableTypeToDraw));
 
     setCableId(`CBL-${Date.now().toString().slice(-5)}`);
     setCableName('');
@@ -107,8 +123,23 @@ export const CableWizardModal: React.FC = () => {
   const availableCores = fiberCount - reservedCores - damagedCores;
   const coreCounts = CORE_COUNTS.includes(fiberCount) ? CORE_COUNTS : [fiberCount, ...CORE_COUNTS];
   const typeDescription = CABLE_TYPES.find((t) => t.type === cableType)?.desc;
+  const nameOf = (id: string) => {
+    const eq = equipments.find((e) => e.id === id);
+    return eq ? `${eq.name} (${eq.id})` : id;
+  };
+  const hasProposal = !!proposedStart || !!proposedEnd;
 
-  const handleFinish = () => {
+  const confirmProposal = () => {
+    if (proposedStart) {
+      setStartEquipmentId(proposedStart);
+      setStartPortName(firstFreePon(equipments.find((eq) => eq.id === proposedStart)));
+    }
+    if (proposedEnd) setEndEquipmentId(proposedEnd);
+    setProposedStart('');
+    setProposedEnd('');
+  };
+
+  const handleFinish = async () => {
     if (coords.length < 2) {
       showToast('error', 'Route Missing', 'Draw a route on the map, or choose both start and end equipment.');
       return;
@@ -123,19 +154,35 @@ export const CableWizardModal: React.FC = () => {
       return;
     }
 
+    // Warn, do not block: say what a blank end means and let the person decide.
+    const problems = [
+      !startEquipmentId && 'The start is not connected to any equipment.',
+      !endEquipmentId && 'The end is not connected to any equipment.',
+      startEquipmentId && ponOptions.length > 0 && !startPortName && 'No OLT PON port is chosen.',
+    ].filter(Boolean) as string[];
+    if (problems.length > 0) {
+      const unconfirmed = hasProposal ? '\n\nThe line touches equipment you have not confirmed. Go back and tap "Yes, connect" to use it.' : '';
+      const accepted = await requestConfirm({
+        title: 'Save a cable that is not connected?',
+        message: `${problems.join(' ')}\n\nCustomers on this cable cannot be traced back to the OLT until it is connected.${unconfirmed}`,
+        confirmLabel: 'Save without connecting',
+        cancelLabel: 'Go back',
+      });
+      if (!accepted) return;
+    }
+
     const created = addCable({
       id: cableId.trim() || undefined,
       name:
         cableName.trim() ||
         (startEquipmentId && endEquipmentId ? `${startEquipmentId} → ${endEquipmentId}` : 'New Fiber Route'),
       type: cableType,
-      manufacturer,
-      model: MODEL,
+      manufacturer: manufacturer.trim() || undefined,
       fiberCount,
       cores: buildCoresWithCapacity(fiberCount, reservedCores, damagedCores),
-      installationType,
+      installationType: installationType || undefined,
       routeStatus,
-      owner,
+      owner: owner.trim(),
       remarks: remarks.trim() || undefined,
       startEquipmentId: startEquipmentId || undefined,
       endEquipmentId: endEquipmentId || undefined,
@@ -145,6 +192,9 @@ export const CableWizardModal: React.FC = () => {
       coordinates: coords,
     });
 
+    if (created && problems.length > 0) {
+      logAudit('CABLE_SAVED_UNCONNECTED', `Saved ${created.id} after a warning: ${problems.join(' ')}`, created.id, 'Cable');
+    }
     if (created) {
       setActiveDrawingPoints([]);
       useMapStore.getState().setCableDraftDefaults(null);
@@ -153,7 +203,7 @@ export const CableWizardModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-3">
@@ -192,6 +242,7 @@ export const CableWizardModal: React.FC = () => {
                   const type = e.target.value as CableType;
                   setCableType(type);
                   setFiberCount(defaultFiberCount(type));
+                  setInstallationType(installationFor(type));
                 }}
                 className={fieldClass}
               >
@@ -222,6 +273,36 @@ export const CableWizardModal: React.FC = () => {
             </div>
           </div>
 
+          {hasProposal && (
+            <div role="status" className="rounded-lg border border-blue-300 bg-blue-50 p-3 text-[13px] text-blue-950">
+              <p className="font-semibold">Your line touches:</p>
+              <ul className="mt-1 list-disc pl-5">
+                {proposedStart && <li>Start: {nameOf(proposedStart)}</li>}
+                {proposedEnd && <li>End: {nameOf(proposedEnd)}</li>}
+              </ul>
+              <p className="mt-1">Connect this cable to {proposedStart && proposedEnd ? 'them' : 'it'}?</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={confirmProposal}
+                  className="min-h-10 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500"
+                >
+                  Yes, connect
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProposedStart('');
+                    setProposedEnd('');
+                  }}
+                  className="min-h-10 rounded-lg border border-blue-300 bg-white px-4 py-2 text-xs font-semibold text-blue-900"
+                >
+                  No, leave blank
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <div>
@@ -233,6 +314,7 @@ export const CableWizardModal: React.FC = () => {
                   value={startEquipmentId}
                   onChange={(e) => {
                     setStartEquipmentId(e.target.value);
+                    setProposedStart('');
                     setStartPortName(firstFreePon(equipments.find((eq) => eq.id === e.target.value)));
                   }}
                   className={fieldClass}
@@ -274,7 +356,10 @@ export const CableWizardModal: React.FC = () => {
               <select
                 id="cable-end"
                 value={endEquipmentId}
-                onChange={(e) => setEndEquipmentId(e.target.value)}
+                onChange={(e) => {
+                  setEndEquipmentId(e.target.value);
+                  setProposedEnd('');
+                }}
                 className={fieldClass}
               >
                 <option value="">Choose equipment</option>
@@ -290,7 +375,7 @@ export const CableWizardModal: React.FC = () => {
           {(!startEquipmentId || !endEquipmentId || (ponOptions.length > 0 && !startPortName)) && (
             <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
               {!startEquipmentId || !endEquipmentId
-                ? 'Choose both ends, or customers on this cable cannot be traced back to the OLT.'
+                ? 'Not connected yet: customers on this cable cannot be traced back to the OLT until both ends are chosen.'
                 : 'Choose a PON port, or customers on this cable cannot be traced to a port.'}
             </p>
           )}
@@ -383,7 +468,9 @@ export const CableWizardModal: React.FC = () => {
                       onChange={(e) => setInstallationType(e.target.value as typeof installationType)}
                       className={fieldClass}
                     >
+                      <option value="">Not recorded</option>
                       <option value="Underground">Underground duct</option>
+                      <option value="Duct">Duct</option>
                       <option value="Aerial">Aerial ADSS / lash</option>
                       <option value="Direct Buried">Direct buried armor</option>
                       <option value="Facade">Building facade</option>
@@ -412,6 +499,7 @@ export const CableWizardModal: React.FC = () => {
                     <input
                       id="cable-maker"
                       type="text"
+                      placeholder="Not recorded"
                       value={manufacturer}
                       onChange={(e) => setManufacturer(e.target.value)}
                       className={fieldClass}
@@ -424,6 +512,7 @@ export const CableWizardModal: React.FC = () => {
                     <input
                       id="cable-owner"
                       type="text"
+                      placeholder="Not recorded"
                       value={owner}
                       onChange={(e) => setOwner(e.target.value)}
                       className={fieldClass}
@@ -458,7 +547,7 @@ export const CableWizardModal: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={handleFinish}
+            onClick={() => void handleFinish()}
             className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5"
           >
             <Check className="w-4 h-4" /> Save Cable

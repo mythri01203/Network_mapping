@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildOltLogicalPorts,
+  buildOltPonPorts,
   generateOltDescription,
   validateOltConfig,
 } from '../src/domain/oltConfig';
+import { oltConfigSchema } from '../src/model/schemas';
 
 describe('oltConfig', () => {
   it('generates a complete formatted description with all modules', () => {
@@ -85,3 +87,19 @@ describe('oltConfig', () => {
   });
 });
 
+
+describe('other PON technologies', () => {
+  it.each(['XGS-PON', '10G-EPON', 'XG-PON', 'Combo PON'] as const)('keeps %s instead of turning it into GPON', (technology) => {
+    expect(validateOltConfig({ technology, totalPorts: 8 }).valid).toBe(true);
+    const ports = buildOltPonPorts({ technology, totalPorts: 2 });
+    expect(ports[0].technology).toBe(technology);
+    expect(buildOltLogicalPorts('OLT-1', 1, technology)[0].technology).toBe(technology);
+    expect(oltConfigSchema.safeParse({ technology, ponPortCount: 8 }).success).toBe(true);
+  });
+
+  it('does not name a manufacturer nobody gave', () => {
+    const text = generateOltDescription({ name: 'X', technology: 'GPON', totalPorts: 8 });
+    expect(text).toContain('Manufacturer: Not recorded');
+    expect(text).not.toContain('Syrotech');
+  });
+});

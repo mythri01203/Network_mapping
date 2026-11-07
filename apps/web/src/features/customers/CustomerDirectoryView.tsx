@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Download, MapPin, PlusCircle, Radio, Route, Search } from 'lucide-react';
 
-import type { Customer } from '@fibergis/shared';
+import { type Customer, hasRecordedLocation, rxReadingOf } from '@fibergis/shared';
 
 import { useShowOnMap } from '../../app/views';
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
 export const CustomerDirectoryView: React.FC = () => {
   const customers = useNetworkStore((s) => s.customers);
+  const optical = useNetworkStore(selectOpticalSettings);
   const setModalOpen = useUiStore((s) => s.setModalOpen);
   const openFiberTrace = useUiStore((s) => s.openFiberTrace);
   const showToast = useToastStore((s) => s.show);
@@ -26,7 +27,7 @@ export const CustomerDirectoryView: React.FC = () => {
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.mobile.includes(searchQuery) ||
-      c.ontSerialNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.ontSerialNumber || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.ipAddress.includes(searchQuery) ||
       c.terminalBoxId.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -54,6 +55,8 @@ export const CustomerDirectoryView: React.FC = () => {
       'ONT Serial',
       'IP Address',
       'Rx Optical Power dBm',
+      'Rx Origin',
+      'Rx Read At',
     ];
     const rows = filteredCustomers.map((c) => [
       c.id,
@@ -69,7 +72,9 @@ export const CustomerDirectoryView: React.FC = () => {
       c.splitterOutputPort,
       c.ontSerialNumber,
       c.ipAddress,
-      c.rxOpticalPowerDbm,
+      rxReadingOf(c, optical).valueDbm ?? '',
+      rxReadingOf(c, optical).originLabel,
+      rxReadingOf(c, optical).measuredAt ?? '',
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -90,7 +95,11 @@ export const CustomerDirectoryView: React.FC = () => {
     (c) => c.serviceType === 'Fiber Broadband' || c.serviceType === 'Triple Play',
   ).length;
   const catvSubs = customers.filter((c) => c.serviceType === 'Cable TV').length;
-  const lowSignalSubs = customers.filter((c) => c.rxOpticalPowerDbm < -24.5).length;
+  const isLowReading = (c: Customer) => {
+    const { band } = rxReadingOf(c, optical);
+    return band === 'low_margin' || band === 'bad';
+  };
+  const lowSignalSubs = customers.filter(isLowReading).length;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
@@ -99,7 +108,7 @@ export const CustomerDirectoryView: React.FC = () => {
         <div>
           <h2 className="text-base font-bold text-slate-800">Customer & Subscriber Directory</h2>
           <p className="text-xs text-slate-500">
-            Manage FTTH broadband, Triple Play, and Cable TV subscriber connections & telemetry
+            FTTH broadband, Triple Play and Cable TV subscribers. No live connection: readings are saved records.
           </p>
         </div>
 
@@ -149,7 +158,9 @@ export const CustomerDirectoryView: React.FC = () => {
           <div className="text-xl font-extrabold text-orange-700 mt-0.5">{catvSubs}</div>
         </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-rose-600 uppercase">Low Rx Signal (&lt; -24.5)</div>
+          <div className="text-[11px] font-bold text-rose-600 uppercase">
+            Low Rx (&lt; {optical.rx.goodFloorDbm} dBm, measured or estimated)
+          </div>
           <div className="text-xl font-extrabold text-rose-700 mt-0.5">{lowSignalSubs}</div>
         </div>
       </div>
@@ -215,7 +226,23 @@ export const CustomerDirectoryView: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredCustomers.map((c) => {
-                const isSignalLow = c.rxOpticalPowerDbm < -24.5;
+                const reading = rxReadingOf(c, optical);
+                const dot =
+                  reading.band === 'good'
+                    ? 'bg-emerald-500'
+                    : reading.band === 'unknown'
+                      ? 'bg-slate-300'
+                      : reading.band === 'low_margin'
+                        ? 'bg-amber-500'
+                        : 'bg-rose-500';
+                const text =
+                  reading.band === 'good'
+                    ? 'text-emerald-700'
+                    : reading.band === 'unknown'
+                      ? 'text-slate-500'
+                      : reading.band === 'low_margin'
+                        ? 'text-amber-700'
+                        : 'text-rose-600';
 
                 return (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition-colors group">
@@ -233,7 +260,13 @@ export const CustomerDirectoryView: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-mono text-[11px] text-slate-700">
-                        {c.oltId} &bull; {c.ponPort}
+                        {c.oltId ? (
+                          <>
+                            {c.oltId} &bull; {c.ponPort || 'Port not recorded'}
+                          </>
+                        ) : (
+                          <span className="font-semibold text-amber-700">Not linked</span>
+                        )}
                       </div>
                       <div className="text-[10px] text-slate-400">
                         Box: <span className="font-semibold text-slate-600">{c.terminalBoxId}</span> (Port{' '}
@@ -241,17 +274,22 @@ export const CustomerDirectoryView: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-mono text-slate-700 font-semibold">{c.ontSerialNumber}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{c.ipAddress}</div>
+                      <div className="font-mono text-slate-700 font-semibold">{c.ontSerialNumber || 'Not recorded'}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{c.ipAddress || 'IP not recorded'}</div>
+                      {!hasRecordedLocation(c) && (
+                        <div className="text-[10px] font-semibold text-amber-700">House location not recorded</div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${isSignalLow ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                        <span className={`font-mono font-bold ${isSignalLow ? 'text-rose-600' : 'text-emerald-700'}`}>
-                          {c.rxOpticalPowerDbm} dBm
+                        <span className={`w-2 h-2 rounded-full ${dot}`} />
+                        <span className={`font-mono font-bold ${text}`}>
+                          {reading.valueDbm !== undefined ? `${reading.valueDbm.toFixed(1)} dBm` : 'Not recorded'}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400">{isSignalLow ? 'Low Signal' : 'Optimal'}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {reading.valueDbm !== undefined ? `${reading.originLabel} · ${reading.bandLabel}` : 'No reading saved'}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <span

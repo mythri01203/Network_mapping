@@ -26,7 +26,14 @@ import { downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';
 import { requestConfirm } from './confirmStore';
 import { useMapStore } from './mapStore';
-import { type Command, type CommandOptions, getNetworkData, getNetworkSnapshot, useNetworkStore } from './networkStore';
+import {
+  type Command,
+  type CommandOptions,
+  getNetworkData,
+  getNetworkSnapshot,
+  selectOpticalSettings,
+  useNetworkStore,
+} from './networkStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { useUiStore } from './uiStore';
@@ -56,13 +63,17 @@ export async function deleteEquipment(id: string, options?: Pick<CommandOptions,
   return true;
 }
 
+/** Moves equipment and the matching ends of its cables as one undoable step. */
+export const moveEquipment = (equipmentId: string, lat: number, lng: number): boolean =>
+  run((data) => domain.moveEquipment(data, equipmentId, lat, lng)) !== null;
+
 export const updateEquipmentPort = (equipmentId: string, portId: string, changes: Partial<EquipmentPort>) => {
   run((data) => domain.updateEquipmentPort(data, equipmentId, portId, changes));
 };
 
-export const uploadEquipmentPhoto = (equipmentId: string, photo: Partial<EquipmentImage>) => {
-  run((data, ctx) => domain.addEquipmentPhoto(data, equipmentId, photo, ctx));
-};
+/** Attaches a photo. Returns false when nothing was saved, so callers never report a false success. */
+export const uploadEquipmentPhoto = (equipmentId: string, photo: Partial<EquipmentImage>): boolean =>
+  run((data, ctx) => domain.addEquipmentPhoto(data, equipmentId, photo, ctx)) !== null;
 
 // Annotations are stored beside the photo; the original image is never modified.
 export const saveImageAnnotation = (equipmentId: string, imageId: string, annotation: ImageAnnotation) => {
@@ -115,10 +126,18 @@ export const removeSplice = (closureId: string, spliceId: string) => {
 // --- Customers, faults & work orders -------------------------------------------------------------
 
 export const addSplitter = (draft: domain.SplitterDraft): Splitter | null =>
-  run((data) => domain.createSplitter(data, draft))?.value ?? null;
+  run((data, ctx) => domain.createSplitter(data, draft, ctx))?.value ?? null;
 
 export const connectCustomerToPort = (draft: domain.CustomerDraft): Customer | null =>
   run((data, ctx) => domain.provisionCustomer(data, draft, ctx))?.value.customer ?? null;
+
+/** Saves a customer's real position and redraws the drop to it, as one undoable step. */
+export const setCustomerLocation = (customerId: string, location: domain.CustomerLocation): boolean =>
+  run((data) => domain.setCustomerLocation(data, customerId, location)) !== null;
+
+/** Links a customer to the path that now reaches their box. Only runs when a person asks. */
+export const relinkCustomer = (customerId: string): boolean =>
+  run((data, ctx) => domain.relinkCustomer(data, customerId, ctx)) !== null;
 
 export const updateCustomer = (customerId: string, patch: Partial<Customer>): boolean =>
   run((data) => {
@@ -183,7 +202,7 @@ export const logAudit = (action: string, details: string, assetId: string, asset
 
 /** Traces the physical path to an equipment, cable or customer id and opens the trace report. */
 export function traceNetworkPath(targetId: string): boolean {
-  const result = domain.resolveTraceTarget(targetId, getNetworkData());
+  const result = domain.resolveTraceTarget(targetId, getNetworkData(), selectOpticalSettings(useNetworkStore.getState()));
   if (!result || result.nodes.length === 0) {
     showToast('warning', 'Trace Not Available', `No traceable network path was found for "${targetId}".`);
     return false;
@@ -192,11 +211,14 @@ export function traceNetworkPath(targetId: string): boolean {
   useUiStore.getState().setModalOpen('routeTrace', true);
 
   const { summary } = result;
-  const budget =
-    summary.estimatedRxDbm !== undefined ? ` · est. Rx ${summary.estimatedRxDbm} dBm (${summary.budgetStatus})` : '';
+  const budget = !summary.pathComplete
+    ? ` · path not complete`
+    : summary.estimatedRxDbm !== undefined
+      ? ` · estimated Rx ${summary.estimatedRxDbm} dBm (${summary.budgetStatus})`
+      : '';
   showToast(
     summary.budgetStatus === 'Fail' || summary.warnings.length > 0 ? 'warning' : 'info',
-    'Fiber Trace Active',
+    summary.pathComplete ? 'Fiber Trace Active' : 'Fiber Trace: Path Not Complete',
     `${summary.targetLabel}: ${result.nodes.length} hops · ${(summary.totalLengthMeters / 1000).toFixed(2)} km${budget}`,
   );
   return true;

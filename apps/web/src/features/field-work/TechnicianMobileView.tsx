@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Camera, CheckCircle2, Navigation, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -18,25 +18,42 @@ export const TechnicianMobileView: React.FC = () => {
   const showToast = useToastStore((s) => s.show);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'box_checker' | 'photo_capture'>('orders');
-  const [selectedBoxId, setSelectedBoxId] = useState<string>('FAT-01');
+  const [selectedBoxId, setSelectedBoxId] = useState<string>('');
+  const userRole = useUiStore((s) => s.userRole);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [savingPhoto, setSavingPhoto] = useState(false);
 
   if (!isTechnicianMobileOpen) return null;
 
-  const currentBox = equipments.find((e) => e.id === selectedBoxId) || equipments[0];
-  const boxSplitter = splitters.find((s) => s.terminalBoxId === currentBox.id);
+  const boxes = equipments.filter((e) => e.type === 'FAT' || e.type.includes('Terminal Box'));
+  const currentBox = boxes.find((e) => e.id === selectedBoxId) ?? boxes[0];
+  const boxSplitter = currentBox ? splitters.find((s) => s.terminalBoxId === currentBox.id) : undefined;
 
-  const handleCapturePhoto = () => {
-    uploadEquipmentPhoto(currentBox.id, {
-      name: `Field-Inspection-${Date.now().toString().slice(-4)}.jpg`,
-      category: 'Maintenance',
-      description: 'Captured via Mobile Technician Field Interface',
-      uploadedBy: 'Arun Varma (Lead Splicer)',
-    });
-    showToast('success', 'Photo Uploaded', `Synced photograph for ${currentBox.id}`);
+  // Only a real photo is saved, and success is reported only when it was saved.
+  const handlePhotoChosen = (file: File | undefined) => {
+    if (!file || !currentBox) return;
+    setSavingPhoto(true);
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setSavingPhoto(false);
+      showToast('error', 'Photo not saved', 'The photo could not be read. Try taking it again.');
+    };
+    reader.onload = () => {
+      setSavingPhoto(false);
+      const saved = uploadEquipmentPhoto(currentBox.id, {
+        url: typeof reader.result === 'string' ? reader.result : undefined,
+        name: file.name || 'Field photo.jpg',
+        category: 'Maintenance',
+        description: 'Taken in the technician phone view',
+        uploadedBy: userRole,
+      });
+      if (!saved) showToast('error', 'Photo not saved', 'Nothing was attached. Try again.');
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
-    <div className="fixed inset-0 z-[1100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 select-none">
+    <div className="modal-sheet fixed inset-0 z-[1100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 select-none">
       {/* Mobile Shell Mockup */}
       <div className="bg-slate-900 border-4 border-slate-700 rounded-[38px] p-3 shadow-2xl w-full max-w-sm flex flex-col h-[740px] max-h-[96vh] text-white overflow-hidden relative">
         {/* Phone Speaker Notch */}
@@ -48,11 +65,12 @@ export const TechnicianMobileView: React.FC = () => {
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <div>
               <div className="text-xs font-bold leading-tight">Field Technician Portal</div>
-              <div className="text-[10px] text-slate-400">Tech: Arun Varma &bull; GPS Online</div>
+              <div className="text-[10px] text-slate-400">{userRole}</div>
             </div>
           </div>
           <button
             onClick={() => setModalOpen('technicianMobile', false)}
+            aria-label="Close"
             className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
@@ -158,30 +176,31 @@ export const TechnicianMobileView: React.FC = () => {
                   Select FAT / FDT Box:
                 </label>
                 <select
-                  value={selectedBoxId}
+                  value={currentBox?.id ?? ''}
                   onChange={(e) => setSelectedBoxId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none"
                 >
-                  {equipments
-                    .filter((e) => e.type === 'FAT' || e.type.includes('Terminal Box'))
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} ({e.id})
-                      </option>
-                    ))}
+                  {boxes.length === 0 && <option value="">No terminal boxes yet</option>}
+                  {boxes.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} ({e.id})
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="p-3 bg-slate-800 rounded-2xl border border-slate-700 space-y-1">
-                <div className="font-bold text-xs text-white">{currentBox.name}</div>
-                <div className="text-[11px] text-slate-400">
-                  {currentBox.street}, {currentBox.area}
+              {currentBox && (
+                <div className="p-3 bg-slate-800 rounded-2xl border border-slate-700 space-y-1">
+                  <div className="font-bold text-xs text-white">{currentBox.name}</div>
+                  <div className="text-[11px] text-slate-400">
+                    {[currentBox.street, currentBox.area].filter(Boolean).join(', ') || 'Location details not recorded'}
+                  </div>
+                  <div className="text-[10px] text-blue-400">
+                    Pole: {currentBox.poleNumber || 'Not recorded'} &bull; Map position: {currentBox.lat.toFixed(4)},{' '}
+                    {currentBox.lng.toFixed(4)}
+                  </div>
                 </div>
-                <div className="text-[10px] text-blue-400">
-                  Pole: {currentBox.poleNumber || 'Wall'} &bull; GPS: {currentBox.lat.toFixed(4)},{' '}
-                  {currentBox.lng.toFixed(4)}
-                </div>
-              </div>
+              )}
 
               {boxSplitter && (
                 <div className="space-y-1.5">
@@ -217,14 +236,32 @@ export const TechnicianMobileView: React.FC = () => {
               </div>
               <div className="font-bold text-sm text-white">Capture Terminal Installation Photo</div>
               <p className="text-slate-400 text-xs px-4">
-                Take a high-resolution photograph of {currentBox.id} to attach to network records.
+                {currentBox
+                  ? `Take a photo of ${currentBox.name} to attach to its record.`
+                  : 'Place a terminal box on the map first.'}
               </p>
+              <input
+                ref={photoInput}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  handlePhotoChosen(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
               <button
-                onClick={handleCapturePhoto}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all mt-4"
+                type="button"
+                disabled={!currentBox || savingPhoto}
+                onClick={() => photoInput.current?.click()}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 transition-all mt-4"
               >
-                <Camera className="w-4 h-4" /> Snap & Upload Photo
+                <Camera className="w-4 h-4" /> {savingPhoto ? 'Saving photo…' : 'Take Photo'}
               </button>
+              <p className="text-[10px] text-slate-500 px-4">
+                Photos are kept with the box record in this browser, then sent to the office with the next sync.
+              </p>
             </div>
           )}
         </div>

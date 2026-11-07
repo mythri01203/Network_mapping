@@ -13,6 +13,8 @@ export interface MarkerSpec {
   label?: string;
   opacity?: number;
   zIndexOffset?: number;
+  /** This one pin can be dragged. Off unless a person chose to move it. */
+  draggable?: boolean;
 }
 
 export interface MarkerLayerOptions {
@@ -20,7 +22,7 @@ export interface MarkerLayerOptions {
   interactive?: boolean;
   pane?: string;
   onClick?: (id: string, event: L.LeafletMouseEvent) => void;
-  draggable?: boolean;
+  /** Called when a pin whose spec is `draggable` is dropped. */
   onDragEnd?: (id: string, latlng: L.LatLng) => void;
 }
 
@@ -43,7 +45,7 @@ function applyLabel(marker: L.Marker, label: string | undefined) {
  * rebuilding the whole layer whenever anything changes. Callers should memoise `specs`.
  */
 export function useMarkerLayer(map: L.Map, specs: readonly MarkerSpec[], options: MarkerLayerOptions = {}) {
-  const { interactive = true, pane, draggable = false } = options;
+  const { interactive = true, pane } = options;
   const group = useLayerGroup(map);
   const entries = useRef(new Map<string, Entry>());
   const onClick = useRef(options.onClick);
@@ -70,21 +72,20 @@ export function useMarkerLayer(map: L.Map, specs: readonly MarkerSpec[], options
           interactive,
           keyboard: interactive,
           riseOnHover: interactive,
-          draggable,
-          // Let clicks reach the map so drawing tools can snap onto the marker's position.
-          bubblingMouseEvents: !draggable,
+          draggable: false,
+          // A tap on a pin also reaches the map, reporting the pin's own position, so drawing and
+          // measuring join exactly onto it at any zoom. The select tool stops the event itself.
+          bubblingMouseEvents: true,
           ...(pane ? { pane } : {}),
         });
         const created: Entry = { marker, spec };
         if (spec.tooltip) marker.bindTooltip(spec.tooltip, TOOLTIP_OPTIONS);
-        marker.on('add', () => applyLabel(marker, created.spec.label));
+        marker.on('add', () => {
+          applyLabel(marker, created.spec.label);
+          if (created.spec.draggable) marker.dragging?.enable();
+        });
         if (interactive) marker.on('click', (e) => onClick.current?.(spec.id, e));
-        if (draggable) {
-          marker.on('dragend', () => {
-            const latlng = marker.getLatLng();
-            onDragEnd.current?.(spec.id, latlng);
-          });
-        }
+        marker.on('dragend', () => onDragEnd.current?.(spec.id, marker.getLatLng()));
         current.set(spec.id, created);
         group.addLayer(marker);
         continue;
@@ -101,6 +102,12 @@ export function useMarkerLayer(map: L.Map, specs: readonly MarkerSpec[], options
       }
       if (prev.opacity !== spec.opacity) marker.setOpacity(spec.opacity ?? 1);
       if (prev.zIndexOffset !== spec.zIndexOffset) marker.setZIndexOffset(spec.zIndexOffset ?? 0);
+      if (!!prev.draggable !== !!spec.draggable || prev.icon !== spec.icon) {
+        if (spec.draggable) marker.dragging?.enable();
+        else marker.dragging?.disable();
+      }
+      // A drop the command refused leaves the pin where it was dragged; put it back on its record.
+      if (!spec.draggable && prev.draggable) marker.setLatLng(spec.latlng);
       if (prev.tooltip !== spec.tooltip) {
         if (!spec.tooltip) marker.unbindTooltip();
         else if (marker.getTooltip()) marker.setTooltipContent(spec.tooltip);

@@ -67,7 +67,7 @@ export const ComponentCatalogModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="modal-sheet fixed inset-0 z-[1100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div>

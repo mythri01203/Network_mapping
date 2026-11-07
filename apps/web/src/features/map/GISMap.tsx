@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type L from 'leaflet';
+import { X } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import type { EquipmentType } from '@fibergis/shared';
 
@@ -9,7 +11,7 @@ import { useBikerStore } from '../../stores/bikerStore';
 import { DEFAULT_VIEWPORT, useMapStore } from '../../stores/mapStore';
 import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
-import { useUiStore } from '../../stores/uiStore';
+import { selectionLabel, useUiStore } from '../../stores/uiStore';
 import { BikerModePanel } from '../field-work/BikerModePanel';
 import { EquipmentToolbox } from './EquipmentToolbox';
 import { oltFamily, type OltFilter } from './layerFilters';
@@ -25,6 +27,7 @@ import { useUserLocation } from './leaflet/useUserLocation';
 import { MapControls, OltFilterControl } from './MapControls';
 import { MapToolbar } from './MapToolbar';
 import { categoryForType } from './markerIcons';
+import { nextPoleName } from './sketch/poleNaming';
 import { SketchTools } from './sketch/SketchTools';
 
 /** The map canvas: owns the Leaflet instance and composes the network layers, tools and controls. */
@@ -63,9 +66,12 @@ export const GISMap: React.FC = () => {
       // ignore
     }
 
+    const placedType = type || 'Outdoor Splitter';
     const created = addEquipment({
-      name,
-      type: type || 'Outdoor Splitter',
+      // Poles take the next free number, never the catalog name.
+      name: placedType.includes('Pole') ? nextPoleName(useNetworkStore.getState().equipment) : name,
+      type: placedType,
+      locationMethod: 'map_pick',
       lat,
       lng,
       category: categoryForType(type || 'Outdoor Splitter'),
@@ -102,9 +108,41 @@ export const GISMap: React.FC = () => {
       {map && <MapViewControls map={map} />}
       <OltFilterControl value={oltFilter} onChange={setOltFilter} counts={oltCounts} />
       <BikerModePanel />
+      <PhoneSelectionBar />
     </div>
   );
 };
+
+/** Phones only: names what is selected and opens its details, without covering the map. */
+function PhoneSelectionBar() {
+  const { selection, panelOpen, select, setPanelOpen } = useUiStore(
+    useShallow((s) => ({ selection: s.selectedObject, panelOpen: s.panels.right, select: s.select, setPanelOpen: s.setPanelOpen })),
+  );
+  const tool = useMapStore((s) => s.activeTool);
+  const moving = useMapStore((s) => s.movingEquipmentId);
+  // Out of the way while drawing, measuring, placing or moving.
+  if (!selection || panelOpen || tool !== 'select' || moving) return null;
+  return (
+    <div className="absolute bottom-[64px] left-2 right-[64px] z-[445] flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 pl-3 shadow-lg md:hidden">
+      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-900">{selectionLabel(selection)}</span>
+      <button
+        type="button"
+        onClick={() => setPanelOpen('right', true)}
+        className="h-[48px] shrink-0 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white"
+      >
+        Details
+      </button>
+      <button
+        type="button"
+        aria-label="Clear selection"
+        onClick={() => select(null)}
+        className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+      >
+        <X size={20} />
+      </button>
+    </div>
+  );
+}
 
 function MapOverlays({ map, oltFilter }: { map: L.Map; oltFilter: OltFilter }) {
   const equipment = useVisibleEquipment(oltFilter);

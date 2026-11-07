@@ -62,3 +62,7 @@ export const isLatLngPair = (value: unknown): value is [number, number] =>
 
 export const isValidCoordinate = (lat: number, lng: number) =>
   Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+
+/** A customer with no recorded position is stored at 0, 0 ("unmapped"), never at a made-up place. */
+export const hasRecordedLocation = (point: { lat: number; lng: number }): boolean =>
+  Number.isFinite(point.lat) && Number.isFinite(point.lng) && !(point.lat === 0 && point.lng === 0);

@@ -36,6 +36,8 @@ function createFakeServer() {
   let data = createSampleNetwork() as unknown as Records;
   let outage: Error | null = null;
   let refusal: ApiError | null = null;
+  /** Records the server refuses one by one, like a validation failure on a single record. */
+  const refusedIds = new Set<string>();
 
   const available = async () => {
     if (outage) throw outage;
@@ -45,6 +47,12 @@ function createFakeServer() {
   const applyChanges = vi.fn<ApiClient['applyChanges']>(async (changes: ChangeSet) => {
     await available();
     if (refusal) throw refusal;
+    const touched = [
+      ...Object.values(changes.upserts ?? {}).flatMap((records) => (records as { id: string }[]).map((r) => r.id)),
+      ...Object.values(changes.deletes ?? {}).flat(),
+    ];
+    const bad = touched.find((id) => refusedIds.has(id as string));
+    if (bad) throw new ApiError(400, 'validation_error', `Record ${bad} is not valid.`);
     expect(changeSetSchema.safeParse(changes).success).toBe(true);
     let upserted = 0;
     let deleted = 0;
@@ -108,6 +116,8 @@ function createFakeServer() {
     refuse: (error: ApiError | null) => {
       refusal = error;
     },
+    refuseRecord: (id: string) => refusedIds.add(id),
+    acceptRecord: (id: string) => refusedIds.delete(id),
     /** Another client edits the network. */
     editElsewhere: (name: CollectionName, record: { id: string }) => {
       const index = data[name].findIndex((item) => item.id === record.id);
@@ -305,14 +315,17 @@ describe('when the server refuses changes', () => {
     server.refuse(new ApiError(400, 'validation_failed', 'Invalid change set.'));
   });
 
+  // Updated in Phase 1: a refused record is now reported by name with a next action, instead of the
+  // generic "Server Rejected Changes" toast and bare server message.
   it('keeps the edits, reports the error once and waits for the user', async () => {
     await startEngine();
     renameFirstEquipment('Refused');
     await idle();
-    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toEqual(['Server Rejected Changes']);
+    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toEqual(['One Item Was Not Sent']);
 
     await vi.advanceTimersByTimeAsync(POLL * 3);
-    expect(useSyncStore.getState()).toMatchObject({ phase: 'error', pendingCount: 1, error: 'Invalid change set.' });
+    expect(useSyncStore.getState()).toMatchObject({ phase: 'error', pendingCount: 1 });
+    expect(useSyncStore.getState().error).toMatch(/Refused .* was not sent\. Invalid change set\. Correct it, then tap Retry now\./);
     expect(server.applyChanges).toHaveBeenCalledTimes(1);
 
     server.refuse(null);
@@ -329,6 +342,83 @@ describe('when the server refuses changes', () => {
     await engine.discardLocalChanges();
     expect(useNetworkStore.getState().equipment[0].name).toBe(original);
     expect(useSyncStore.getState()).toMatchObject({ phase: 'synced', pendingCount: 0 });
+  });
+});
+
+describe('when the server refuses one record', () => {
+  const renameEquipment = (index: number, name: string) => {
+    const equipment = [...useNetworkStore.getState().equipment];
+    equipment[index] = { ...equipment[index], name };
+    useNetworkStore.setState({ equipment });
+    return equipment[index].id;
+  };
+
+  it('still sends every other record and names the refused one', async () => {
+    await startEngine();
+    const bad = useNetworkStore.getState().equipment[1].id;
+    server.refuseRecord(bad);
+    const good = renameEquipment(0, 'Good edit');
+    renameEquipment(1, 'Bad edit');
+    const alsoGood = renameEquipment(2, 'Another good edit');
+    await idle();
+
+    expect(serverEquipment(good).name).toBe('Good edit');
+    expect(serverEquipment(alsoGood).name).toBe('Another good edit');
+    expect(serverEquipment(bad).name).not.toBe('Bad edit');
+
+    const state = useSyncStore.getState();
+    expect(state.phase).toBe('error');
+    expect(state.pendingCount).toBe(1);
+    expect(state.refused).toEqual([
+      expect.objectContaining({ collection: 'equipment', id: bad, label: `Bad edit (${bad})`, reason: expect.stringContaining('not valid') }),
+    ]);
+    expect(state.error).toContain('Correct it, then tap Retry now');
+    expect(useToastStore.getState().toasts.at(-1)?.message).toContain('Everything else was sent');
+    // The refused edit stays in this browser.
+    expect(useNetworkStore.getState().equipment[1].name).toBe('Bad edit');
+    expect(storedMeta().pending.equipment).toContain(bad);
+  });
+
+  it('keeps sending later edits while one record stays refused', async () => {
+    await startEngine();
+    const bad = useNetworkStore.getState().equipment[1].id;
+    server.refuseRecord(bad);
+    renameEquipment(1, 'Bad edit');
+    await idle();
+
+    const later = renameEquipment(3, 'Later edit');
+    await vi.advanceTimersByTimeAsync(DEBOUNCE);
+    await idle();
+    expect(serverEquipment(later).name).toBe('Later edit');
+    expect(useSyncStore.getState().refused.map((r) => r.id)).toEqual([bad]);
+  });
+
+  it('sends the record again once it is corrected', async () => {
+    await startEngine();
+    const bad = useNetworkStore.getState().equipment[1].id;
+    server.refuseRecord(bad);
+    renameEquipment(1, 'Bad edit');
+    await idle();
+
+    server.acceptRecord(bad);
+    renameEquipment(1, 'Fixed edit');
+    await vi.advanceTimersByTimeAsync(DEBOUNCE);
+    await idle();
+    expect(serverEquipment(bad).name).toBe('Fixed edit');
+    expect(useSyncStore.getState()).toMatchObject({ phase: 'synced', refused: [], pendingCount: 0 });
+  });
+
+  it('retries the refused record when asked', async () => {
+    await startEngine();
+    const bad = useNetworkStore.getState().equipment[1].id;
+    server.refuseRecord(bad);
+    renameEquipment(1, 'Bad edit');
+    await idle();
+
+    server.acceptRecord(bad);
+    await engine.retry();
+    expect(serverEquipment(bad).name).toBe('Bad edit');
+    expect(useSyncStore.getState().phase).toBe('synced');
   });
 });
 

@@ -42,7 +42,7 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
               {joinPresent([olt.manufacturer, olt.model]) ?? 'Model not recorded'}
             </div>
             <div className="font-medium text-slate-700">
-              {ponPorts.length} PON ports · <span className="text-sky-700 font-bold">{olt.technology || 'GPON'}</span>
+              {ponPorts.length} PON ports · <span className="text-sky-700 font-bold">{olt.technology || 'Technology not recorded'}</span>
             </div>
             <div>{subscribers} subscribers</div>
           </div>
@@ -97,14 +97,14 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
         aside={<StatusBadge status={power.signalLevel} tone={SIGNAL_TONES[power.signalLevel]} />}
       >
         <div className="grid grid-cols-2 gap-2">
-          <Metric label="Average Tx" value={formatDbm(power.txPowerDbm)} />
-          <Metric label="Weakest Rx" value={formatDbm(power.rxPowerDbm)} className={worstRx.text} />
+          <Metric label="Average Tx" value={formatDbm(power.txPowerDbm) ?? 'Not recorded'} />
+          <Metric label="Weakest Rx" value={formatDbm(power.rxPowerDbm) ?? 'Not recorded'} className={worstRx.text} />
         </div>
         <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
           <span className="truncate">
-            {power.lastUpdated ? `Read ${formatDateTime(power.lastUpdated)}` : 'No readings on record'}
+            {power.lastUpdated ? `Read ${formatDateTime(power.lastUpdated)}` : 'No readings on record'} · No live connection
           </span>
-          <Badge tone="neutral">Sample data</Badge>
+          {(power.txPowerDbm !== undefined || power.rxPowerDbm !== undefined) && <Badge tone="neutral">Sample data</Badge>}
         </div>
       </InspectorSection>
 

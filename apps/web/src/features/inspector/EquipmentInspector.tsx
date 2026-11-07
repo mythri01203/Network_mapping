@@ -6,6 +6,7 @@ import {
   Gauge,
   GitMerge,
   Info,
+  Move,
   Navigation,
   PlugZap,
   Repeat,
@@ -16,13 +17,15 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import type { Equipment } from '@fibergis/shared';
+import { type Equipment, LOCATION_METHOD_LABELS, RX_BAND_LABELS, rxBandFor } from '@fibergis/shared';
 
-import { Button, KeyValueList } from '../../components/ui';
+import { Badge, Button, KeyValueList } from '../../components/ui';
+import { useMapStore } from '../../stores/mapStore';
 import { deleteEquipment } from '../../stores/networkActions';
+import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { navigateToSite, startCableFrom } from './actions';
-import { formatDate, formatUptime, joinPresent, presentItems } from './format';
+import { formatDate, formatUptime, joinPresent, orNotRecorded, presentItems } from './format';
 import { OltSections } from './OltSection';
 import { ActionList, ActionRow, InspectorLayout, InspectorSection, PortUsage } from './sections';
 
@@ -48,19 +51,28 @@ const withPrefix = (prefix: string, value?: string) =>
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
+/** Visible on every panel whose numbers describe a type of equipment rather than this one. */
+function ExampleValuesLabel() {
+  return (
+    <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900">
+      Example values, not your network
+    </p>
+  );
+}
+
 function RatioCouplerLossSection() {
-  const ratios = [
-    { ratio: '90/10', throughput: '0.6 dB (90%)', tap: '10.5 dB (10%)' },
-    { ratio: '80/20', throughput: '1.2 dB (80%)', tap: '7.4 dB (20%)' },
-    { ratio: '70/30', throughput: '1.8 dB (70%)', tap: '5.6 dB (30%)' },
-    { ratio: '50/50', throughput: '3.4 dB (50%)', tap: '3.4 dB (50%)' },
-  ];
+  const optical = useNetworkStore(selectOpticalSettings);
+  const ratios = ['90/10', '80/20', '70/30', '50/50'].map((ratio) => ({
+    ratio,
+    throughput: `${optical.couplers[ratio].throughDb} dB`,
+    tap: `${optical.couplers[ratio].tapDb} dB`,
+  }));
 
   return (
     <InspectorSection title="Coupler Loss Specs" icon={Split} defaultOpen>
       <div className="space-y-2 text-xs">
         <p className="text-[11px] text-slate-500">
-          Unbalanced FBT splitters equalize power across bus FTTH street cascades:
+          Planning values from Optical settings. Check the datasheet of the installed part.
         </p>
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/50">
           <div className="grid grid-cols-3 bg-slate-100/90 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600">
@@ -84,17 +96,22 @@ function RatioCouplerLossSection() {
 }
 
 function OntPowerLevelSection({ equipment }: { equipment: Equipment }) {
-  const rxPower = equipment.opticalPower?.rxPowerDbm ?? -19.4;
-  const txPower = equipment.opticalPower?.txPowerDbm ?? 2.4;
-  const isNormal = rxPower >= -24 && rxPower <= -8;
-  const isWarning = (rxPower < -24 && rxPower >= -27) || (rxPower > -8 && rxPower <= -6);
+  const optical = useNetworkStore(selectOpticalSettings);
+  const rxPower = equipment.opticalPower?.rxPowerDbm;
+  const txPower = equipment.opticalPower?.txPowerDbm;
+  const band = rxBandFor(rxPower, optical);
+  const hasReading = equipment.opticalPower !== undefined && (rxPower !== undefined || txPower !== undefined);
 
-  const statusLabel = isNormal ? 'Normal Signal' : isWarning ? 'Warning Level' : 'Critical (Out of Spec)';
-  const statusBadge = isNormal
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : isWarning
-      ? 'border-amber-200 bg-amber-50 text-amber-700'
-      : 'border-rose-200 bg-rose-50 text-rose-700';
+  const statusLabel = RX_BAND_LABELS[band];
+  const statusBadge =
+    band === 'good'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : band === 'low_margin'
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : band === 'unknown'
+          ? 'border-slate-200 bg-slate-50 text-slate-600'
+          : 'border-rose-200 bg-rose-50 text-rose-700';
+  const { overloadDbm, goodFloorDbm, sensitivityDbm } = optical.rx;
 
   return (
     <InspectorSection title="ONT Power Level" icon={Gauge} defaultOpen>
@@ -102,7 +119,9 @@ function OntPowerLevelSection({ equipment }: { equipment: Equipment }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rx Optical Power</div>
-            <div className="text-lg font-bold tracking-tight text-slate-900">{rxPower.toFixed(1)} dBm</div>
+            <div className="text-lg font-bold tracking-tight text-slate-900">
+              {rxPower !== undefined ? `${rxPower.toFixed(1)} dBm` : 'Not recorded'}
+            </div>
           </div>
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusBadge}`}>
             {statusLabel}
@@ -111,45 +130,61 @@ function OntPowerLevelSection({ equipment }: { equipment: Equipment }) {
 
         <div className="space-y-1">
           <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-200">
-            <div className="w-[60%] bg-emerald-500" title="-8 to -24 dBm (Normal)" />
-            <div className="w-[15%] bg-amber-400" title="-24 to -27 dBm (Warning)" />
-            <div className="w-[25%] bg-rose-500" title="< -27 dBm (Critical)" />
+            <div className="w-[60%] bg-emerald-500" title={`${overloadDbm} to ${goodFloorDbm} dBm (Good)`} />
+            <div className="w-[15%] bg-amber-400" title={`${goodFloorDbm} to ${sensitivityDbm} dBm (Little margin)`} />
+            <div className="w-[25%] bg-rose-500" title={`Below ${sensitivityDbm} dBm (Too weak)`} />
           </div>
           <div className="flex justify-between text-[10px] text-slate-400">
-            <span>-8 dBm (High)</span>
-            <span>-24 dBm (Target)</span>
-            <span>-27 dBm (Min)</span>
+            <span>{overloadDbm} dBm (High)</span>
+            <span>{goodFloorDbm} dBm</span>
+            <span>{sensitivityDbm} dBm (Min)</span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-1 text-xs">
           <div>
             <span className="block text-[10px] text-slate-400">Upstream Tx (1310nm)</span>
-            <span className="font-medium text-slate-700">+{txPower.toFixed(1)} dBm</span>
+            <span className="font-medium text-slate-700">
+              {txPower !== undefined ? `${txPower > 0 ? '+' : ''}${txPower.toFixed(1)} dBm` : 'Not recorded'}
+            </span>
           </div>
           <div>
             <span className="block text-[10px] text-slate-400">Downstream Rx (1490nm)</span>
-            <span className="font-medium text-slate-700">{rxPower.toFixed(1)} dBm</span>
+            <span className="font-medium text-slate-700">{rxPower !== undefined ? `${rxPower.toFixed(1)} dBm` : 'Not recorded'}</span>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-500">
+          <span>No live connection</span>
+          {hasReading && <Badge tone="neutral">Sample data</Badge>}
         </div>
       </div>
     </InspectorSection>
   );
 }
 
-function NodeOpticalPowerSection() {
+function NodeOpticalPowerSection({ equipment }: { equipment: Equipment }) {
   return (
     <InspectorSection title="Node Optical Power" icon={Gauge} defaultOpen>
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Optical Input Power</div>
-            <div className="text-lg font-bold tracking-tight text-slate-900">-3.2 dBm</div>
+            <div className="text-lg font-bold tracking-tight text-slate-900">Not recorded</div>
           </div>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-            AGC Locked
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+            No live connection
           </span>
         </div>
+
+        <div className="text-xs">
+          <span className="text-slate-500">RF output on record: </span>
+          <span className="font-semibold text-slate-800">
+            {equipment.rfLevelDbf !== undefined ? `${equipment.rfLevelDbf} (sample data)` : 'Not recorded'}
+          </span>
+        </div>
+
+        <ExampleValuesLabel />
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
@@ -158,13 +193,13 @@ function NodeOpticalPowerSection() {
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
             <div className="text-[10px] uppercase text-slate-400">RF Output Level</div>
-            <div className="font-semibold text-slate-800">96 dBµV (AGC)</div>
+            <div className="font-semibold text-slate-800">96 dBµV</div>
           </div>
         </div>
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-[11px] text-slate-500">
           <span>Forward Band: 45 - 1000 MHz</span>
-          <span className="font-medium text-emerald-600">CNR ≥ 51 dB</span>
+          <span className="font-medium text-slate-600">CNR ≥ 51 dB</span>
         </div>
       </div>
     </InspectorSection>
@@ -172,12 +207,14 @@ function NodeOpticalPowerSection() {
 }
 
 function SpliceJointSection() {
+  const optical = useNetworkStore(selectOpticalSettings);
   return (
     <InspectorSection title="Fusion Splice Loss Specs" icon={GitMerge} defaultOpen>
+      <ExampleValuesLabel />
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-          <div className="text-[10px] uppercase text-slate-400">Typical Loss</div>
-          <div className="font-semibold text-emerald-700">≤ 0.02 dB</div>
+          <div className="text-[10px] uppercase text-slate-400">Planned Loss</div>
+          <div className="font-semibold text-slate-800">{optical.fusionSpliceDb} dB</div>
         </div>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
           <div className="text-[10px] uppercase text-slate-400">Return Loss</div>
@@ -195,6 +232,7 @@ function SpliceJointSection() {
 function SlackLoopSection() {
   return (
     <InspectorSection title="Fiber Slack Storage (Snowshoe)" icon={Repeat} defaultOpen>
+      <ExampleValuesLabel />
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between border-b border-slate-100 py-1">
           <span className="text-slate-500">Reserve Loop Length</span>
@@ -225,10 +263,14 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
     equipment.totalPorts || equipment.ponPorts?.length || PORT_MANAGED_TYPES.has(equipment.type),
   );
 
+  const isMoving = useMapStore((s) => s.movingEquipmentId === equipment.id);
+  const setMovingEquipmentId = useMapStore((s) => s.setMovingEquipmentId);
+
   const details = presentItems([
     { label: 'Category', value: equipment.category },
-    { label: 'Make / model', value: joinPresent([equipment.manufacturer, equipment.model]) },
-    { label: 'Serial number', value: equipment.serialNumber, mono: true },
+    { label: 'Area', value: orNotRecorded(joinPresent([equipment.street, equipment.area], ', ')) },
+    { label: 'Make / model', value: orNotRecorded(joinPresent([equipment.manufacturer, equipment.model])) },
+    { label: 'Serial number', value: orNotRecorded(equipment.serialNumber), mono: true },
     { label: 'Management IP', value: equipment.ipAddress, mono: true },
     {
       label: 'Rack position',
@@ -252,6 +294,14 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
     { label: 'Uptime', value: equipment.uptimeHours !== undefined ? formatUptime(equipment.uptimeHours) : undefined },
     { label: 'Installed', value: formatDate(equipment.installedDate) },
     { label: 'Coordinates', value: `${equipment.lat.toFixed(5)}, ${equipment.lng.toFixed(5)}`, mono: true },
+    {
+      label: 'Location from',
+      value: equipment.locationMethod
+        ? `${equipment.officeMustPlace ? 'No GPS fix: office must place this' : LOCATION_METHOD_LABELS[equipment.locationMethod]}${
+            equipment.locationAccuracyMeters !== undefined ? `, within ${Math.round(equipment.locationAccuracyMeters)} m` : ''
+          }`
+        : undefined,
+    },
   ]);
 
   return (
@@ -316,7 +366,7 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
       {(equipment.type === 'ONT' || equipment.type === 'ONU' || equipment.type === 'Optical Instrument') && (
         <OntPowerLevelSection equipment={equipment} />
       )}
-      {equipment.type === 'CATV Optical Node' && <NodeOpticalPowerSection />}
+      {equipment.type === 'CATV Optical Node' && <NodeOpticalPowerSection equipment={equipment} />}
       {equipment.type === 'Fiber Splice Joint' && <SpliceJointSection />}
       {equipment.type === 'Fiber Slack Loop' && <SlackLoopSection />}
 
@@ -373,6 +423,16 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
               onClick={() => setModalOpen('splitter', true)}
             />
           )}
+          <ActionRow
+            icon={Move}
+            label="Move this item"
+            hint={isMoving ? 'Drag the pin, or cancel in the bar on the map' : 'Its connected cable ends move with it'}
+            onClick={() => {
+              setMovingEquipmentId(equipment.id);
+              // On a phone the inspector covers the map, so get it out of the way.
+              if (window.innerWidth < 768) useUiStore.getState().setPanelOpen('right', false);
+            }}
+          />
           <ActionRow
             icon={CableGlyph}
             label="Start cable here"

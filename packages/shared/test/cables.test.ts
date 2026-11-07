@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { allocateCore, createCable, deleteCable } from '../src/domain/cables';
 import { applyPatch } from '../src/domain/command';
 import { buildCores } from '../src/domain/defaults';
+import { cableSchema } from '../src/model/schemas';
 import { cable, closure, emptyNetwork, equipment, NOW, smallNetwork, splice } from './fixtures';
 
 const ctx = { now: NOW };
@@ -145,5 +146,27 @@ describe('allocateCore', () => {
     expect(core).toMatchObject({ status: 'In Use', connectedToEquipmentId: 'FAT-01', connectedPort: 'P1' });
     expect(core.remarks).toBe('Allocated to FAT-01 on 2026-11-04');
     expect(result.audit[0]).toMatchObject({ action: 'CORE_ALLOCATED', assetType: 'Core' });
+  });
+});
+
+describe('createCable facts', () => {
+
+  it('saves no made-up owner', () => {
+    const result = createCable(emptyNetwork(), { name: 'C', type: 'Main Feeder Fiber', coordinates: route });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.owner).toBe('');
+    expect(result.value.manufacturer).toBeUndefined();
+    expect(cableSchema.safeParse(result.value).success).toBe(true);
+  });
+
+  it('takes installation from the cable type only when the type says it', () => {
+    const made = (type: 'Aerial Fiber' | 'Underground Fiber' | 'Distribution Fiber') => {
+      const result = createCable(emptyNetwork(), { name: 'C', type, coordinates: route });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.value.installationType;
+    };
+    expect(made('Aerial Fiber')).toBe('Aerial');
+    expect(made('Underground Fiber')).toBe('Underground');
+    expect(made('Distribution Fiber')).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import {
+  type AgentTrip,
   applyPatch,
   type AuditEntry,
   type AuditLog,
@@ -10,13 +11,16 @@ import {
   type CommandContext,
   type CommandResult,
   type CommandSuccess,
-  type GpsRoute,
   formatLogTimestamp,
+  type GpsRoute,
   isLatLngPair,
   type LatLng,
   type NetworkData,
   type NetworkPatch,
   type NetworkSnapshot,
+  type OpticalSettings,
+  resolveOpticalSettings,
+  type Setting,
   uniqueId,
   type UserRole,
 } from '@fibergis/shared';
@@ -51,6 +55,8 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   documents: 'documents',
   catalog: 'custom_components',
   gpsRoutes: 'gps_routes',
+  agentTrips: 'agent_trips',
+  settings: 'settings',
 };
 
 export const MAX_AUDIT_LOGS = 500;
@@ -115,6 +121,11 @@ export interface NetworkState extends NetworkSnapshot {
   addCatalogComponent: (item: CatalogComponent) => void;
   addGpsRoute: (route: GpsRoute) => void;
   deleteGpsRoute: (id: string) => void;
+  /** Inserts or replaces a trip without a toast: active duties save on every location update. */
+  saveAgentTrip: (trip: AgentTrip) => void;
+  /** Inserts or replaces one operator override. Settings sit outside undo; "Reset" removes them. */
+  saveSetting: (setting: Setting) => void;
+  deleteSetting: (id: string) => void;
 }
 
 const isRecordArray = (value: unknown): boolean =>
@@ -182,6 +193,15 @@ const toAuditLog = (entry: AuditEntry, role: UserRole, now: Date): AuditLog => (
   ...entry,
 });
 
+let opticalCache: { records: readonly Setting[]; merged: OpticalSettings } | null = null;
+
+/** Optical defaults merged with the operator's overrides. Stable until the overrides change. */
+export const selectOpticalSettings = (state: Pick<NetworkSnapshot, 'settings'>): OpticalSettings => {
+  const records = state.settings ?? [];
+  if (opticalCache?.records !== records) opticalCache = { records, merged: resolveOpticalSettings(records) };
+  return opticalCache.merged;
+};
+
 export const useNetworkStore = create<NetworkState>()((set, get) => {
   const initial = loadInitialState();
 
@@ -214,6 +234,7 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       now: new Date(),
       actor: `${role} User`,
       fallbackLocation: state.projectStartPoint ?? undefined,
+      optical: selectOpticalSettings(state),
     });
     if (result.ok) return result;
     showToast(result.error.tone, result.error.title, result.error.message);
@@ -303,6 +324,21 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     deleteGpsRoute: (id) => {
       set((s) => ({ gpsRoutes: (s.gpsRoutes || []).filter((r) => r.id !== id) }));
       showToast('info', 'GPS Route Deleted', 'Route removed from saved tracks.');
+    },
+
+    saveAgentTrip: (trip) => {
+      set((s) => {
+        const exists = s.agentTrips.some((t) => t.id === trip.id);
+        return { agentTrips: exists ? s.agentTrips.map((t) => (t.id === trip.id ? trip : t)) : [...s.agentTrips, trip] };
+      });
+    },
+
+    saveSetting: (setting) => {
+      set((s) => ({ settings: [...s.settings.filter((item) => item.id !== setting.id), setting] }));
+    },
+
+    deleteSetting: (id) => {
+      set((s) => ({ settings: s.settings.filter((item) => item.id !== id) }));
     },
   };
 });

@@ -457,3 +457,68 @@
 .gis-map--drawing .leaflet-container.leaflet-dragging {
   cursor: grabbing;
 }
+
+/* ------------------------------------------------------------------ */
+/* Phones: dialogs become full-screen sheets with large controls.      */
+/* Nothing here applies from 768 px up, so the desk layout is as was.  */
+/* ------------------------------------------------------------------ */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .modal-sheet {
+    top: 3rem !important;
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+  .modal-sheet > div:not([aria-hidden]) {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    border-width: 0 !important;
+  }
+  .modal-sheet button,
+  .modal-sheet select,
+  .modal-sheet input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']) {
+    min-height: 48px;
+  }
+  .modal-sheet input,
+  .modal-sheet select,
+  .modal-sheet textarea {
+    font-size: 16px;
+  }
+  .modal-sheet button:has(> svg.lucide-x) {
+    min-width: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-sheet .grid.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modal-sheet .grid.grid-cols-3 > .col-span-2 {
+    grid-column: auto;
+  }
+  .modal-sheet .grid.grid-cols-4:not(.sm\:grid-cols-8) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .modal-sheet .overflow-y-auto {
+    overflow-x: auto;
+  }
+  /* The inspector sheet and menus: primary buttons are thumb-sized on phones. */
+  aside[aria-label='Inspector'] button,
+  [role='menu'] button,
+  [role='menuitem'] {
+    min-height: 48px;
+  }
+  /* Two toasts at most, so a burst never covers the screen. */
+  .toast-stack > :nth-last-child(n + 3) {
+    display: none;
+  }
+}

@@ -11,15 +11,33 @@ export const SplitterPortModal: React.FC = () => {
   );
   const splitters = useNetworkStore((s) => s.splitters);
 
-  const [selectedSplitterId, setSelectedSplitterId] = useState<string>(splitters[0]?.id || 'SP-01');
+  const [selectedSplitterId, setSelectedSplitterId] = useState<string>(splitters[0]?.id ?? '');
   const [selectedPortDetail, setSelectedPortDetail] = useState<any | null>(null);
 
   if (!isSplitterModalOpen) return null;
+  if (splitters.length === 0) {
+    return (
+      <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-3 text-sm">
+          <h2 className="font-bold text-slate-900">No splitters yet</h2>
+          <p className="text-slate-600">Add a splitter to a terminal box from the customer form, then it shows here.</p>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setModalOpen('splitter', false)}
+            className="px-4 py-2 rounded-lg bg-slate-800 text-white font-semibold"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const currentSplitter = splitters.find((s) => s.id === selectedSplitterId) || splitters[0];
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -76,7 +94,10 @@ export const SplitterPortModal: React.FC = () => {
                 Input Port: {currentSplitter.inputPort.id}
               </div>
               <div className="text-[11px] text-purple-600">
-                Signal: {currentSplitter.inputPort.signalLevelDbm || -14.2} dBm
+                Signal:{' '}
+                {currentSplitter.inputPort.signalLevelDbm !== undefined
+                  ? `${currentSplitter.inputPort.signalLevelDbm} dBm (Sample data)`
+                  : 'Not recorded'}
               </div>
             </div>
           </div>

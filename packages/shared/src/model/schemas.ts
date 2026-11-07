@@ -15,15 +15,19 @@ import {
   DOCUMENT_CATEGORIES,
   equipmentCategorySchema,
   equipmentStatusSchema,
-  equipmentTypeSchema,
+  type EquipmentType,
   FAULT_STATUSES,
   FAULT_TYPES,
   IMAGE_CATEGORIES,
+  locationMethodSchema,
   logicalPortStatusSchema,
+  poleMaterialSchema,
+  poleOwnerTypeSchema,
   PON_PORT_STATUSES,
   ponTechnologySchema,
   portTechnologySchema,
   routeStatusSchema,
+  rxSourceSchema,
   severitySchema,
   signalLevelSchema,
   spliceStatusSchema,
@@ -189,7 +193,7 @@ export const oltCableConfigItemSchema = z.object({
 });
 
 export const oltConfigSchema = z.object({
-  technology: z.enum(['EPON', 'GPON']),
+  technology: ponTechnologySchema,
   ponPortCount: z.number().int().positive(),
   portColors: z.record(z.string(), z.string()).optional(),
   splitters: z.array(oltSplitterConfigItemSchema).optional(),
@@ -197,13 +201,45 @@ export const oltConfigSchema = z.object({
   description: z.string().optional(),
 });
 
+/**
+ * Optional evidence recorded by the phone capture flow. Every field is optional so older records and
+ * older clients keep working. Positions keep their method, accuracy, sample count and time together.
+ */
+const fieldCaptureFields = {
+  locationSampleCount: z.number().int().nonnegative().optional(),
+  locationCapturedAt: isoDate.optional(),
+  /** No usable GPS fix: the point is a placeholder until the office places it. */
+  officeMustPlace: z.boolean().optional(),
+  /** When the office placed or confirmed a field position, and who did it. */
+  locationCheckedAt: isoDate.optional(),
+  locationCheckedBy: z.string().optional(),
+  /** Photo ids stored by `/api/v1/photos/<id>`. */
+  photoIds: z.array(z.string()).optional(),
+  captureSource: z.literal('field_capture').optional(),
+};
+
 export const equipmentSchema = z.object({
   id,
+  ...fieldCaptureFields,
+  /** Unchanging short code printed on the asset's QR tag. */
+  tagCode: z.string().trim().min(1).max(64).optional(),
+  /** Kind of pole owner as seen in the field. The company is recorded later by the office. */
+  ownerType: poleOwnerTypeSchema.optional(),
+  material: poleMaterialSchema.optional(),
+  /** The asset captured just before this one in the same walk. Order only: it does not mean a cable joins them. */
+  previousAssetId: z.string().optional(),
+  captureRunId: z.string().optional(),
+  captureOrder: z.number().int().nonnegative().optional(),
+  /** For a house drop: the customer the field worker said it serves. The office confirms the link. */
+  customerId: z.string().optional(),
   name: z.string().min(1),
-  type: equipmentTypeSchema,
+  // Not limited to EQUIPMENT_TYPES: custom catalog items carry a type name the user typed.
+  type: z.string().trim().min(1) as unknown as z.ZodType<EquipmentType>,
   category: equipmentCategorySchema,
   lat: latitude,
   lng: longitude,
+  locationMethod: locationMethodSchema.optional(),
+  locationAccuracyMeters: z.number().nonnegative().optional(),
   area: z.string(),
   street: z.string(),
   poleNumber: z.string().optional(),
@@ -238,6 +274,8 @@ export const equipmentSchema = z.object({
   images: z.array(equipmentImageSchema),
   notes: z.string().optional(),
   installedDate: isoDate,
+  /** Set on records from the bundled demo network: their readings are made up. */
+  isSampleData: z.boolean().optional(),
 });
 
 export const fiberCoreSchema = z.object({
@@ -265,7 +303,8 @@ export const cableSchema = z.object({
   model: z.string().optional(),
   fiberCount: z.number().int().nonnegative(),
   lengthMeters: z.number().nonnegative(),
-  installationType: cableInstallationTypeSchema,
+  /** Absent when nobody has recorded how the cable was installed. */
+  installationType: cableInstallationTypeSchema.optional(),
   owner: z.string(),
   installationDate: isoDate,
   status: cableStatusSchema,
@@ -367,7 +406,20 @@ export const customerSchema = z.object({
   ontSerialNumber: z.string(),
   routerModel: z.string(),
   ipAddress: z.string(),
-  rxOpticalPowerDbm: z.number(),
+  /** Absent when nothing has been recorded. Values with no rxSource have unknown origin. */
+  rxOpticalPowerDbm: z.number().optional(),
+  rxSource: rxSourceSchema.optional(),
+  rxMeasuredAt: isoDate.optional(),
+  /** The recorded OLT launch power a calculated reading was worked out from. */
+  rxLaunchDbm: z.number().optional(),
+  /** Photo of the meter display that proves a field reading. */
+  rxPhotoId: z.string().optional(),
+  /** The capture that recorded the reading, so saving it twice changes nothing. */
+  rxCaptureId: z.string().optional(),
+  /** Set on records from the bundled demo network: their readings are made up. */
+  isSampleData: z.boolean().optional(),
+  locationMethod: locationMethodSchema.optional(),
+  locationAccuracyMeters: z.number().nonnegative().optional(),
 });
 
 export const faultSchema = z.object({
@@ -388,6 +440,11 @@ export const faultSchema = z.object({
   assignedTechnician: z.string().optional(),
   workOrderId: z.string().optional(),
   images: z.array(z.string()),
+  /** Reported as dangerous to people, not only to the network. */
+  unsafe: z.boolean().optional(),
+  locationMethod: locationMethodSchema.optional(),
+  locationAccuracyMeters: z.number().nonnegative().optional(),
+  ...fieldCaptureFields,
 });
 
 export const workOrderSchema = z.object({
@@ -484,6 +541,8 @@ export const fiberTraceHopSchema = z.object({
   details: z.string().optional(),
   equipmentType: z.string().optional(),
   splitRatio: z.string().optional(),
+  /** This hop marks a missing link rather than a real part of the path. */
+  gap: z.boolean().optional(),
 });
 
 /** Saved live GPS tracked route from Bike Mode. */
@@ -500,4 +559,42 @@ export const gpsRouteSchema = z.object({
   status: z.enum(['recording', 'paused', 'completed']),
   startLocationName: z.string().optional(),
   notes: z.string().optional(),
+});
+
+/** `[epoch ms, lat, lng, accuracy m]`, compact because a day of duty holds thousands of points. */
+export const agentTrackPointSchema = z.tuple([z.number(), latitude, longitude, z.number().nonnegative()]);
+
+/** A period with no usable location. An open gap has no end time yet. */
+export const agentTrackingGapSchema = z.object({
+  startTime: isoDate,
+  endTime: isoDate.optional(),
+  reason: z.string(),
+});
+
+/** One field agent's duty, from Start Duty to End Duty. Stops are derived from the points. */
+export const agentTripSchema = z.object({
+  id,
+  agentName: z.string().min(1),
+  status: z.enum(['active', 'completed']),
+  startTime: isoDate,
+  endTime: isoDate.optional(),
+  /** Last time any location reading arrived, usable or not. */
+  lastContactAt: isoDate,
+  points: z.array(agentTrackPointSchema),
+  gaps: z.array(agentTrackingGapSchema),
+  /** Agent notes keyed by the stop's start time in epoch ms. */
+  stopNotes: z.record(z.string(), z.string()),
+});
+
+/**
+ * One operator override of an application setting, keyed by the setting's id. A value with no record
+ * uses its documented default, so an empty collection means "all defaults".
+ */
+export const settingSchema = z.object({
+  id,
+  value: z.union([z.number(), z.string(), z.boolean()]),
+  /** Where the operator got this value, such as a datasheet. */
+  source: z.string().optional(),
+  updatedAt: isoDate.optional(),
+  updatedBy: z.string().optional(),
 });

@@ -81,7 +81,7 @@ export function MenuItem({ icon: Icon, label, hint, onClick, active, danger, dis
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] transition-colors disabled:opacity-40',
+        'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] transition-colors disabled:opacity-40 max-md:min-h-[48px]',
         danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900',
         active && 'font-medium text-blue-700',
       )}

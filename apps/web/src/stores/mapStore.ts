@@ -89,12 +89,15 @@ export interface MapState {
   /** Last camera position, so the map reopens where the user left it after visiting another view. */
   viewport: MapViewport;
   isLayersDrawerOpen: boolean;
+  /** Equipment whose pin may be dragged right now. Pins are fixed unless a person chose "Move this item". */
+  movingEquipmentId: string | null;
   // Preferences (persisted)
   layers: Record<string, boolean>;
   layerOpacity: Record<string, number>;
   tileProvider: TileProvider;
 
   setActiveTool: (tool: MapTool) => void;
+  setMovingEquipmentId: (id: string | null) => void;
   setEquipmentTypeToAdd: (type: EquipmentType | null) => void;
   setEquipmentDraftTemplate: (template: Partial<Equipment> | null) => void;
   setCableTypeToDraw: (type: CableType) => void;
@@ -127,11 +130,14 @@ export const useMapStore = create<MapState>()(
       flyToTarget: null,
       viewport: DEFAULT_VIEWPORT,
       isLayersDrawerOpen: false,
+      movingEquipmentId: null,
       layers: DEFAULT_LAYERS,
       layerOpacity: DEFAULT_LAYER_OPACITY,
       tileProvider: 'google_streets',
 
-      setActiveTool: (activeTool) => set({ activeTool }),
+      // Picking any other tool ends a move, so a pin is never left draggable by accident.
+      setActiveTool: (activeTool) => set({ activeTool, movingEquipmentId: null }),
+      setMovingEquipmentId: (movingEquipmentId) => set({ movingEquipmentId }),
       setEquipmentTypeToAdd: (equipmentTypeToAdd) => set({ equipmentTypeToAdd }),
       setEquipmentDraftTemplate: (equipmentDraftTemplate) => set({ equipmentDraftTemplate }),
       setCableTypeToDraw: (cableTypeToDraw) => set({ cableTypeToDraw }),

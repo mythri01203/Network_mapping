@@ -1,0 +1,37 @@
+/* Field capture only. Unlayered on purpose, so it wins over Tailwind's layered utilities. */
+@import '@fontsource/noto-sans-telugu/telugu-500.css';
+@import '@fontsource/noto-sans-telugu/telugu-700.css';
+@import '@fontsource/noto-sans-kannada/kannada-500.css';
+@import '@fontsource/noto-sans-kannada/kannada-700.css';
+
+.field-capture {
+  font-family: 'Inter', 'Noto Sans Telugu', 'Noto Sans Kannada', ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Telugu and Kannada: 18 px body, weight 500, line height 1.7 so conjuncts and vowel signs do not clip. */
+.field-capture:lang(te),
+.field-capture [lang='te'] {
+  font-family: 'Noto Sans Telugu', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+.field-capture:lang(kn),
+.field-capture [lang='kn'] {
+  font-family: 'Noto Sans Kannada', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+.field-capture:lang(te) *,
+.field-capture:lang(kn) *,
+.field-capture [lang='te'],
+.field-capture [lang='kn'] {
+  line-height: 1.7;
+}
+.field-capture :lang(en) {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.field-capture .leaflet-container {
+  font-size: 0.75rem;
+}

@@ -4,8 +4,7 @@ import type L from 'leaflet';
 import type { Equipment } from '@fibergis/shared';
 
 import { useMapStore } from '../../../stores/mapStore';
-import { updateEquipment } from '../../../stores/networkActions';
-import { showToast } from '../../../stores/toastStore';
+import { moveEquipment } from '../../../stores/networkActions';
 import { useTraceStore } from '../../../stores/traceStore';
 import { useUiStore } from '../../../stores/uiStore';
 import { equipmentLayerKey } from '../layerFilters';
@@ -38,6 +37,7 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
   const layerOpacity = useMapStore((s) => s.layerOpacity);
   const showLabels = useMapStore((s) => s.layers.labels !== false);
   const zoom = useMapZoom(map);
+  const movingId = useMapStore((s) => s.movingEquipmentId);
   const [oltPopupId, setOltPopupId] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(equipment.map((eq) => [eq.id, eq])), [equipment]);
@@ -56,9 +56,10 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
         label: `${eq.type} ${eq.name}`,
         opacity: layer ? (layerOpacity[layer] ?? 1) : 1,
         zIndexOffset: zIndexFor(eq, selected),
+        draggable: eq.id === movingId,
       };
     });
-  }, [equipment, selectedId, tracedIds, layerOpacity]);
+  }, [equipment, selectedId, tracedIds, layerOpacity, movingId]);
 
   const onClick = useCallback(
     (id: string, event: L.LeafletMouseEvent) => {
@@ -71,21 +72,13 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
     [byId],
   );
 
-  const onDragEnd = useCallback(
-    (id: string, latlng: L.LatLng) => {
-      const eq = byId.get(id);
-      if (!eq) return;
-      updateEquipment({ ...eq, lat: latlng.lat, lng: latlng.lng });
-      showToast(
-        'info',
-        'Equipment Repositioned',
-        `Moved ${eq.name} to [${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}].`,
-      );
-    },
-    [byId],
-  );
+  // Moves the equipment and its cable ends as one undoable step, then fixes the pin again.
+  const onDragEnd = useCallback((id: string, latlng: L.LatLng) => {
+    moveEquipment(id, latlng.lat, latlng.lng);
+    useMapStore.getState().setMovingEquipmentId(null);
+  }, []);
 
-  useMarkerLayer(map, markers, { onClick, draggable: true, onDragEnd });
+  useMarkerLayer(map, markers, { onClick, onDragEnd });
 
   const labels = useMemo<MarkerSpec[]>(() => {
     if (!showLabels || zoom < LABEL_MIN_ZOOM) return [];

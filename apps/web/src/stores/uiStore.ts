@@ -82,6 +82,11 @@ export interface UiState {
   selectedSpliceTarget: Equipment | Customer | null;
   activeTraceTargetId: string | null;
   pickingOnuCustomer: Customer | null;
+  /** The customer form is hidden while the person taps the house on the map. */
+  customerWizardPicking: boolean;
+  customerWizardPick: { lat: number; lng: number } | null;
+  /** The navigation menu shown over the screen on phones. */
+  isMobileMenuOpen: boolean;
   selectedOltForConfig: Equipment | null;
   // Preferences (persisted)
   uiMode: UiMode;
@@ -100,6 +105,9 @@ export interface UiState {
   openOltConfigModal: (olt: Equipment) => void;
   closeOltConfigModal: () => void;
   setPickingOnuCustomer: (customer: Customer | null) => void;
+  setCustomerWizardPicking: (picking: boolean) => void;
+  setCustomerWizardPick: (pick: { lat: number; lng: number } | null) => void;
+  setMobileMenuOpen: (open: boolean) => void;
   openKnowledge: (equipmentTypeOrId: string) => void;
   setUiMode: (mode: UiMode) => void;
   setUserRole: (role: UserRole) => void;
@@ -118,6 +126,9 @@ export const useUiStore = create<UiState>()(
       selectedSpliceTarget: null,
       activeTraceTargetId: null,
       pickingOnuCustomer: null,
+      customerWizardPicking: false,
+      customerWizardPick: null,
+      isMobileMenuOpen: false,
       selectedOltForConfig: null,
       uiMode: 'simple',
       userRole: 'Network Engineer',
@@ -152,6 +163,9 @@ export const useUiStore = create<UiState>()(
           modals: { ...s.modals, oltConfig: false },
         })),
       setPickingOnuCustomer: (pickingOnuCustomer) => set({ pickingOnuCustomer }),
+      setCustomerWizardPicking: (customerWizardPicking) => set({ customerWizardPicking }),
+      setCustomerWizardPick: (customerWizardPick) => set({ customerWizardPick, customerWizardPicking: false }),
+      setMobileMenuOpen: (isMobileMenuOpen) => set({ isMobileMenuOpen }),
       openKnowledge: (equipmentTypeOrId) =>
         set((s) => ({
           selectedKnowledgeId: knowledgeKeyFor(equipmentTypeOrId),

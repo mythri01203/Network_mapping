@@ -13,13 +13,13 @@ import {
   Waypoints,
 } from 'lucide-react';
 
-import { type Cable, STANDARD_12_COLORS } from '@fibergis/shared';
+import { type Cable, fiberLossDb, STANDARD_12_COLORS } from '@fibergis/shared';
 
 import { Button, KeyValueList } from '../../components/ui';
 import { deleteCable, traceNetworkPath, updateCable } from '../../stores/networkActions';
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
-import { formatDate, formatLength, joinPresent, presentItems } from './format';
+import { formatDate, formatLength, joinPresent, orNotRecorded, presentItems } from './format';
 import { ActionList, ActionRow, CoreBreakdown, InspectorLayout, InspectorSection, RecordLink } from './sections';
 
 function Endpoint({ label, equipmentId }: { label: string; equipmentId?: string }) {
@@ -45,30 +45,28 @@ function Endpoint({ label, equipmentId }: { label: string; equipmentId?: string 
 }
 
 function FiberLossSection({ lengthMeters }: { lengthMeters: number }) {
-  const km = lengthMeters / 1000;
-  const loss1310 = (km * 0.35).toFixed(2);
-  const loss1550 = (km * 0.20).toFixed(2);
-  const totalBudget1310 = (km * 0.35 + 0.5).toFixed(2);
+  const optical = useNetworkStore(selectOpticalSettings);
+  const loss1310 = fiberLossDb(lengthMeters, 1310, optical);
+  const loss1490 = fiberLossDb(lengthMeters, 1490, optical);
 
   return (
-    <InspectorSection title="Optical Fiber Loss" icon={Gauge} defaultOpen>
+    <InspectorSection title="Estimated fiber loss" icon={Gauge} defaultOpen>
       <div className="space-y-2 text-xs">
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
             <span className="block text-[10px] uppercase text-slate-400">Loss @ 1310 nm</span>
             <span className="text-base font-bold text-slate-900">{loss1310} dB</span>
-            <span className="mt-0.5 block text-[10px] text-slate-400">0.35 dB/km standard</span>
+            <span className="mt-0.5 block text-[10px] text-slate-400">{optical.fiberDbPerKm[1310]} dB/km setting</span>
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-            <span className="block text-[10px] uppercase text-slate-400">Loss @ 1550 nm</span>
-            <span className="text-base font-bold text-slate-900">{loss1550} dB</span>
-            <span className="mt-0.5 block text-[10px] text-slate-400">0.20 dB/km standard</span>
+            <span className="block text-[10px] uppercase text-slate-400">Loss @ 1490 nm</span>
+            <span className="text-base font-bold text-slate-900">{loss1490} dB</span>
+            <span className="mt-0.5 block text-[10px] text-slate-400">{optical.fiberDbPerKm[1490]} dB/km setting</span>
           </div>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-100 pt-1 text-[11px] text-slate-600">
-          <span>Est. Link Budget (incl. connectors):</span>
-          <span className="font-bold text-blue-700">{totalBudget1310} dB</span>
-        </div>
+        <p className="border-t border-slate-100 pt-1 text-[11px] text-slate-500">
+          Estimated from the length and the optical settings. Connectors and splices are not included.
+        </p>
       </div>
     </InspectorSection>
   );
@@ -152,9 +150,9 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
     { label: 'Category', value: cable.cableCategory },
     { label: 'Fiber count', value: `${cable.fiberCount} F` },
     { label: 'Length', value: formatLength(cable.lengthMeters) },
-    { label: 'Installation', value: cable.installationType },
+    { label: 'Installation', value: orNotRecorded(cable.installationType) },
     { label: 'Route status', value: cable.routeStatus },
-    { label: 'Owner', value: cable.owner },
+    { label: 'Owner', value: orNotRecorded(cable.owner) },
     { label: 'Make / model', value: joinPresent([cable.manufacturer, cable.model]) },
     { label: 'Installed', value: formatDate(cable.installationDate) },
   ]);

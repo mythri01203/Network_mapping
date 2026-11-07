@@ -39,7 +39,7 @@ function ActionRow({
       type="button"
       onClick={onClick}
       className={cn(
-        'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors',
+        'group flex min-h-[48px] w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors md:min-h-0',
         primary ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-700 hover:bg-slate-100',
       )}
     >

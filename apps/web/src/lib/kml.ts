@@ -1,4 +1,4 @@
-import type { Cable, Customer, Equipment } from '@fibergis/shared';
+import { type Cable, type Customer, type Equipment, hasRecordedLocation } from '@fibergis/shared';
 
 import { escapeXml as x } from './xml';
 
@@ -44,7 +44,7 @@ export function buildNetworkKml({ equipment, cables, customers }: KmlSource): st
       ),
     );
 
-  const customerMarks = customers.map((c) =>
+  const customerMarks = customers.filter(hasRecordedLocation).map((c) =>
     placemark(
       `${x(c.name)} (${x(c.id)})`,
       `Plan: ${x(c.plan)} | Status: ${x(c.status)} | FAT: ${x(c.terminalBoxId)} port ${c.splitterOutputPort}`,

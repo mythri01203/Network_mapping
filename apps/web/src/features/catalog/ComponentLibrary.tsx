@@ -146,7 +146,7 @@ const COMPONENTS: ComponentItem[] = [
     type: 'Fiber Splice Joint',
     category: 'Fiber Distribution',
     name: 'Fusion Splice Joint / Tray',
-    description: 'Core-alignment fusion splice joint (≤0.02 dB loss)',
+    description: 'Core-alignment fusion splice joint (planned at 0.1 dB)',
     defaultPorts: 12,
     iconBg: 'bg-amber-600',
   },
@@ -408,18 +408,20 @@ export const ComponentLibrary: React.FC = () => {
   const handleClickToPlace = (type: EquipmentType) => {
     setSelectedEquipmentTypeToAdd(type);
     setActiveTool('add_equipment');
+    if (window.innerWidth < 768) setPanelOpen('left', false);
     showToast('info', 'Click Map to Place', `Click anywhere on the GIS map to place ${type}.`);
   };
 
   const handleStartDrawCable = (cableType: CableType) => {
     setSelectedCableTypeToDraw(cableType);
     setActiveTool('draw_cable');
+    if (window.innerWidth < 768) setPanelOpen('left', false);
     showToast('info', 'Draw Cable Route', `Click points on the map to draw ${cableType}.`);
   };
 
   if (!isLeftPanelOpen) {
     return (
-      <div className="w-9 shrink-0 bg-white border-r border-slate-200 flex flex-col items-center py-3 gap-2 z-20">
+      <div className="hidden w-9 shrink-0 bg-white border-r border-slate-200 flex-col items-center py-3 gap-2 z-20 md:flex">
         <button
           onClick={() => setPanelOpen('left', true)}
           className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
@@ -432,7 +434,7 @@ export const ComponentLibrary: React.FC = () => {
   }
 
   return (
-    <div className="w-72 bg-white/95 backdrop-blur-md border-r border-slate-200/80 flex flex-col z-20 shrink-0 select-none shadow-md transition-all duration-200">
+    <div className="fixed inset-x-0 bottom-0 top-12 z-[1050] w-full bg-white flex flex-col select-none shadow-md transition-all duration-200 md:static md:z-20 md:w-72 md:shrink-0 md:bg-white/95 md:backdrop-blur-md md:border-r md:border-slate-200/80">
       {/* Header */}
       <div className="p-3 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -443,8 +445,9 @@ export const ComponentLibrary: React.FC = () => {
         </div>
         <button
           onClick={() => setPanelOpen('left', false)}
-          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+          className="flex h-[48px] w-[48px] items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors md:h-auto md:w-auto md:p-1"
           title="Collapse Panel"
+          aria-label="Close"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>

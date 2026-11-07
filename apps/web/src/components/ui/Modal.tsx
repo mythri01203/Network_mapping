@@ -82,7 +82,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center p-6"
+      className={cn('fixed inset-0 z-[2000] flex items-center justify-center p-6', size !== 'sm' && 'modal-sheet')}
       role="presentation"
       onMouseDown={(e) => {
         if (closeOnOverlayClick && e.target === e.currentTarget) onClose();

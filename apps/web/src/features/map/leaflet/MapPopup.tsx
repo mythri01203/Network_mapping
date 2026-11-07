@@ -34,6 +34,19 @@ export function MapPopup({ map, latlng, onClose, offsetY = 0, children }: MapPop
       .setLatLng([lat, lng])
       .setContent(container);
 
+    // Opening may pan the map to fit the popup. Closing puts the map back, unless the person moved it
+    // in between, so the things they were about to tap are where they left them.
+    const centerBefore = map.getCenter();
+    let autoPanned = false;
+    const onAutoPan = () => {
+      autoPanned = true;
+    };
+    const onUserMove = () => {
+      autoPanned = false;
+    };
+    map.on('autopanstart', onAutoPan);
+    map.on('dragstart zoomstart', onUserMove);
+
     let unmounting = false;
     popup.on('remove', () => {
       if (!unmounting) onCloseRef.current();
@@ -42,7 +55,10 @@ export function MapPopup({ map, latlng, onClose, offsetY = 0, children }: MapPop
 
     return () => {
       unmounting = true;
+      map.off('autopanstart', onAutoPan);
+      map.off('dragstart zoomstart', onUserMove);
       popup.remove();
+      if (autoPanned) map.panTo(centerBefore, { animate: false });
     };
   }, [map, container, lat, lng, offsetY]);
 

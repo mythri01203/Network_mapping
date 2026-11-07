@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bike,
+  Camera,
   Check,
   ChevronDown,
   CornerUpLeft,
@@ -20,6 +21,7 @@ import {
   UtilityPole,
   X,
 } from 'lucide-react';
+import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
 import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/shared';
@@ -87,7 +89,7 @@ function Shortcut({ children, dark }: { children: React.ReactNode; dark?: boolea
   return (
     <kbd
       className={cn(
-        'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded px-1 font-sans text-[10px] font-semibold',
+        'hidden h-[18px] md:inline-flex min-w-[18px] items-center justify-center rounded px-1 font-sans text-[10px] font-semibold',
         dark ? 'bg-white/10 text-slate-300 ring-1 ring-white/15' : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200',
       )}
     >
@@ -128,8 +130,8 @@ function ToolButton({
         aria-label={label}
         aria-pressed={active}
         className={cn(
-          'flex h-9 items-center gap-1.5 rounded-md text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-35',
-          showLabel ? 'px-2.5' : caret ? 'pl-2 pr-1.5' : 'w-9 justify-center',
+          'flex h-[48px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-35 md:h-9',
+          showLabel ? 'px-2.5' : caret ? 'pl-2 pr-1.5' : 'w-[48px] justify-center md:w-9',
           active
             ? 'bg-slate-900 text-white shadow-sm'
             : danger
@@ -141,7 +143,7 @@ function ToolButton({
         {showLabel && <span>{label}</span>}
         {caret && <ChevronDown className={cn('h-3.5 w-3.5', active ? 'text-white/70' : 'text-slate-400')} />}
       </button>
-      <div className="pointer-events-none absolute left-1/2 top-full z-[1600] mt-2 hidden -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:flex">
+      <div className="pointer-events-none absolute left-1/2 top-full z-[1600] mt-2 hidden -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg md:group-hover:flex">
         {label}
         {shortcut && <Shortcut dark>{shortcut}</Shortcut>}
       </div>
@@ -150,7 +152,7 @@ function ToolButton({
 }
 
 function Divider() {
-  return <div className="mx-1 h-5 w-px bg-slate-200" />;
+  return <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,7 +169,8 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // On a phone the keyboard would cover the list, so only focus the search on a desk.
+    if (window.innerWidth >= 768) inputRef.current?.focus();
   }, []);
 
   const all = useMemo(
@@ -207,9 +210,9 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
   }, [filtered, categories]);
 
   return (
-    <div className="animate-pop-in absolute left-1/2 top-full z-[1500] mt-2 flex h-[440px] w-[640px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-[var(--shadow-overlay)]">
-      <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-slate-100 bg-slate-50/70 p-2">
-        <div className="px-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <div className="animate-pop-in fixed inset-x-0 bottom-0 top-12 z-[1500] flex flex-col overflow-hidden bg-white text-slate-700 md:absolute md:inset-auto md:left-1/2 md:top-full md:mt-2 md:h-[440px] md:w-[640px] md:max-w-[calc(100vw-2rem)] md:-translate-x-1/2 md:flex-row md:rounded-xl md:border md:border-slate-200 md:shadow-[var(--shadow-overlay)]">
+      <nav className="flex shrink-0 flex-row gap-0.5 overflow-x-auto border-b border-slate-100 bg-slate-50/70 p-2 md:w-48 md:flex-col md:overflow-visible md:border-b-0 md:border-r">
+        <div className="hidden px-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:block">
           Categories
         </div>
         {['All', ...categories].map((c) => {
@@ -220,7 +223,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
               type="button"
               onClick={() => setCategory(c)}
               className={cn(
-                'flex items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] transition-colors',
+                'flex min-h-[48px] shrink-0 items-center justify-between whitespace-nowrap rounded-md px-2 py-1.5 text-left text-[13px] transition-colors md:min-h-0',
                 category === c
                   ? 'bg-white font-medium text-slate-900 shadow-sm ring-1 ring-slate-200'
                   : 'text-slate-600 hover:bg-white/70',
@@ -249,10 +252,10 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-[48px] w-[48px] items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 md:h-auto md:w-auto md:p-1"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5 md:h-4 md:w-4" />
           </button>
         </div>
 
@@ -285,7 +288,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
                     }}
                     onClick={() => onPick(c)}
                     className={cn(
-                      'group/item flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors',
+                      'group/item flex min-h-[52px] w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors md:min-h-0',
                       selected ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50',
                     )}
                   >
@@ -325,7 +328,7 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
           ))}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500">
+        <div className="hidden items-center justify-between border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500 md:flex">
           <span>Click to place on the map, or drag an item onto it.</span>
           <span className="flex items-center gap-1">
             <Shortcut>Esc</Shortcut> close
@@ -358,12 +361,17 @@ function CableSwatch({ type }: { type: string }) {
   );
 }
 
-function CablePicker({ onPick }: { onPick: (t: CableType) => void }) {
+function CablePicker({ onPick, className }: { onPick: (t: CableType) => void; className?: string }) {
   const { selectedCableTypeToDraw, activeTool } = useMapStore(
     useShallow((s) => ({ selectedCableTypeToDraw: s.cableTypeToDraw, activeTool: s.activeTool })),
   );
   return (
-    <div className="animate-pop-in absolute left-0 top-full z-[1500] mt-2 w-72 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-[var(--shadow-overlay)]">
+    <div
+      className={cn(
+        'animate-pop-in z-[1500] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-[var(--shadow-overlay)]',
+        className,
+      )}
+    >
       <div className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         Draw cable route
       </div>
@@ -375,7 +383,7 @@ function CablePicker({ onPick }: { onPick: (t: CableType) => void }) {
             type="button"
             onClick={() => onPick(type)}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors',
+              'flex min-h-[48px] w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors md:min-h-0',
               selected ? 'bg-blue-50' : 'hover:bg-slate-50',
             )}
           >
@@ -492,8 +500,20 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   }, []);
 
   return (
-    <div ref={rootRef} className="absolute left-1/2 top-3 z-[450] -translate-x-1/2">
-      <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/90 bg-white/95 p-1 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_-6px_rgb(15_23_42/0.18)] backdrop-blur">
+    <div
+      ref={rootRef}
+      className="absolute inset-x-0 bottom-0 z-[450] md:inset-x-auto md:bottom-auto md:left-1/2 md:top-3 md:-translate-x-1/2"
+    >
+      <div className="no-scrollbar flex items-center gap-0.5 overflow-x-auto border-t border-slate-200 bg-white p-1 shadow-[0_-4px_16px_-6px_rgb(15_23_42/0.25)] md:overflow-visible md:rounded-lg md:border md:border-slate-200/90 md:bg-white/95 md:shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_-6px_rgb(15_23_42/0.18)] md:backdrop-blur">
+        {/* Phone only: the simple field flow for poles, boxes, drops, light levels and danger. */}
+        <Link
+          to="/capture"
+          data-testid="open-capture"
+          className="flex h-[48px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-emerald-800 px-3 text-[14px] font-semibold text-white md:hidden"
+        >
+          <Camera className="h-5 w-5" strokeWidth={2} aria-hidden />
+          Field capture
+        </Link>
         <ToolButton
           icon={MousePointer2}
           label="Select"
@@ -504,7 +524,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
 
         <Divider />
 
-        <div className="relative">
+        <div className="relative shrink-0">
           <ToolButton
             icon={LayoutGrid}
             label="Equipment"
@@ -515,7 +535,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
             onClick={() => setMenu((m) => (m === 'equipment' ? null : 'equipment'))}
           />
         </div>
-        <div className="relative">
+        <div className="relative shrink-0">
           <ToolButton
             icon={Spline}
             label="Cable"
@@ -525,7 +545,9 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
             active={activeTool === 'draw_cable' || menu === 'cable'}
             onClick={() => setMenu((m) => (m === 'cable' ? null : 'cable'))}
           />
-          {menu === 'cable' && <CablePicker onPick={pickCable} />}
+          {menu === 'cable' && (
+            <CablePicker onPick={pickCable} className="absolute left-0 top-full mt-2 hidden w-72 md:block" />
+          )}
         </div>
         <ToolButton
           icon={UserPlus}
@@ -576,6 +598,9 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
         />
       </div>
 
+      {menu === 'cable' && (
+        <CablePicker onPick={pickCable} className="absolute inset-x-2 bottom-full mb-2 max-h-[60vh] overflow-y-auto md:hidden" />
+      )}
       {menu === 'equipment' && <EquipmentPicker onPick={pickEquipment} onClose={closeMenu} />}
     </div>
   );
@@ -655,11 +680,12 @@ export function MapModeBar({
   };
 
   const darkBtn =
-    'flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40';
+    'flex h-[48px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40 md:h-8 md:px-2.5 md:text-[12px]';
+  const isPolePlacement = activeTool === 'add_equipment' && !!selectedEquipmentTypeToAdd?.includes('Pole');
 
   return (
-    <div className="animate-pop-in absolute left-1/2 top-[64px] z-[440] -translate-x-1/2">
-      <div className="flex items-center gap-3 rounded-lg bg-slate-900/95 py-1.5 pl-3 pr-1.5 text-white shadow-xl ring-1 ring-black/10 backdrop-blur">
+    <div className="animate-pop-in absolute inset-x-2 top-2 z-[440] md:inset-x-auto md:left-1/2 md:top-[64px] md:-translate-x-1/2">
+      <div className="flex flex-col gap-2 rounded-lg bg-slate-900/95 py-1.5 pl-3 pr-1.5 text-white shadow-xl ring-1 ring-black/10 backdrop-blur md:flex-row md:items-center md:gap-3">
         <div className="flex items-center gap-2.5">
           {activeTool === 'draw_cable' && <CableSwatch type={selectedCableTypeToDraw} />}
           {activeTool === 'measure' && <Ruler className="h-4 w-4 text-amber-300" />}
@@ -673,10 +699,12 @@ export function MapModeBar({
               {activeTool === 'add_equipment' && `Place ${selectedEquipmentTypeToAdd}`}
             </div>
             <div className="text-[11px] text-slate-400">
-              {activeTool === 'add_equipment'
-                ? 'Click anywhere on the map to drop it'
+              {isPolePlacement
+                ? 'Tap each place for a pole. Each gets the next number.'
+                : activeTool === 'add_equipment'
+                ? 'Tap the place on the map'
                 : points === 0
-                  ? 'Click on the map to start'
+                  ? 'Tap the map to start. Tap a pin to join it.'
                   : `${points} point${points === 1 ? '' : 's'} · ${formatDistance(distanceMeters)}`}
             </div>
           </div>
@@ -688,7 +716,7 @@ export function MapModeBar({
           </span>
         )}
 
-        <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+        <div className="no-scrollbar flex items-center gap-1 overflow-x-auto md:overflow-visible md:border-l md:border-white/10 md:pl-2">
           {activeTool === 'draw_cable' && (
             <>
               <button
@@ -732,13 +760,13 @@ export function MapModeBar({
               type="button"
               onClick={onFinish}
               disabled={activeDrawingPoints.length < 2}
-              className={cn(darkBtn, 'bg-blue-600 text-white hover:bg-blue-500')}
+              className={cn(darkBtn, 'order-first bg-blue-600 text-white hover:bg-blue-500 md:order-none')}
             >
               <Check className="h-4 w-4" /> Finish <Shortcut dark>↵</Shortcut>
             </button>
           )}
           <button type="button" onClick={onCancel} className={cn(darkBtn, 'text-slate-300 hover:bg-white/10')}>
-            {activeTool === 'measure' ? 'Done' : 'Cancel'} <Shortcut dark>Esc</Shortcut>
+            {activeTool === 'measure' || isPolePlacement ? 'Done' : 'Cancel'} <Shortcut dark>Esc</Shortcut>
           </button>
         </div>
       </div>

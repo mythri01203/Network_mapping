@@ -17,11 +17,11 @@ export * from './sampleNetwork';
 /** A fresh, independently mutable copy of the bundled demo network, used to seed new databases. */
 export function createSampleNetwork(): NetworkSnapshot {
   const snapshot: NetworkSnapshot = {
-    equipment: SAMPLE_EQUIPMENT,
+    equipment: SAMPLE_EQUIPMENT.map((item) => ({ ...item, isSampleData: true })),
     cables: SAMPLE_CABLES,
     splitters: SAMPLE_SPLITTERS,
     closures: SAMPLE_JOINT_CLOSURES,
-    customers: SAMPLE_CUSTOMERS,
+    customers: SAMPLE_CUSTOMERS.map((customer) => ({ ...customer, isSampleData: true })),
     faults: SAMPLE_FAULTS,
     workOrders: SAMPLE_WORK_ORDERS,
     auditLogs: SAMPLE_AUDIT_LOGS,
@@ -29,6 +29,8 @@ export function createSampleNetwork(): NetworkSnapshot {
     documents: SAMPLE_DOCUMENTS,
     catalog: [],
     gpsRoutes: [],
+    agentTrips: [],
+    settings: [],
   };
   return JSON.parse(JSON.stringify(snapshot)) as NetworkSnapshot;
 }

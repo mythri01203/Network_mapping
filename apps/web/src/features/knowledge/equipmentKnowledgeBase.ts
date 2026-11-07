@@ -558,7 +558,7 @@ export const EQUIPMENT_KNOWLEDGE_BASE: EquipmentKnowledgeItem[] = [
     ftthPositionDescription:
       'Step 6: Core passive component that defines the FTTH optical power budget and split architecture.',
     practicalInstallationTips: [
-      'Always calculate the optical link power budget: OLT Tx Power (+4 dBm) minus total splitter loss (10.5 dB for 1:8, 13.8 dB for 1:16) minus cable fiber attenuation (0.35 dB/km) must be greater than ONT receiver sensitivity (-28 dBm).',
+      'Always calculate the optical link power budget: the real launch power of the port minus total splitter loss (10.4 dB for 1:8, 13.5 dB for 1:16), fiber loss (0.25 dB/km down, 0.35 dB/km up), splices and connectors must stay above ONT receiver sensitivity (-27 dBm for class B+). These are planning values: get the datasheet of the installed splitter.',
       'Never touch the polished ceramic ferrule of the splitter connector.',
     ],
     relatedEquipment: [
@@ -702,14 +702,14 @@ export const EQUIPMENT_KNOWLEDGE_BASE: EquipmentKnowledgeItem[] = [
       wavelengths: '1490 nm Rx / 1310 nm Tx',
     },
     technicalSpecs: [
-      { label: 'Receiver Sensitivity', value: '-8 dBm to -28 dBm (Acceptable operating window)' },
+      { label: 'Receiver Sensitivity', value: '-8 dBm to -27 dBm for class B+ (G.984.2)' },
       { label: 'Overload Optical Power', value: '-8 dBm (Higher levels will blind receiver)' },
       { label: 'Transmit Optical Power', value: '+0.5 dBm to +5.0 dBm' },
       { label: 'Power Consumption', value: '< 12 Watts (12V DC power adapter)' },
     ],
     ftthPositionDescription: 'Step 9: Final terminus of the FTTH link inside the customer home.',
     practicalInstallationTips: [
-      'Target optical power level at the ONT between -15 dBm and -24 dBm for optimal SNR.',
+      'Aim for a meter reading between -8 dBm and -24 dBm at the ONT. Below -24 dBm works, with little repair margin.',
       'Never bend the yellow fiber patch cord tighter than the diameter of a standard coin (30mm radius).',
     ],
     relatedEquipment: [
@@ -725,7 +725,7 @@ export const EQUIPMENT_KNOWLEDGE_BASE: EquipmentKnowledgeItem[] = [
       {
         question: 'What is the ideal optical signal power for an ONT?',
         answer:
-          'Between -18 dBm and -23 dBm. Anything weaker than -27 dBm can cause packet loss, and stronger than -8 dBm may damage optical sensors.',
+          'Between -8 dBm and -24 dBm on a meter. Anything weaker than -27 dBm can cause packet loss, and stronger than -8 dBm is too much light: check for a missing splitter or wrong path. These bands are proposed defaults, and your OLT thresholds have the final word.',
       },
     ],
   },

@@ -29,10 +29,9 @@ import {
   generateOltDescription,
   isCustomerTerminal,
   type OltConfig,
-  type SplitterRatio,
+PON_TECHNOLOGIES, type PonTechnology,  type SplitterRatio,
   STANDARD_PORT_COLORS,
-  validateOltConfig,
-} from '@fibergis/shared';
+  validateOltConfig } from '@fibergis/shared';
 
 import { useMapStore } from '../../stores/mapStore';
 import { addSplitter, updateEquipment } from '../../stores/networkActions';
@@ -88,11 +87,11 @@ export const OltConfigModal: React.FC = () => {
   // Form State
   const [name, setName] = useState('');
   const [oltId, setOltId] = useState('');
-  const [manufacturer, setManufacturer] = useState('Syrotech');
+  const [manufacturer, setManufacturer] = useState('');
   const [model, setModel] = useState('');
   const [area, setArea] = useState('');
   const [street, setStreet] = useState('');
-  const [technology, setTechnology] = useState<'EPON' | 'GPON'>('GPON');
+  const [technology, setTechnology] = useState<PonTechnology>('GPON');
   const [totalPorts, setTotalPorts] = useState(8);
   const [customPortCount, setCustomPortCount] = useState<number | ''>('');
   const [portColorMap, setPortColorMap] = useState<Record<string, string>>({});
@@ -132,15 +131,15 @@ export const OltConfigModal: React.FC = () => {
   useEffect(() => {
     if (!olt) return;
 
-    setName(olt.name || 'Central Telco Hub OLT');
+    setName(olt.name);
     setOltId(olt.id);
-    setManufacturer(olt.manufacturer || 'Syrotech');
-    setModel(olt.model || `${olt.technology || 'GPON'} 8-Port OLT`);
-    setArea(olt.area || 'Metro Telecom Central');
-    setStreet(olt.street || 'Ring Road 1');
+    setManufacturer(olt.manufacturer || '');
+    setModel(olt.model || '');
+    setArea(olt.area || '');
+    setStreet(olt.street || '');
 
-    const tech = olt.technology === 'EPON' ? 'EPON' : 'GPON';
-    setTechnology(tech);
+    // Keep the recorded technology, including XGS-PON and 10G-EPON. GPON is only the shown starting choice.
+    setTechnology(olt.technology ?? 'GPON');
 
     const portCount = olt.totalPorts || olt.ponPorts?.length || 8;
     setTotalPorts(portCount);
@@ -170,10 +169,12 @@ export const OltConfigModal: React.FC = () => {
       );
       if (downstream.length > 0) {
         setSplitters(
-          downstream.map((s, idx) => ({
+          downstream
+            .filter((s) => !!s.splitterConfig?.ratio)
+            .map((s, idx) => ({
             id: s.id,
             name: s.name,
-            ratio: (s.splitterConfig?.ratio as SplitterRatio) || '1:8',
+            ratio: s.splitterConfig!.ratio as SplitterRatio,
             inPort: 'IN-01',
             parentPonPort: `PON-${String(idx + 1).padStart(2, '0')}`,
             outPortsCount: s.totalPorts || 8,
@@ -228,7 +229,7 @@ export const OltConfigModal: React.FC = () => {
 
   const handleAddSplitter = () => {
     const targetRatioPreset = SPLITTER_RATIO_PRESETS.find((p) => p.ratio === newSplitterRatio) || SPLITTER_RATIO_PRESETS[2];
-    const newId = `SPL-${technology}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const newId = `SPL-${technology.replace(/\s+/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
     const destination = newSplitterTerminalId ? ` → ${newSplitterTerminalId}` : '';
 
     const newSplItem = {
@@ -334,8 +335,8 @@ export const OltConfigModal: React.FC = () => {
     const updatedOlt: Equipment = {
       ...current,
       name: name.trim() || current.name,
-      manufacturer,
-      model,
+      manufacturer: manufacturer || undefined,
+      model: model || undefined,
       technology,
       totalPorts,
       usedPorts: usedPons,
@@ -369,7 +370,7 @@ export const OltConfigModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div className="modal-sheet fixed inset-0 z-[1600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
       <div className="w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl text-white flex flex-col overflow-hidden my-auto max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between">
@@ -473,6 +474,7 @@ export const OltConfigModal: React.FC = () => {
                     onChange={(e) => setManufacturer(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-sky-500"
                   >
+                    <option value="">Not recorded</option>
                     {OLT_MANUFACTURERS.map((m) => (
                       <option key={m} value={m}>
                         {m}
@@ -618,6 +620,23 @@ export const OltConfigModal: React.FC = () => {
                   </ul>
                 </div>
               </div>
+
+              <label className="block text-xs text-slate-300">
+                <span className="mb-1.5 block font-semibold">Other PON technology</span>
+                <select
+                  aria-label="Other PON technology"
+                  value={technology === 'GPON' || technology === 'EPON' ? '' : technology}
+                  onChange={(e) => e.target.value && setTechnology(e.target.value as PonTechnology)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white outline-none focus:border-sky-500 md:w-72"
+                >
+                  <option value="">GPON or EPON (choose above)</option>
+                  {PON_TECHNOLOGIES.filter((t) => t !== 'GPON' && t !== 'EPON').map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-300">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1128,7 +1147,7 @@ export const OltConfigModal: React.FC = () => {
             onClick={() => {
               // Reset to initial
               if (olt) {
-                setTechnology(olt.technology === 'EPON' ? 'EPON' : 'GPON');
+                setTechnology(olt.technology ?? 'GPON');
                 setTotalPorts(olt.totalPorts || 8);
                 setName(olt.name);
                 showToast('info', 'Form Reset', 'Reverted unsaved draft changes.');

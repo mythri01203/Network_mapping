@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
-import { HardHat, Kanban, List, PlusCircle, Search } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Camera, HardHat, Kanban, List, PlusCircle, Search } from 'lucide-react';
 
-import type { WorkOrder } from '@fibergis/shared';
+import { fieldFollowUps, resolveFieldSettings, type WorkOrder } from '@fibergis/shared';
 
 import { addWorkOrder, updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
+import { FieldFollowUpPanel } from './FieldFollowUpPanel';
 
 export const OperationsHubView: React.FC = () => {
   const workOrders = useNetworkStore((s) => s.workOrders);
+  const equipment = useNetworkStore((s) => s.equipment);
+  const faults = useNetworkStore((s) => s.faults);
+  const settings = useNetworkStore((s) => s.settings);
+  const fieldCount = useMemo(
+    () => fieldFollowUps({ equipment, faults }, resolveFieldSettings(settings).gps).length,
+    [equipment, faults, settings],
+  );
   const showToast = useToastStore((s) => s.show);
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'field'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string>('All');
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
@@ -20,7 +28,7 @@ export const OperationsHubView: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<WorkOrder['type']>('Repair');
   const [newPriority, setNewPriority] = useState<WorkOrder['priority']>('High');
-  const [newTechName, setNewTechName] = useState('Arun Varma (Lead Splicer)');
+  const [newTechName, setNewTechName] = useState('');
   const newTechPhone = '+91 98450 11223';
   const [newNotes, setNewNotes] = useState('');
 
@@ -131,6 +139,16 @@ export const OperationsHubView: React.FC = () => {
               <List className="w-3.5 h-3.5" />
               <span>List View</span>
             </button>
+            <button
+              onClick={() => setViewMode('field')}
+              data-testid="ops-field-captures"
+              className={`px-2.5 py-1 rounded-md font-semibold flex items-center gap-1 transition-all ${
+                viewMode === 'field' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Field captures{fieldCount > 0 ? ` (${fieldCount})` : ''}</span>
+            </button>
           </div>
 
           <button
@@ -199,7 +217,9 @@ export const OperationsHubView: React.FC = () => {
 
       {/* Main Workspace (Kanban or List) */}
       <div className="flex-1 overflow-auto p-4">
-        {viewMode === 'kanban' ? (
+        {viewMode === 'field' ? (
+          <FieldFollowUpPanel />
+        ) : viewMode === 'kanban' ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-full">
             {columns.map((col) => {
               const ordersInCol = filteredOrders.filter((w) => w.status === col.status);
@@ -347,7 +367,7 @@ export const OperationsHubView: React.FC = () => {
 
       {/* New Work Order Modal */}
       {isNewOrderModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
+        <div className="modal-sheet fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-bold text-sm text-slate-800">Dispatch Field Work Order</h3>

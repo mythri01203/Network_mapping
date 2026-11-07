@@ -97,6 +97,36 @@ export const LOGICAL_PORT_STATUSES = ['Used', 'Available', 'Reserved', 'Damaged'
 export const logicalPortStatusSchema = z.enum(LOGICAL_PORT_STATUSES);
 export type LogicalPortStatus = z.infer<typeof logicalPortStatusSchema>;
 
+/** Where an optical reading came from. Only the last two may ever be called measured. */
+export const RX_SOURCES = ['designed', 'calculated', 'field_measured', 'device_reported'] as const;
+export const rxSourceSchema = z.enum(RX_SOURCES);
+export type RxSource = z.infer<typeof rxSourceSchema>;
+
+/**
+ * How a position was captured. `gps_averaged` is several phone readings averaged; `not_placed` means
+ * no usable fix was found, so the stored point is only a rough placeholder the office must replace.
+ */
+export const LOCATION_METHODS = ['gps', 'gps_averaged', 'map_pick', 'typed', 'not_placed'] as const;
+export const locationMethodSchema = z.enum(LOCATION_METHODS);
+export type LocationMethod = z.infer<typeof locationMethodSchema>;
+
+export const LOCATION_METHOD_LABELS: Record<LocationMethod, string> = {
+  gps: 'GPS',
+  gps_averaged: 'GPS, several readings averaged',
+  map_pick: 'Placed on map',
+  typed: 'Typed',
+  not_placed: 'No GPS fix: office must place this',
+};
+
+/** Who owns a pole, as far as a field worker can tell. Only the kind is recorded, never the company. */
+export const POLE_OWNER_TYPES = ['telecom', 'electricity', 'unknown'] as const;
+export const poleOwnerTypeSchema = z.enum(POLE_OWNER_TYPES);
+export type PoleOwnerType = z.infer<typeof poleOwnerTypeSchema>;
+
+export const POLE_MATERIALS = ['concrete', 'iron', 'wood', 'unknown'] as const;
+export const poleMaterialSchema = z.enum(POLE_MATERIALS);
+export type PoleMaterial = z.infer<typeof poleMaterialSchema>;
+
 export const PORT_TECHNOLOGIES = [...PON_TECHNOLOGIES, 'GE', '10GE'] as const;
 export const portTechnologySchema = z.enum(PORT_TECHNOLOGIES);
 export type PortTechnology = z.infer<typeof portTechnologySchema>;
@@ -153,6 +183,8 @@ export const FAULT_TYPES = [
   'Port Failure',
   'Power Failure',
   'Customer Disconnection',
+  /** Danger seen in the field, such as a hanging wire or a leaning pole. */
+  'Safety Hazard',
 ] as const;
 export const faultTypeSchema = z.enum(FAULT_TYPES);
 export type FaultType = z.infer<typeof faultTypeSchema>;

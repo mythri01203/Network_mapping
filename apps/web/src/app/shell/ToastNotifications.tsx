@@ -12,6 +12,7 @@ const TONES: Record<string, { icon: LucideIcon; iconClass: string; bar: string }
   info: { icon: Info, iconClass: 'text-blue-600', bar: 'bg-blue-500' },
 };
 
+/** Taps pass through a toast card, so a message never blocks the button under it. */
 export const ToastNotifications: React.FC = () => {
   const { toasts, removeToast } = useToastStore(useShallow((s) => ({ toasts: s.toasts, removeToast: s.dismiss })));
 
@@ -21,7 +22,7 @@ export const ToastNotifications: React.FC = () => {
     <div
       aria-live="polite"
       aria-relevant="additions"
-      className="pointer-events-none fixed bottom-4 right-4 z-[2100] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2"
+      className="toast-stack pointer-events-none fixed inset-x-2 top-14 z-[2100] flex flex-col gap-2 xl:inset-x-auto xl:bottom-4 xl:right-4 xl:top-auto xl:w-[360px] xl:max-w-[calc(100vw-2rem)]"
     >
       {toasts.map((toast) => {
         const tone = TONES[toast.type] || TONES.info;
@@ -30,7 +31,7 @@ export const ToastNotifications: React.FC = () => {
           <div
             key={toast.id}
             role={toast.type === 'error' ? 'alert' : 'status'}
-            className="animate-slide-in-right pointer-events-auto relative flex gap-3 overflow-hidden rounded-lg border border-slate-200 bg-white py-3 pl-4 pr-3 shadow-[var(--shadow-overlay)]"
+            className="animate-slide-in-right relative flex gap-3 overflow-hidden rounded-lg border border-slate-200 bg-white py-3 pl-4 pr-3 shadow-[var(--shadow-overlay)]"
           >
             <span className={cn('absolute inset-y-0 left-0 w-[3px]', tone.bar)} />
             <Icon size={18} strokeWidth={2} className={cn('mt-px shrink-0', tone.iconClass)} />
@@ -41,7 +42,7 @@ export const ToastNotifications: React.FC = () => {
             <button
               type="button"
               onClick={() => removeToast(toast.id)}
-              className="-mr-1 -mt-1 h-6 w-6 shrink-0 rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              className="pointer-events-auto -mr-1 -mt-1 hidden h-6 w-6 shrink-0 rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 xl:block"
               aria-label="Dismiss notification"
             >
               <X size={14} className="mx-auto" />

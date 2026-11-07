@@ -4,6 +4,7 @@ import {
   BookOpenText,
   Box,
   Cable,
+  Camera,
   ChartColumn,
   Combine,
   FileText,
@@ -56,8 +57,10 @@ interface TooltipState {
 }
 
 export const LeftSidebar: React.FC = () => {
-  const { isSidebarCollapsed, setIsSidebarCollapsed, uiMode, setModalOpen, setPanelOpen } = useUiStore(
+  const { isSidebarCollapsed, setIsSidebarCollapsed, uiMode, setModalOpen, setPanelOpen, menuOpen, setMenuOpen } = useUiStore(
     useShallow((s) => ({
+      menuOpen: s.isMobileMenuOpen,
+      setMenuOpen: s.setMobileMenuOpen,
       isSidebarCollapsed: s.isSidebarCollapsed,
       setIsSidebarCollapsed: s.setSidebarCollapsed,
       uiMode: s.uiMode,
@@ -83,7 +86,11 @@ export const LeftSidebar: React.FC = () => {
   const activeView = useActiveView();
   const openView = useOpenView();
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const collapsed = isSidebarCollapsed;
+  // The phone menu always shows labels; the desk sidebar keeps the chosen width.
+  const collapsed = isSidebarCollapsed && !menuOpen;
+  const closeMenu = () => {
+    if (menuOpen) setMenuOpen(false);
+  };
   const simple = uiMode === 'simple';
 
   const openFaults = faults.filter((f) => f.status !== 'Resolved').length;
@@ -131,8 +138,10 @@ export const LeftSidebar: React.FC = () => {
     {
       label: 'Operations',
       items: [
+        { key: 'capture', label: 'Field capture', icon: Camera, to: '/capture', simple: true },
         view('operations', { count: openFaults + openWorkOrders || undefined, alert: openFaults > 0, simple: true }),
         view('field', { simple: true }),
+        view('agent_tracking', { simple: true }),
         tool('tech', 'Technician App', Smartphone, () => setModalOpen('technicianMobile', true)),
         tool('biker', 'Ride Navigation', Bike, () => {
           openView('map');
@@ -198,7 +207,7 @@ export const LeftSidebar: React.FC = () => {
       'aria-label': collapsed ? item.label : undefined,
       className: cn(
         'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
-        collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
+        collapsed ? 'h-9 justify-center' : 'h-[48px] gap-2.5 px-2.5 md:h-8',
         item.active ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
       ),
     };
@@ -229,11 +238,18 @@ export const LeftSidebar: React.FC = () => {
     return (
       <li key={item.key}>
         {item.to ? (
-          <Link to={item.to} aria-current={item.active ? 'page' : undefined} {...shared}>
+          <Link to={item.to} aria-current={item.active ? 'page' : undefined} onClick={closeMenu} {...shared}>
             {content}
           </Link>
         ) : (
-          <button type="button" onClick={item.onClick} {...shared}>
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              item.onClick?.();
+            }}
+            {...shared}
+          >
             {content}
           </button>
         )}
@@ -242,11 +258,21 @@ export const LeftSidebar: React.FC = () => {
   };
 
   return (
+    <>
+      {menuOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={closeMenu}
+          className="fixed inset-x-0 bottom-0 top-12 z-[1080] bg-slate-900/40 md:hidden"
+        />
+      )}
     <nav
       aria-label="Primary"
       className={cn(
-        'relative z-[900] flex h-full shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-150',
-        collapsed ? 'w-14' : 'w-56',
+        'flex-col border-r border-slate-200 bg-white transition-[width] duration-150 md:relative md:z-[900] md:flex md:h-full md:shrink-0',
+        menuOpen ? 'fixed bottom-0 left-0 top-12 z-[1090] flex w-72 shadow-2xl md:static md:shadow-none' : 'hidden',
+        collapsed ? 'md:w-14' : 'md:w-56',
       )}
     >
       {/* Create */}
@@ -266,7 +292,7 @@ export const LeftSidebar: React.FC = () => {
               aria-label="Create"
               className={cn(
                 'flex w-full items-center justify-center rounded-md bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-700',
-                collapsed ? 'h-9' : 'h-8 gap-2 text-[13px] font-medium',
+                collapsed ? 'h-9' : 'h-[48px] gap-2 text-[13px] font-medium md:h-8',
                 open && 'bg-blue-700',
               )}
             >
@@ -284,6 +310,7 @@ export const LeftSidebar: React.FC = () => {
                 onClick={() => {
                   setModalOpen('customerWizard', true);
                   close();
+                  closeMenu();
                 }}
               />
               <MenuItem
@@ -292,6 +319,7 @@ export const LeftSidebar: React.FC = () => {
                 onClick={() => {
                   setModalOpen('cableWizard', true);
                   close();
+                  closeMenu();
                 }}
               />
               <MenuItem
@@ -302,6 +330,7 @@ export const LeftSidebar: React.FC = () => {
                   openView('map');
                   setPanelOpen('left', true);
                   close();
+                  closeMenu();
                 }}
               />
               <MenuSeparator />
@@ -311,6 +340,7 @@ export const LeftSidebar: React.FC = () => {
                 onClick={() => {
                   setModalOpen('faults', true);
                   close();
+                  closeMenu();
                 }}
               />
             </>
@@ -345,7 +375,7 @@ export const LeftSidebar: React.FC = () => {
           onMouseLeave={hideTip}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            'mt-1 flex w-full items-center rounded-md text-[13px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800',
+            'mt-1 hidden w-full items-center rounded-md md:flex text-[13px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800',
             collapsed ? 'h-9 justify-center' : 'h-8 gap-2.5 px-2.5',
           )}
         >
@@ -364,5 +394,6 @@ export const LeftSidebar: React.FC = () => {
         </div>
       )}
     </nav>
+    </>
   );
 };

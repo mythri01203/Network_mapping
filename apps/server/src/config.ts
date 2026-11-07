@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -13,6 +15,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(5000),
   DATABASE_PATH: z.string().min(1).default(fromPackageRoot('data/fibergis.db')),
   STATIC_DIR: z.string().min(1).default(fromPackageRoot('../web/dist')),
+  /** Defaults to a photos folder next to the database file. */
+  PHOTOS_DIR: z.string().min(1).optional(),
   CORS_ORIGINS: z.string().optional(),
   OSRM_URL: z.url().default('https://router.project-osrm.org'),
   ROUTING_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
@@ -25,6 +29,8 @@ export interface AppConfig {
   port: number;
   /** SQLite file path, or `:memory:` for a throwaway database. */
   databasePath: string;
+  /** Field photos, one file per photo id. */
+  photosDir: string;
   /** Built web app to serve; skipped when it has no `index.html`. */
   staticDir: string;
   corsOrigins: string[];
@@ -34,6 +40,10 @@ export interface AppConfig {
   seedSampleData: boolean;
   logLevel: z.infer<typeof envSchema>['LOG_LEVEL'];
 }
+
+/** Photos live beside the database, so a test or temporary database never writes into the real data folder. */
+const defaultPhotosDir = (databasePath: string) =>
+  databasePath === ':memory:' ? join(tmpdir(), 'fibergis-memory-photos') : join(dirname(databasePath), 'photos');
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = envSchema.safeParse(env);
@@ -46,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: value.HOST,
     port: value.PORT,
     databasePath: value.DATABASE_PATH,
+    photosDir: value.PHOTOS_DIR ?? defaultPhotosDir(value.DATABASE_PATH),
     staticDir: value.STATIC_DIR,
     corsOrigins: value.CORS_ORIGINS
       ? value.CORS_ORIGINS.split(',')

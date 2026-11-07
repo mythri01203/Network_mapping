@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,8 @@ async function start(overrides: Partial<AppConfig> = {}, fetchImpl?: typeof fetc
   const config = {
     ...loadConfig({ LOG_LEVEL: 'silent', STATIC_DIR: join(tmpdir(), 'fibergis-no-static') }),
     databasePath: ':memory:',
+    // Never the real data folder.
+    photosDir: join(mkdtempSync(join(tmpdir(), 'fibergis-photos-')), 'photos'),
     ...overrides,
   };
   repository = new SqliteNetworkRepository(config.databasePath);
@@ -81,6 +83,13 @@ describe('API', () => {
       issues: [{ path: 'upserts.cables.0.fiberCount' }],
     });
     expect((await getNetwork()).revision).toBe(1);
+  });
+
+  it('accepts equipment placed from a custom catalog type', async () => {
+    const custom = { ...sample.equipment[0], id: 'EQ-CUSTOM', type: 'Custom Network Node' };
+    const response = await app.inject({ method: 'POST', url: api('/changes'), payload: { upserts: { equipment: [custom] } } });
+    expect(response.statusCode).toBe(200);
+    expect((await getNetwork()).data.equipment.find((e) => e.id === 'EQ-CUSTOM')?.type).toBe('Custom Network Node');
   });
 
   it('supports record-level CRUD', async () => {
@@ -307,6 +316,76 @@ describe('static web app', () => {
     const apiMiss = await app.inject({ method: 'GET', url: api('/nope/a/b') });
     expect(apiMiss.statusCode).toBe(404);
     expect(apiMiss.json()).toMatchObject({ error: 'not_found' });
+  });
+});
+
+describe('photos', () => {
+  let dir: string;
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(50, 1)]);
+  const put = (id: string, payload: Buffer, type = 'image/jpeg') =>
+    app.inject({ method: 'PUT', url: api(`/photos/${id}`), headers: { 'content-type': type }, payload });
+
+  beforeEach(async () => {
+    dir = join(mkdtempSync(join(tmpdir(), 'fibergis-photo-test-')), 'photos');
+    await start({ photosDir: dir });
+  });
+  afterEach(async () => {
+    await app.close();
+    await repository.close();
+    rmSync(join(dir, '..'), { recursive: true, force: true });
+  });
+
+  it('stores a photo once and serves it back', async () => {
+    expect(existsSync(dir)).toBe(false);
+    const first = await put('PH-ABCDEFGH12', jpeg);
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toEqual({ id: 'PH-ABCDEFGH12', url: '/api/v1/photos/PH-ABCDEFGH12', bytes: jpeg.length, created: true });
+
+    const again = await put('PH-ABCDEFGH12', Buffer.concat([jpeg, Buffer.from([1, 2, 3])]));
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toMatchObject({ created: false, bytes: jpeg.length });
+    expect(readdirSync(dir)).toEqual(['PH-ABCDEFGH12.jpg']);
+
+    const got = await app.inject({ method: 'GET', url: api('/photos/PH-ABCDEFGH12') });
+    expect(got.statusCode).toBe(200);
+    expect(got.headers['content-type']).toBe('image/jpeg');
+    expect(got.headers['cache-control']).toContain('immutable');
+    expect(got.rawPayload.equals(jpeg)).toBe(true);
+    expect((await app.inject({ method: 'HEAD', url: api('/photos/PH-ABCDEFGH12') })).statusCode).toBe(200);
+  });
+
+  it('accepts PNG and checks the bytes match the declared type', async () => {
+    expect((await put('PH-PNG000001', png, 'image/png')).statusCode).toBe(201);
+    const fake = await put('PH-FAKE00001', Buffer.from('<svg onload=alert(1)>'), 'image/jpeg');
+    expect(fake.statusCode).toBe(415);
+    expect(fake.json()).toMatchObject({ error: 'unsupported_media_type' });
+    const gif = await put('PH-GIF000001', Buffer.from('GIF89a....'), 'image/gif');
+    expect(gif.statusCode).toBe(415);
+    const text = await put('PH-TXT000001', Buffer.from('hello'), 'text/plain');
+    expect(text.statusCode).toBe(415);
+    expect(readdirSync(dir)).toEqual(['PH-PNG000001.png']);
+  });
+
+  it('refuses oversized photos, bad ids and empty bodies', async () => {
+    const big = Buffer.concat([jpeg, Buffer.alloc(5 * 1024 * 1024)]);
+    expect((await put('PH-BIG0000001', big)).statusCode).toBe(413);
+    expect((await put('..%2F..%2Fevil', jpeg)).statusCode).toBe(400);
+    expect((await put('ab', jpeg)).statusCode).toBe(400);
+    expect((await put('PH-EMPTY00001', Buffer.alloc(0))).statusCode).toBe(400);
+    expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
+  });
+
+  it('answers 404 for a photo that has not arrived', async () => {
+    const missing = await app.inject({ method: 'GET', url: api('/photos/PH-NOTHERE01') });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ error: 'not_found' });
+  });
+
+  it('keeps photos beside the database by default, never in the real data folder for tests', () => {
+    expect(loadConfig({ DATABASE_PATH: '/srv/fibergis/net.db' }).photosDir.replaceAll('\\', '/')).toMatch(/\/srv\/fibergis\/photos$/);
+    expect(loadConfig({ DATABASE_PATH: '/srv/net.db', PHOTOS_DIR: '/data/pics' }).photosDir).toBe('/data/pics');
+    expect(loadConfig({ DATABASE_PATH: ':memory:' }).photosDir).toContain('fibergis-memory-photos');
   });
 });
 

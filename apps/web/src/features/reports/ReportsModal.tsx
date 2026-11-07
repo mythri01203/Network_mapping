@@ -3,6 +3,8 @@ import jsPDF from 'jspdf';
 import { Download, FileSpreadsheet, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { rxReadingOf } from '@fibergis/shared';
+
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -39,9 +41,9 @@ export const ReportsModal: React.FC = () => {
       });
     } else if (type === 'customers') {
       csvContent +=
-        'Customer ID,Name,Mobile,Address,Area,Plan,Terminal Box,Splitter,Port,ONT Serial,IP Address,Rx Power dBm\n';
+        'Customer ID,Name,Mobile,Address,Area,Plan,Terminal Box,Splitter,Port,ONT Serial,IP Address,Rx Power dBm,Rx Origin\n';
       customers.forEach((cu) => {
-        csvContent += `"${cu.id}","${cu.name}","${cu.mobile}","${cu.address}","${cu.area}","${cu.plan}","${cu.terminalBoxId}","${cu.splitterId}","${cu.splitterOutputPort}","${cu.ontSerialNumber}","${cu.ipAddress}","${cu.rxOpticalPowerDbm}"\n`;
+        csvContent += `"${cu.id}","${cu.name}","${cu.mobile}","${cu.address}","${cu.area}","${cu.plan}","${cu.terminalBoxId}","${cu.splitterId}","${cu.splitterOutputPort}","${cu.ontSerialNumber}","${cu.ipAddress}","${rxReadingOf(cu).valueDbm ?? ''}","${rxReadingOf(cu).originLabel}"\n`;
       });
     } else if (type === 'faults') {
       csvContent += 'Fault ID,Type,Severity,Status,Reported At,Description,Affected Customers\n';
@@ -109,7 +111,7 @@ export const ReportsModal: React.FC = () => {
           y = 20;
         }
         doc.text(
-          `${idx + 1}. [${cu.id}] ${cu.name} — ${cu.plan} | FAT: ${cu.terminalBoxId} Port ${cu.splitterOutputPort} | Rx: ${cu.rxOpticalPowerDbm} dBm`,
+          `${idx + 1}. [${cu.id}] ${cu.name} — ${cu.plan} | FAT: ${cu.terminalBoxId} Port ${cu.splitterOutputPort} | Rx: ${rxReadingOf(cu).text}`,
           14,
           y,
         );
@@ -150,7 +152,7 @@ export const ReportsModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">

@@ -9,6 +9,7 @@ import {
   Globe,
   Layers,
   type LucideIcon,
+  Menu,
   Redo2,
   RotateCcw,
   Search,
@@ -94,8 +95,9 @@ export const TopNavBar: React.FC = () => {
       canRedo: selectCanRedo(s),
     })),
   );
-  const { userRole, setUserRole, networkMode, setNetworkMode, uiMode, setUiMode, setModalOpen } = useUiStore(
+  const { userRole, setUserRole, networkMode, setNetworkMode, uiMode, setUiMode, setModalOpen, setMobileMenuOpen } = useUiStore(
     useShallow((s) => ({
+      setMobileMenuOpen: s.setMobileMenuOpen,
       userRole: s.userRole,
       setUserRole: s.setUserRole,
       networkMode: s.networkMode,
@@ -265,7 +267,15 @@ export const TopNavBar: React.FC = () => {
   let lastKind: ResultKind | null = null;
 
   return (
-    <header className="relative z-[1100] flex h-12 shrink-0 items-center gap-3 border-b border-slate-950 bg-slate-900 pl-3 pr-2 text-slate-300">
+    <header className="relative z-[1100] flex h-12 shrink-0 items-center gap-2 border-b border-slate-950 bg-slate-900 pl-1 pr-1 text-slate-300 md:gap-3 md:pl-3 md:pr-2">
+      <button
+        type="button"
+        aria-label="Open menu"
+        onClick={() => setMobileMenuOpen(true)}
+        className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-md text-slate-200 hover:bg-slate-800 md:hidden"
+      >
+        <Menu size={22} />
+      </button>
       {/* Brand + breadcrumb */}
       <div className="flex min-w-0 items-center gap-3">
         <Link
@@ -276,7 +286,7 @@ export const TopNavBar: React.FC = () => {
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600">
             <Waypoints size={16} strokeWidth={2.2} />
           </span>
-          <span className="text-[14px] font-semibold tracking-tight">FiberGIS</span>
+          <span className="hidden text-[14px] font-semibold tracking-tight sm:inline">FiberGIS</span>
         </Link>
         <span className="hidden h-5 w-px bg-slate-700 md:block" />
         <div className="hidden min-w-0 items-center gap-2 md:flex">
@@ -294,7 +304,7 @@ export const TopNavBar: React.FC = () => {
       <div ref={searchBoxRef} className="relative mx-auto w-full max-w-xl min-w-0 flex-1">
         <div
           className={cn(
-            'flex h-8 items-center gap-2 rounded-md border px-2.5 transition-colors',
+            'flex h-10 items-center gap-2 rounded-md border px-2.5 transition-colors md:h-8',
             open
               ? 'border-blue-500 bg-white text-slate-900'
               : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600',
@@ -441,13 +451,35 @@ export const TopNavBar: React.FC = () => {
 
         <SyncStatus />
 
-        <IconButton icon={Undo2} label="Undo (Ctrl+Z)" variant="dark" size="md" onClick={undo} disabled={!canUndo} />
-        <IconButton icon={Redo2} label="Redo (Ctrl+Y)" variant="dark" size="md" onClick={redo} disabled={!canRedo} />
+        <IconButton
+          icon={Undo2}
+          label="Undo (Ctrl+Z)"
+          variant="dark"
+          size="md"
+          onClick={undo}
+          disabled={!canUndo}
+          className="max-md:hidden"
+        />
+        <IconButton
+          icon={Redo2}
+          label="Redo (Ctrl+Y)"
+          variant="dark"
+          size="md"
+          onClick={redo}
+          disabled={!canRedo}
+          className="max-md:hidden"
+        />
 
         <span className="mx-1 hidden h-5 w-px bg-slate-700 sm:block" />
 
         {activeView === 'map' && (
-          <IconButton icon={Layers} label="Map layers" variant="dark" onClick={() => setIsLayersDrawerOpen(true)} />
+          <IconButton
+            icon={Layers}
+            label="Map layers"
+            variant="dark"
+            onClick={() => setIsLayersDrawerOpen(true)}
+            className="max-md:hidden"
+          />
         )}
         <IconButton
           icon={Bell}
@@ -455,12 +487,14 @@ export const TopNavBar: React.FC = () => {
           variant="dark"
           badge={activeFaultsCount || null}
           onClick={() => setModalOpen('faults', true)}
+          className="max-md:hidden"
         />
         <IconButton
           icon={CircleHelp}
           label="Help and user guide"
           variant="dark"
           onClick={() => setModalOpen('help', true)}
+          className="max-md:hidden"
         />
 
         <Popover
@@ -473,7 +507,7 @@ export const TopNavBar: React.FC = () => {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               className={cn(
-                'ml-1 flex h-8 items-center gap-2 rounded-md pl-1 pr-1.5 transition-colors',
+                'ml-1 flex h-[48px] items-center gap-2 rounded-md pl-1 pr-1.5 transition-colors md:h-8',
                 menuOpen ? 'bg-slate-800' : 'hover:bg-slate-800',
               )}
             >

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  agentTripSchema,
   auditLogSchema,
   cableSchema,
   catalogComponentSchema,
@@ -11,6 +12,7 @@ import {
   jointClosureSchema,
   networkDocumentSchema,
   networkZoneSchema,
+  settingSchema,
   splitterSchema,
   workOrderSchema,
 } from './schemas';
@@ -32,6 +34,8 @@ export const COLLECTION_SCHEMAS = {
   documents: networkDocumentSchema,
   catalog: catalogComponentSchema,
   gpsRoutes: gpsRouteSchema,
+  agentTrips: agentTripSchema,
+  settings: settingSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

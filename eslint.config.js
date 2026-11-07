@@ -45,4 +45,9 @@ export default tseslint.config(
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.node },
   },
+  {
+    // The service worker template: worker globals, and the build fills in one placeholder.
+    files: ['apps/web/sw/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker, __FIBERGIS_PRECACHE__: 'readonly' } },
+  },
 );

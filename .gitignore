@@ -42,3 +42,6 @@ apps/server/data/
 coverage/
 playwright-report/
 test-results/
+
+# Local https certificates for dev:https (never commit private keys)
+certs/

@@ -27,8 +27,9 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CableType, Equipment, EquipmentType } from '@fibergis/shared';
+import { type CableType, DEFAULT_OPTICAL_SETTINGS, type Equipment, type EquipmentType } from '@fibergis/shared';
 
+import { currentGpsPosition, gpsFailureMessage } from '../../lib/browser';
 import { useBikerStore } from '../../stores/bikerStore';
 import { useMapStore } from '../../stores/mapStore';
 import { addEquipment } from '../../stores/networkActions';
@@ -41,13 +42,14 @@ type SplitRatio = '1:2' | '1:4' | '1:8' | '1:16' | '1:32' | 'ratio_90_10';
 type SlackLength = 10 | 20 | 30 | 50;
 type PoleTypeChoice = 'Telecom Pole' | 'Electric Pole';
 
+const OPTICAL = DEFAULT_OPTICAL_SETTINGS;
 const SPLIT_SPECS: Record<SplitRatio, { label: string; ports: number; lossDb: number; desc: string }> = {
-  '1:2': { label: '1:2 (2 Ports)', ports: 2, lossDb: 3.5, desc: 'Balanced optical split ~3.5 dB' },
-  '1:4': { label: '1:4 (4 Ports)', ports: 4, lossDb: 7.2, desc: 'Balanced optical split ~7.2 dB' },
-  '1:8': { label: '1:8 (8 Ports)', ports: 8, lossDb: 10.5, desc: 'Standard distribution split ~10.5 dB' },
-  '1:16': { label: '1:16 (16 Ports)', ports: 16, lossDb: 14.0, desc: 'High-density split ~14.0 dB' },
-  '1:32': { label: '1:32 (32 Ports)', ports: 32, lossDb: 17.5, desc: 'Centralized GPON split ~17.5 dB' },
-  ratio_90_10: { label: '90/10 Ratio Coupler', ports: 2, lossDb: 10.8, desc: 'Unbalanced tap (90% through, 10% tap)' },
+  '1:2': { label: '1:2 (2 Ports)', ports: 2, lossDb: OPTICAL.splitterDb['1:2'], desc: `Balanced optical split ~${OPTICAL.splitterDb['1:2']} dB` },
+  '1:4': { label: '1:4 (4 Ports)', ports: 4, lossDb: OPTICAL.splitterDb['1:4'], desc: `Balanced optical split ~${OPTICAL.splitterDb['1:4']} dB` },
+  '1:8': { label: '1:8 (8 Ports)', ports: 8, lossDb: OPTICAL.splitterDb['1:8'], desc: `Standard distribution split ~${OPTICAL.splitterDb['1:8']} dB` },
+  '1:16': { label: '1:16 (16 Ports)', ports: 16, lossDb: OPTICAL.splitterDb['1:16'], desc: `High-density split ~${OPTICAL.splitterDb['1:16']} dB` },
+  '1:32': { label: '1:32 (32 Ports)', ports: 32, lossDb: OPTICAL.splitterDb['1:32'], desc: `Centralized GPON split ~${OPTICAL.splitterDb['1:32']} dB` },
+  ratio_90_10: { label: '90/10 Ratio Coupler', ports: 2, lossDb: OPTICAL.couplers['90/10'].tapDb, desc: 'Unbalanced tap (90% through, 10% tap)' },
 };
 
 export const BikerModePanel: React.FC = () => {
@@ -163,28 +165,40 @@ export const BikerModePanel: React.FC = () => {
   const poleCount = useMemo(() => equipments.filter((e) => e.type.includes('Pole')).length, [equipments]);
   const isDrawingWire = activeTool === 'draw_cable';
 
-  // Quick helper to drop equipment at current viewport center or GPS
-  const dropEquipmentAtCenter = (type: EquipmentType, template: Partial<Equipment>) => {
-    const lat = viewport.lat;
-    const lng = viewport.lng;
+  /**
+   * Places equipment at the device's real GPS position and stores how accurate that was. If there is
+   * no fix it saves nothing and says so; it never falls back to the map centre.
+   */
+  const dropEquipmentAtGps = async (type: EquipmentType, template: Partial<Equipment>) => {
+    showToast('info', 'Getting your position', 'Stay still for a moment. This uses your GPS, not the map.');
+    let fix;
+    try {
+      fix = await currentGpsPosition();
+    } catch (error) {
+      showToast('warning', 'Not placed: no GPS position', `${gpsFailureMessage(error)} Or use "Click Map to Plant".`);
+      return;
+    }
+    const isPole = type.includes('Pole');
     const created = addEquipment({
-      name: template.name || `New ${type}`,
       type,
-      lat,
-      lng,
       category:
         template.category ||
-        (type.includes('Pole') || type === 'Fiber Slack Loop' ? 'Supporting Infrastructure' : 'Fiber Distribution'),
+        (isPole || type === 'Fiber Slack Loop' ? 'Supporting Infrastructure' : 'Fiber Distribution'),
       totalPorts: template.totalPorts,
       availablePorts: template.totalPorts,
       notes: template.notes,
       ...template,
+      name: isPole ? nextPoleName(useNetworkStore.getState().equipment) : template.name || `New ${type}`,
+      lat: fix.lat,
+      lng: fix.lng,
+      locationMethod: 'gps',
+      locationAccuracyMeters: fix.accuracyMeters,
     });
     if (created) {
       showToast(
-        'success',
+        fix.accuracyMeters > 20 ? 'warning' : 'success',
         `${type} Added`,
-        `Created ${created.name} at current location [${lat.toFixed(4)}, ${lng.toFixed(4)}].`,
+        `${created.name} placed by GPS, within about ${Math.round(fix.accuracyMeters)} m.${fix.accuracyMeters > 20 ? ' That is rough: go to open sky, or move it later.' : ''}`,
       );
       select({ type: 'equipment', data: created });
       setPanelOpen('right', true);
@@ -217,7 +231,7 @@ export const BikerModePanel: React.FC = () => {
         { enableHighAccuracy: true, timeout: 5000 },
       );
     } else {
-      showToast('info', 'Map Center', `Current position: [${viewport.lat.toFixed(5)}, ${viewport.lng.toFixed(5)}].`);
+      showToast('warning', 'No GPS here', `This device has no GPS. The map is centred at [${viewport.lat.toFixed(5)}, ${viewport.lng.toFixed(5)}], which is not your position.`);
     }
   };
 
@@ -444,14 +458,14 @@ export const BikerModePanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    dropEquipmentAtCenter(selectedPoleType, {
+                    void dropEquipmentAtGps(selectedPoleType, {
                       name: nextPole,
                       category: 'Supporting Infrastructure',
-                      notes: `${selectedPoleType} dropped at current location`,
+                      notes: `${selectedPoleType} placed by GPS`,
                     })
                   }
                   className="py-1.5 px-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium flex items-center justify-center gap-1.5 transition-colors text-[11px]"
-                  title="Drop pole at current map center"
+                  title="Place a pole at your real GPS position"
                 >
                   <Plus className="w-3.5 h-3.5 shrink-0" />
                   <span>Drop Pole Here</span>
@@ -616,7 +630,7 @@ export const BikerModePanel: React.FC = () => {
                   type="button"
                   onClick={() => {
                     const spec = SPLIT_SPECS[selectedSplitRatio];
-                    dropEquipmentAtCenter('Outdoor Splitter', {
+                    void dropEquipmentAtGps('Outdoor Splitter', {
                       name: `PLC Splitter (${selectedSplitRatio})`,
                       totalPorts: spec.ports,
                       category: 'Fiber Distribution',
@@ -678,7 +692,7 @@ export const BikerModePanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    dropEquipmentAtCenter('Fiber Slack Loop', {
+                    void dropEquipmentAtGps('Fiber Slack Loop', {
                       name: `Fiber Slack Loop (${selectedSlackLength}m)`,
                       category: 'Supporting Infrastructure',
                       notes: `${selectedSlackLength}m fiber cable coil reserve for maintenance / emergency restoration`,
@@ -735,7 +749,7 @@ export const BikerModePanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    dropEquipmentAtCenter('FAT', {
+                    void dropEquipmentAtGps('FAT', {
                       name: `Pole FAT (${selectedFatPorts} Ports)`,
                       totalPorts: selectedFatPorts,
                       category: 'Fiber Distribution',

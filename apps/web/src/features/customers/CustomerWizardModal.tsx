@@ -1,25 +1,36 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Users, X } from 'lucide-react';
+import { Check, LocateFixed, MapPin, Users, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { budgetStatusFor, estimateRxForSplitter, isCustomerTerminal, SPLITTER_RATIOS, type SplitterRatio } from '@fibergis/shared';
+import {
+  budgetStatusFor,
+  type Customer,
+  estimateRxForSplitter,
+  hasRecordedLocation,
+  isCustomerTerminal,
+  polylineLengthMeters,
+  SPLITTER_RATIOS,
+  type SplitterRatio,
+} from '@fibergis/shared';
 
+import { currentGpsPosition, gpsFailureMessage } from '../../lib/browser';
+import { requestConfirm } from '../../stores/confirmStore';
 import { useMapStore } from '../../stores/mapStore';
-import { addSplitter, connectCustomerToPort } from '../../stores/networkActions';
-import { useNetworkStore } from '../../stores/networkStore';
+import { addSplitter, connectCustomerToPort, logAudit } from '../../stores/networkActions';
+import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
-const newOntSerial = () => `HWTC-ONT-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-
 export const CustomerWizardModal: React.FC = () => {
-  const { isCustomerWizardOpen, setModalOpen, selectedObject } = useUiStore(
+  const { isCustomerWizardOpen, setModalOpen, selectedObject, picking } = useUiStore(
     useShallow((s) => ({
       isCustomerWizardOpen: s.modals.customerWizard,
       setModalOpen: s.setModalOpen,
       selectedObject: s.selectedObject,
+      picking: s.customerWizardPicking,
     })),
   );
+  const optical = useNetworkStore(selectOpticalSettings);
   const { equipments, splitters, cables, closures, customers, faults } = useNetworkStore(
     useShallow((s) => ({
       equipments: s.equipment,
@@ -42,11 +53,14 @@ export const CustomerWizardModal: React.FC = () => {
   const [flatNumber, setFlatNumber] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
+  const [locationMethod, setLocationMethod] = useState<Customer['locationMethod']>();
+  const [locationAccuracy, setLocationAccuracy] = useState<number | undefined>();
+  const [locating, setLocating] = useState(false);
 
   const [serviceType, setServiceType] = useState<'Fiber Broadband' | 'Triple Play' | 'Enterprise Fiber' | 'Cable TV'>(
     'Fiber Broadband',
   );
-  const [plan, setPlan] = useState('FTTH Ultra 300 Mbps');
+  const [plan, setPlan] = useState('');
 
   // A terminal without a splitter is still listed: its splitter can be added right here.
   const availableTerminals = useMemo(() => equipments.filter((e) => isCustomerTerminal(e.type)), [equipments]);
@@ -55,8 +69,8 @@ export const CustomerWizardModal: React.FC = () => {
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
   const [selectedPortNumber, setSelectedPortNumber] = useState<number | null>(null);
 
-  const [ontSerial, setOntSerial] = useState(newOntSerial);
-  const [routerModel, setRouterModel] = useState('Huawei OptiXstar Wi-Fi 6');
+  const [ontSerial, setOntSerial] = useState('');
+  const [routerModel, setRouterModel] = useState('');
 
   const selectedTerminal = equipments.find((e) => e.id === selectedTerminalId);
   const terminalSplitters = splitters.filter((s) => s.terminalBoxId === selectedTerminalId);
@@ -72,12 +86,46 @@ export const CustomerWizardModal: React.FC = () => {
     const sp = termSplitters.find((s) => s.outputPorts.some((p) => p.status === 'Available')) || termSplitters[0];
     setSelectedSplitterId(sp?.id || '');
     setSelectedPortNumber(sp ? firstFreePort(sp.id) : null);
-    if (term) {
-      setLat((term.lat + 0.0003).toFixed(6));
-      setLng((term.lng + 0.0003).toFixed(6));
-      setArea(term.area || '');
+    // The house is not next to the box by default: its position is left for the person to record.
+    if (term) setArea(term.area || '');
+  };
+
+  const setLocation = (next: { lat: number; lng: number }, method: Customer['locationMethod'], accuracy?: number) => {
+    setLat(next.lat.toFixed(6));
+    setLng(next.lng.toFixed(6));
+    setLocationMethod(method);
+    setLocationAccuracy(accuracy);
+  };
+
+  const captureGps = async () => {
+    setLocating(true);
+    try {
+      const fix = await currentGpsPosition();
+      setLocation(fix, 'gps', fix.accuracyMeters);
+      if (fix.accuracyMeters > 20) {
+        showToast('warning', 'GPS is rough', `Within about ${Math.round(fix.accuracyMeters)} m. Move to open sky and try again, or pick on the map.`);
+      }
+    } catch (error) {
+      showToast('warning', 'No GPS position', gpsFailureMessage(error));
+    } finally {
+      setLocating(false);
     }
   };
+
+  // Back from "Pick on map": take the tapped point when it arrives.
+  useEffect(
+    () =>
+      useUiStore.subscribe((state) => {
+        const tapped = state.customerWizardPick;
+        if (!tapped) return;
+        setLat(tapped.lat.toFixed(6));
+        setLng(tapped.lng.toFixed(6));
+        setLocationMethod('map_pick');
+        setLocationAccuracy(undefined);
+        state.setCustomerWizardPick(null);
+      }),
+    [],
+  );
 
   // Re-initialise the form each time the wizard opens (prefer the FAT selected on the map).
   useEffect(() => {
@@ -87,7 +135,13 @@ export const CustomerWizardModal: React.FC = () => {
     setAddress('');
     setBuilding('');
     setFlatNumber('');
-    setOntSerial(newOntSerial());
+    setOntSerial('');
+    setRouterModel('');
+    setPlan('');
+    setLat('');
+    setLng('');
+    setLocationMethod(undefined);
+    setLocationAccuracy(undefined);
     const selectedId = selectedObject?.type === 'equipment' ? selectedObject.data?.id : undefined;
     const preferred =
       availableTerminals.find((t) => t.id === selectedId) ||
@@ -108,26 +162,29 @@ export const CustomerWizardModal: React.FC = () => {
     if (!selectedTerminal || !activeSplitter) return null;
     const custLat = parseFloat(lat);
     const custLng = parseFloat(lng);
+    // No position, no drop length: the estimate then leaves the drop out and says so.
     const dropLen =
       Number.isFinite(custLat) && Number.isFinite(custLng)
         ? Math.round(
-            Math.hypot(
-              (custLat - selectedTerminal.lat) * 111320,
-              (custLng - selectedTerminal.lng) * 111320 * Math.cos((custLat * Math.PI) / 180),
-            ),
+            polylineLengthMeters([
+              [selectedTerminal.lat, selectedTerminal.lng],
+              [custLat, custLng],
+            ]),
           )
-        : 30;
+        : 0;
     return estimateRxForSplitter(
       selectedTerminal,
       activeSplitter,
       { equipment: equipments, cables, splitters, closures, customers, faults },
       dropLen,
+      optical,
     );
-  }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults]);
+  }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults, optical]);
 
-  if (!isCustomerWizardOpen) return null;
+  // Hidden, not closed, while the person taps the house, so nothing typed is lost.
+  if (!isCustomerWizardOpen || picking) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -138,11 +195,34 @@ export const CustomerWizardModal: React.FC = () => {
       showToast('error', 'Validation Error', 'Select a terminal, splitter and a free output port.');
       return;
     }
+    const noLocation = lat.trim() === '' && lng.trim() === '';
     const custLat = parseFloat(lat);
     const custLng = parseFloat(lng);
-    if (!Number.isFinite(custLat) || !Number.isFinite(custLng) || Math.abs(custLat) > 90 || Math.abs(custLng) > 180) {
-      showToast('error', 'Invalid Location', 'Enter a valid latitude (-90..90) and longitude (-180..180).');
+    const validLocation =
+      Number.isFinite(custLat) &&
+      Number.isFinite(custLng) &&
+      Math.abs(custLat) <= 90 &&
+      Math.abs(custLng) <= 180 &&
+      hasRecordedLocation({ lat: custLat, lng: custLng });
+    if (!noLocation && !validLocation) {
+      showToast('error', 'Location not valid', 'Use my GPS or pick on the map, or clear both boxes.');
       return;
+    }
+
+    // Warn, do not block: name what the gaps mean and let the person decide.
+    const problems = [
+      !estimate?.olt &&
+        'No OLT is reachable from this box. The customer will be saved as not linked and cannot be traced until a cable connects the box.',
+      noLocation && 'The house location is not recorded, so the drop cable will have no route or length.',
+    ].filter(Boolean) as string[];
+    if (problems.length > 0) {
+      const accepted = await requestConfirm({
+        title: 'Save with missing details?',
+        message: problems.join('\n\n'),
+        confirmLabel: 'Save anyway',
+        cancelLabel: 'Go back',
+      });
+      if (!accepted) return;
     }
 
     const connected = connectCustomerToPort({
@@ -152,8 +232,7 @@ export const CustomerWizardModal: React.FC = () => {
       area: area.trim() || selectedTerminal?.area,
       building: building.trim() || undefined,
       flatNumber: flatNumber.trim() || undefined,
-      lat: custLat,
-      lng: custLng,
+      ...(validLocation ? { lat: custLat, lng: custLng, locationMethod: locationMethod ?? 'typed', locationAccuracyMeters: locationAccuracy } : {}),
       serviceType,
       plan,
       terminalBoxId: selectedTerminalId,
@@ -164,15 +243,19 @@ export const CustomerWizardModal: React.FC = () => {
     });
 
     if (connected) {
-      flyToLocation(connected.lat, connected.lng, 18);
+      if (problems.length > 0) {
+        logAudit('CUSTOMER_SAVED_WITH_WARNING', `Saved ${connected.id} after a warning: ${problems.join(' ')}`, connected.id, 'Customer');
+      }
+      if (hasRecordedLocation(connected)) flyToLocation(connected.lat, connected.lng, 18);
       setModalOpen('customerWizard', false);
     }
   };
 
-  const rxStatus = budgetStatusFor(estimate?.rxDbm);
+  const rxStatus = budgetStatusFor(estimate?.rxDbm, optical);
+  const hasLocation = lat.trim() !== '' && lng.trim() !== '';
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -182,10 +265,12 @@ export const CustomerWizardModal: React.FC = () => {
             </div>
             <div>
               <h2 className="font-bold text-sm text-slate-900">Connect New Customer Subscriber</h2>
-              <p className="text-[11px] text-slate-500">Assign physical terminal port & provision FTTH lead</p>
+              <p className="text-[11px] text-slate-500">Choose the box and port, then where the house is</p>
             </div>
           </div>
           <button
+            type="button"
+            aria-label="Close"
             onClick={() => setModalOpen('customerWizard', false)}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
           >
@@ -194,7 +279,7 @@ export const CustomerWizardModal: React.FC = () => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
           {/* Customer Details */}
           <div className="space-y-3">
             <div className="font-bold text-xs text-slate-800 border-b pb-1">1. Customer Information</div>
@@ -237,9 +322,10 @@ export const CustomerWizardModal: React.FC = () => {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tariff Plan</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Plan</label>
                 <input
                   type="text"
+                  placeholder="Not recorded"
                   value={plan}
                   onChange={(e) => setPlan(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
@@ -411,17 +497,26 @@ export const CustomerWizardModal: React.FC = () => {
                 <div className="font-bold">Upstream path</div>
                 <div>
                   {estimate.olt
-                    ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ''}`
-                    : 'No OLT reachable'}
-                  {estimate.hops.length > 0 && ` ? ${estimate.hops.map((h) => h.cable.id).join(' ? ')}`}
-                  {` ? ${selectedTerminalId} / ${activeSplitter?.id}`}
+                    ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ' / no PON port linked'}`
+                    : 'No OLT reachable: this customer will be saved as not linked'}
+                  {estimate.hops.length > 0 && ` → ${estimate.hops.map((h) => h.cable.id).join(' → ')}`}
+                  {` → ${selectedTerminalId} / ${activeSplitter?.id}`}
                 </div>
                 <div>
                   Estimated Rx:{' '}
                   <span className="font-mono font-bold">
-                    {estimate.rxDbm !== undefined ? `${estimate.rxDbm} dBm` : 'n/a'}
-                  </span>{' '}
-                  ({rxStatus})
+                    {estimate.rxDbm !== undefined
+                      ? `${estimate.rxDbm} dBm`
+                      : estimate.rxRangeDbm
+                        ? `${estimate.rxRangeDbm.min} to ${estimate.rxRangeDbm.max} dBm`
+                        : 'Not known'}
+                  </span>
+                  {estimate.rxDbm !== undefined
+                    ? ` (${rxStatus})`
+                    : estimate.rxRangeDbm
+                      ? ' (launch power not recorded, so a range)'
+                      : ''}
+                  {!hasLocation && ' · drop not counted until the house is placed'}
                 </div>
               </div>
             )}
@@ -429,7 +524,33 @@ export const CustomerWizardModal: React.FC = () => {
 
           {/* Installation Location */}
           <div className="space-y-3 pt-2">
-            <div className="font-bold text-xs text-slate-800 border-b pb-1">3. Premises Location</div>
+            <div className="font-bold text-xs text-slate-800 border-b pb-1">3. Where the house is</div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void captureGps()}
+                disabled={locating}
+                className="flex min-h-10 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-60"
+              >
+                <LocateFixed className="h-4 w-4" /> {locating ? 'Getting GPS…' : 'Use my GPS'}
+              </button>
+              <button
+                type="button"
+                onClick={() => useUiStore.getState().setCustomerWizardPicking(true)}
+                className="flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                <MapPin className="h-4 w-4" /> Pick on map
+              </button>
+            </div>
+            <p className={`text-[11px] ${hasLocation ? 'text-slate-500' : 'font-semibold text-amber-800'}`}>
+              {hasLocation
+                ? locationMethod === 'gps'
+                  ? `From GPS${locationAccuracy !== undefined ? `, within about ${Math.round(locationAccuracy)} m` : ''}.`
+                  : locationMethod === 'map_pick'
+                    ? 'Picked on the map.'
+                    : 'Typed in.'
+                : 'Not recorded yet. Stand at the house and tap Use my GPS, or pick the house on the map. Nothing is filled in for you.'}
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Latitude</label>
@@ -437,7 +558,12 @@ export const CustomerWizardModal: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={lat}
-                  onChange={(e) => setLat(e.target.value)}
+                  placeholder="Not recorded"
+                  onChange={(e) => {
+                    setLat(e.target.value);
+                    setLocationMethod('typed');
+                    setLocationAccuracy(undefined);
+                  }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
                 />
               </div>
@@ -447,7 +573,12 @@ export const CustomerWizardModal: React.FC = () => {
                   type="text"
                   inputMode="decimal"
                   value={lng}
-                  onChange={(e) => setLng(e.target.value)}
+                  placeholder="Not recorded"
+                  onChange={(e) => {
+                    setLng(e.target.value);
+                    setLocationMethod('typed');
+                    setLocationAccuracy(undefined);
+                  }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono focus:border-blue-500"
                 />
               </div>
@@ -481,19 +612,18 @@ export const CustomerWizardModal: React.FC = () => {
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500">
-              Defaults next to the selected terminal; a drop cable is drawn from the terminal to this point.
-            </p>
+            <p className="text-[10px] text-slate-500">A drop cable is drawn from the box to this point.</p>
           </div>
 
           {/* CPE Hardware */}
           <div className="space-y-3 pt-2">
-            <div className="font-bold text-xs text-slate-800 border-b pb-1">4. Customer Premise Equipment (CPE)</div>
+            <div className="font-bold text-xs text-slate-800 border-b pb-1">4. Customer’s ONT and router</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">ONT Serial Number</label>
                 <input
                   type="text"
+                  placeholder="Not recorded (leave blank if unknown)"
                   value={ontSerial}
                   onChange={(e) => setOntSerial(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono"
@@ -503,6 +633,7 @@ export const CustomerWizardModal: React.FC = () => {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Wi-Fi Router Model</label>
                 <input
                   type="text"
+                  placeholder="Not recorded"
                   value={routerModel}
                   onChange={(e) => setRouterModel(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"

@@ -100,7 +100,7 @@ export const BottomInfoPanel: React.FC = () => {
 
   if (!isBottomPanelOpen) {
     return (
-      <div className="flex h-8 shrink-0 items-center gap-3 border-t border-slate-200 bg-white px-3 text-xs">
+      <div className="hidden h-8 shrink-0 items-center gap-3 border-t border-slate-200 bg-white px-3 text-xs md:flex">
         <button
           type="button"
           onClick={() => setPanelOpen('bottom', true)}
@@ -120,7 +120,8 @@ export const BottomInfoPanel: React.FC = () => {
           ) : activeTraceSummary ? (
             <>
               Trace to <span className="font-medium text-slate-700">{activeTraceSummary.targetLabel}</span> ·{' '}
-              {formatLength(activeTraceSummary.totalLengthMeters)} · {activeTraceSummary.totalLossDb.toFixed(2)} dB
+              {formatLength(activeTraceSummary.totalLengthMeters)} · {activeTraceSummary.totalLossDb.toFixed(2)} dB estimated
+              {!activeTraceSummary.pathComplete && ' · path not complete'}
             </>
           ) : (
             'Select a cable on the map to inspect its fiber cores'
@@ -131,7 +132,10 @@ export const BottomInfoPanel: React.FC = () => {
   }
 
   return (
-    <section className="flex h-72 shrink-0 flex-col border-t border-slate-200 bg-white" aria-label="Attribute table">
+    <section
+      className="fixed inset-x-0 bottom-0 top-12 z-[1050] flex flex-col bg-white md:static md:z-auto md:h-72 md:shrink-0 md:border-t md:border-slate-200"
+      aria-label="Attribute table"
+    >
       {/* Header */}
       <div className="flex h-10 shrink-0 items-center gap-3 border-b border-slate-200 pl-2 pr-2">
         <Tabs<Tab>
@@ -312,9 +316,9 @@ export const BottomInfoPanel: React.FC = () => {
                   {[
                     { label: 'Target', value: activeTraceSummary.targetLabel },
                     { label: 'Total length', value: formatLength(activeTraceSummary.totalLengthMeters) },
-                    { label: 'Path loss', value: `${activeTraceSummary.totalLossDb.toFixed(2)} dB` },
+                    { label: 'Estimated path loss', value: `${activeTraceSummary.totalLossDb.toFixed(2)} dB` },
                     {
-                      label: 'Est. Rx power',
+                      label: 'Estimated Rx power',
                       value:
                         activeTraceSummary.estimatedRxDbm !== undefined
                           ? `${activeTraceSummary.estimatedRxDbm.toFixed(2)} dBm`
@@ -338,7 +342,7 @@ export const BottomInfoPanel: React.FC = () => {
                     </div>
                   ))}
                   <div className="flex min-w-[120px] flex-1 flex-col justify-center bg-white px-3 py-2">
-                    <div className="text-[11px] text-slate-500">Power budget</div>
+                    <div className="text-[11px] text-slate-500">{activeTraceSummary.pathComplete ? 'Power budget' : 'Path not complete'}</div>
                     <div>
                       <StatusBadge
                         status={activeTraceSummary.budgetStatus}

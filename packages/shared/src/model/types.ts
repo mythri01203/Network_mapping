@@ -1,6 +1,8 @@
 import type { z } from 'zod';
 
 import type {
+  agentTrackPointSchema,
+  agentTripSchema,
   auditLogSchema,
   cableCoreLinkSchema,
   cableSchema,
@@ -23,6 +25,7 @@ import type {
   opticalPowerInfoSchema,
   opticalPowerSampleSchema,
   ponPortSchema,
+  settingSchema,
   spliceMatrixEntrySchema,
   spliceRecordSchema,
   splitterPortSchema,
@@ -56,6 +59,9 @@ export type SpliceMatrixEntry = z.infer<typeof spliceMatrixEntrySchema>;
 export type CableCoreLink = z.infer<typeof cableCoreLinkSchema>;
 export type FiberTraceHop = z.infer<typeof fiberTraceHopSchema>;
 export type GpsRoute = z.infer<typeof gpsRouteSchema>;
+export type AgentTrackPoint = z.infer<typeof agentTrackPointSchema>;
+export type AgentTrip = z.infer<typeof agentTripSchema>;
+export type Setting = z.infer<typeof settingSchema>;
 export type OltConfig = z.infer<typeof oltConfigSchema>;
 
 /** One hop of a computed OLT-to-customer path. Derived at runtime, never stored. */

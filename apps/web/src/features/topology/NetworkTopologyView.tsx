@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { rxReadingOf } from '@fibergis/shared';
+
 import { useOpenView } from '../../app/views';
 import { useMapStore } from '../../stores/mapStore';
 import { traceNetworkPath } from '../../stores/networkActions';
@@ -177,8 +179,8 @@ export const NetworkTopologyView: React.FC = () => {
                         type: olt.type,
                         category: 'Central Office',
                         status: olt.status,
-                        details: `Model: ${olt.model || 'Huawei MA5800'} | IP: ${olt.ipAddress || '10.10.1.1'} | Rack: ${olt.rackNumber || 'R01'}`,
-                        opticalPower: 'Tx Power: +3.5 dBm (Class C+)',
+                        details: `Model: ${olt.model || 'Not recorded'} | IP: ${olt.ipAddress || 'Not recorded'} | Rack: ${olt.rackNumber || 'Not recorded'}`,
+                        opticalPower: 'Tx power: Not recorded here. No live connection.',
                         lat: olt.lat,
                         lng: olt.lng,
                         raw: olt,
@@ -414,8 +416,8 @@ export const NetworkTopologyView: React.FC = () => {
                           type: cust.serviceType,
                           category: 'Subscriber ONT',
                           status: cust.status,
-                          details: `ONT Serial: ${cust.ontSerialNumber} | Plan: ${cust.plan} | IP: ${cust.ipAddress}`,
-                          opticalPower: `Rx Optical Power: ${cust.rxOpticalPowerDbm} dBm`,
+                          details: `ONT Serial: ${cust.ontSerialNumber || 'Not recorded'} | Plan: ${cust.plan || 'Not recorded'} | IP: ${cust.ipAddress || 'Not recorded'}`,
+                          opticalPower: `Rx: ${rxReadingOf(cust).text}`,
                           lat: cust.lat,
                           lng: cust.lng,
                           raw: cust,
@@ -429,7 +431,7 @@ export const NetworkTopologyView: React.FC = () => {
                     >
                       <div className="flex items-center justify-between text-[10px] mb-1">
                         <span className="font-mono text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded">{cust.id}</span>
-                        <span className="font-semibold text-slate-500">{cust.rxOpticalPowerDbm} dBm</span>
+                        <span className="font-semibold text-slate-500">{rxReadingOf(cust).text}</span>
                       </div>
                       <div className="font-semibold text-xs text-slate-800 truncate">{cust.name}</div>
                       <div className="text-[10px] text-slate-400 truncate">{cust.address}</div>

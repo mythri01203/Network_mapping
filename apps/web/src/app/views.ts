@@ -7,6 +7,7 @@ import {
   Hexagon,
   type LucideIcon,
   Map as MapIcon,
+  MapPinned,
   Network,
   Server,
   Settings2,
@@ -38,6 +39,12 @@ export const VIEW_META: Record<MainView, ViewMeta> = {
   zones: { path: '/zones', label: 'Zones', description: 'Service areas and coverage', icon: Hexagon },
   operations: { path: '/operations', label: 'Operations', description: 'Faults and work orders', icon: ClipboardList },
   field: { path: '/field-work', label: 'Field Work', description: 'Technician activity and navigation', icon: HardHat },
+  agent_tracking: {
+    path: '/agent-tracking',
+    label: 'Agent Tracking',
+    description: 'Duty routes, stops and GPS reports',
+    icon: MapPinned,
+  },
   admin: { path: '/admin', label: 'Administration', description: 'Users, configuration and data', icon: Settings2 },
 };
 

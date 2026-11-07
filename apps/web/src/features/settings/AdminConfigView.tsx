@@ -6,12 +6,14 @@ import { type FiberColorDef, STANDARD_12_COLORS, type UserRole } from '@fibergis
 import { backupSystem, exportKML, restoreSystem } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { FieldSettingsPanel } from '../admin/FieldSettingsPanel';
+import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
 
 export const AdminConfigView: React.FC = () => {
   const userRole = useUiStore((s) => s.userRole);
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
-  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'audit_logs' | 'backup'>('roles');
+  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
 
   const permissionsList = [
@@ -108,7 +110,7 @@ export const AdminConfigView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
       {/* Top Header */}
-      <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
+      <div className="min-h-16 bg-white border-b border-slate-200 px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">System Administration & Global Configuration</h2>
           <p className="text-xs text-slate-500">
@@ -117,7 +119,7 @@ export const AdminConfigView: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
           <button
             onClick={() => setActiveTab('roles')}
             className={`px-3 py-1.5 rounded-lg transition-all ${
@@ -135,6 +137,23 @@ export const AdminConfigView: React.FC = () => {
             }`}
           >
             12-Color Standards
+          </button>
+          <button
+            onClick={() => setActiveTab('optical')}
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'optical' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Optical settings
+          </button>
+          <button
+            onClick={() => setActiveTab('field')}
+            data-testid="admin-field-tab"
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'field' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Field capture settings
           </button>
           <button
             onClick={() => setActiveTab('audit_logs')}
@@ -279,6 +298,9 @@ export const AdminConfigView: React.FC = () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'optical' && <OpticalSettingsPanel />}
+        {activeTab === 'field' && <FieldSettingsPanel />}
 
         {/* Tab 3: Audit Logs */}
         {activeTab === 'audit_logs' && (

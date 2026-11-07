@@ -69,8 +69,10 @@ export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandCo
     id,
     fiberCount,
     lengthMeters: draft.lengthMeters && draft.lengthMeters > 0 ? draft.lengthMeters : measuredLength,
-    installationType: draft.installationType || (draft.type === 'Underground Fiber' ? 'Underground' : 'Aerial'),
-    owner: draft.owner || 'Metropolitan Fiber Corp',
+    installationType:
+      draft.installationType ||
+      (draft.type === 'Underground Fiber' ? 'Underground' : draft.type === 'Aerial Fiber' ? 'Aerial' : undefined),
+    owner: draft.owner || '',
     installationDate: draft.installationDate || isoDate(ctx.now),
     status: draft.status || 'Active',
     remarks: draft.remarks || 'Drawn via interactive GIS route wizard',

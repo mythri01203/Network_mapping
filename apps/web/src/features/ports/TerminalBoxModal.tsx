@@ -99,7 +99,7 @@ export const TerminalBoxModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -380,15 +380,16 @@ export const TerminalBoxModal: React.FC = () => {
               <div className="flex items-center justify-between p-3 bg-blue-50/70 rounded-xl border border-blue-200">
                 <div>
                   <div className="font-bold text-xs text-blue-900">
-                    Splitter Module: {terminalSplitter?.name || '1:8 PLC Cassette'}
+                    Splitter Module: {terminalSplitter?.name || 'Not recorded'}
                   </div>
                   <div className="text-[11px] text-blue-800">
-                    Ratio: {terminalSplitter?.ratio || '1:8'} &bull; Insertion Loss:{' '}
-                    {terminalSplitter?.insertionLossDb || 10.3} dB &bull; Status: Active
+                    Ratio: {terminalSplitter?.ratio || 'Not recorded'} &bull; Insertion Loss:{' '}
+                    {terminalSplitter ? `${terminalSplitter.insertionLossDb} dB` : 'Not recorded'} &bull; Status:{' '}
+                    {terminalSplitter?.status || 'Not recorded'}
                   </div>
                 </div>
                 <span className="text-[11px] font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-lg">
-                  Input Lead: IN-01 (Feeder Branch 01)
+                  Input cable: {terminalSplitter?.inputPort.connectedCableId || 'Not recorded'}
                 </span>
               </div>
 
@@ -466,7 +467,7 @@ export const TerminalBoxModal: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-500">Manufacturer:</span>{' '}
-                    <span className="font-semibold">{targetTerminal.manufacturer || 'Huawei OptiX'}</span>
+                    <span className="font-semibold">{targetTerminal.manufacturer || 'Not recorded'}</span>
                   </div>
                   <div>
                     <span className="text-slate-500">Installation Date:</span>{' '}
@@ -503,6 +504,9 @@ export const TerminalBoxModal: React.FC = () => {
           {activeTab === 'maintenance' && (
             <div className="space-y-3 text-xs">
               <div className="font-bold text-xs text-slate-800">Field Maintenance History</div>
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900">
+                Example values, not your network. Maintenance records are not stored yet.
+              </p>
               <div className="space-y-2">
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                   <div>

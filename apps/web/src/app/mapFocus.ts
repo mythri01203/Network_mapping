@@ -1,3 +1,5 @@
+import { hasRecordedLocation } from '@fibergis/shared';
+
 import type { FlyToTarget } from '../stores/mapStore';
 import type { SelectedObject } from '../stores/uiStore';
 
@@ -17,7 +19,7 @@ export function focusFor(selection: SelectedObject): FlyToTarget | null {
     }
     default: {
       const { lat, lng } = selection.data;
-      return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng, zoom: POINT_FOCUS_ZOOM } : null;
+      return hasRecordedLocation({ lat, lng }) ? { lat, lng, zoom: POINT_FOCUS_ZOOM } : null;
     }
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Bike, Camera, CheckCircle2, Clock, MapPin } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -6,6 +6,7 @@ import { useOpenView } from '../../app/views';
 import { useBikerStore } from '../../stores/bikerStore';
 import { updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
+import { useSyncStore } from '../../stores/syncStore';
 import { useUiStore } from '../../stores/uiStore';
 
 export const FieldWorkView: React.FC = () => {
@@ -17,7 +18,18 @@ export const FieldWorkView: React.FC = () => {
     useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
   );
   const openView = useOpenView();
-  const [offlineDraft, setOfflineDraft] = useState(false);
+  const sync = useSyncStore();
+  const syncText = sync.cacheWriteFailed
+    ? 'Not saved on this phone: storage is full. Stay connected until changes reach the office.'
+    : sync.phase === 'offline'
+      ? `Offline. ${sync.pendingCount} change(s) saved on this phone, waiting to send.`
+      : sync.phase === 'error'
+        ? (sync.error ?? 'The office refused an item. Open the sync menu at the top.')
+        : sync.pendingCount > 0
+          ? `Sending ${sync.pendingCount} change(s) to the office.`
+          : sync.phase === 'connecting'
+            ? 'Connecting to the office.'
+            : 'All changes sent to the office.';
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
@@ -25,7 +37,7 @@ export const FieldWorkView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900">Field Work</h1>
-            <p className="text-xs text-slate-500">Technician jobs, navigation, and offline draft status.</p>
+            <p className="text-xs text-slate-500">Technician jobs, navigation, and what has reached the office.</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -46,14 +58,9 @@ export const FieldWorkView: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-3 rounded-xl border bg-white text-xs flex items-center justify-between">
-          <span>
-            Offline drafts:{' '}
-            {offlineDraft ? 'unsynced notes stored on this device' : 'connected — changes save locally as sample data'}
-          </span>
-          <button onClick={() => setOfflineDraft(!offlineDraft)} className="px-2 py-1 border rounded-lg font-semibold">
-            {offlineDraft ? 'Mark synced' : 'Simulate offline draft'}
-          </button>
+        <div className="p-3 rounded-xl border bg-white text-xs" role="status">
+          <span className="font-semibold">Sync: </span>
+          {syncText}
         </div>
 
         <div className="grid gap-3">
@@ -112,8 +119,7 @@ export const FieldWorkView: React.FC = () => {
         </div>
 
         <div className="text-[11px] text-slate-400 flex items-center gap-1">
-          <Camera className="w-3.5 h-3.5" /> Photo uploads stay as local sample overlays and do not overwrite original
-          images.
+          <Camera className="w-3.5 h-3.5" /> Photos are added beside existing ones and never replace an original.
         </div>
       </div>
     </div>

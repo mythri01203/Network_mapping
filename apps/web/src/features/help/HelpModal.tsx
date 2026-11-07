@@ -2,7 +2,7 @@ import React from 'react';
 import { BookOpen, Map, ShieldCheck, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { STANDARD_12_COLORS } from '@fibergis/shared';
+import { DEFAULT_OPTICAL_SETTINGS, STANDARD_12_COLORS } from '@fibergis/shared';
 
 import { useUiStore } from '../../stores/uiStore';
 
@@ -14,7 +14,7 @@ export const HelpModal: React.FC = () => {
   if (!isHelpModalOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -99,22 +99,22 @@ export const HelpModal: React.FC = () => {
             <div className="grid grid-cols-4 gap-2 text-center">
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="font-bold text-xs text-slate-800">1:4 Splitter</div>
-                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~7.2 dB loss</div>
+                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~{DEFAULT_OPTICAL_SETTINGS.splitterDb['1:4']} dB loss</div>
                 <div className="text-[9px] text-slate-500">Distribution Hubs</div>
               </div>
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="font-bold text-xs text-slate-800">1:8 Splitter</div>
-                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~10.3 dB loss</div>
+                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~{DEFAULT_OPTICAL_SETTINGS.splitterDb['1:8']} dB loss</div>
                 <div className="text-[9px] text-slate-500">Standard FAT Drop</div>
               </div>
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="font-bold text-xs text-slate-800">1:16 Splitter</div>
-                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~13.8 dB loss</div>
+                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~{DEFAULT_OPTICAL_SETTINGS.splitterDb['1:16']} dB loss</div>
                 <div className="text-[9px] text-slate-500">High Density Riser</div>
               </div>
               <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                 <div className="font-bold text-xs text-slate-800">1:32 Splitter</div>
-                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~17.1 dB loss</div>
+                <div className="text-[10px] text-purple-700 font-bold mt-0.5">~{DEFAULT_OPTICAL_SETTINGS.splitterDb['1:32']} dB loss</div>
                 <div className="text-[9px] text-slate-500">Single-Stage PON</div>
               </div>
             </div>

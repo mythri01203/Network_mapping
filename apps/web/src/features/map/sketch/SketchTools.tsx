@@ -5,7 +5,7 @@ import type { Equipment, LatLng } from '@fibergis/shared';
 
 import { isTypingTarget } from '../../../lib/browser';
 import { useMapStore } from '../../../stores/mapStore';
-import { addEquipment, updateCustomer } from '../../../stores/networkActions';
+import { addEquipment, setCustomerLocation } from '../../../stores/networkActions';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { showToast } from '../../../stores/toastStore';
 import { useUiStore } from '../../../stores/uiStore';
@@ -105,6 +105,9 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   const measuringPoints = useMapStore((s) => s.measuringPoints);
   const pickingOnuCustomer = useUiStore((s) => s.pickingOnuCustomer);
   const setPickingOnuCustomer = useUiStore((s) => s.setPickingOnuCustomer);
+  const wizardPicking = useUiStore((s) => s.customerWizardPicking);
+  const movingId = useMapStore((s) => s.movingEquipmentId);
+  const movingName = useNetworkStore((s) => (movingId ? s.equipment.find((e) => e.id === movingId)?.name : undefined));
   const [trackedPointer, setPointer] = useState<LatLng | null>(null);
   const [trackedSnap, setSnapTarget] = useState<SnapTarget | null>(null);
   const [autoPole, setAutoPole] = useState(false);
@@ -134,16 +137,27 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       const store = useMapStore.getState();
       const ui = useUiStore.getState();
 
-      if (ui.pickingOnuCustomer) {
-        const cust = ui.pickingOnuCustomer;
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        updateCustomer(cust.id, { lat, lng });
-        ui.setPickingOnuCustomer(null);
-        showToast('success', 'ONU Location Set', `Positioned ${cust.name}'s ONU at [${lat.toFixed(4)}, ${lng.toFixed(4)}].`);
-        ui.openSpliceModal({ ...cust, lat, lng });
+      // A tap on a pin reports the pin's position; for a house, read where the finger really was.
+      const tapped = () => map.mouseEventToLatLng(e.originalEvent);
+
+      if (ui.customerWizardPicking) {
+        const { lat, lng } = tapped();
+        ui.setCustomerWizardPick({ lat, lng });
         return;
       }
+
+      if (ui.pickingOnuCustomer) {
+        const cust = ui.pickingOnuCustomer;
+        const { lat, lng } = tapped();
+        ui.setPickingOnuCustomer(null);
+        if (!setCustomerLocation(cust.id, { lat, lng, method: 'map_pick' })) return;
+        // A customer already on a box is connected; only an unconnected one goes on to splicing.
+        if (!cust.terminalBoxId) ui.openSpliceModal({ ...cust, lat, lng });
+        return;
+      }
+
+      // While a pin is being moved, a stray tap must not clear the selection.
+      if (store.movingEquipmentId) return;
 
       if (store.activeTool === 'select') {
         ui.select(null);
@@ -166,29 +180,31 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
         // A click on a marker reports the marker's position, so read the pointer itself.
         const { lat: placeLat, lng: placeLng } = map.mouseEventToLatLng(e.originalEvent);
         const isPole = type.includes('Pole');
-        const defaultName = isPole
+        // Poles always get the next free number: a template name would give every pole the same one.
+        const name = isPole
           ? nextPoleName(useNetworkStore.getState().equipment)
-          : type === 'Fiber Slack Loop'
-            ? 'Fiber Slack Loop (20m)'
-            : `New ${type}`;
-        const name = tpl?.name || defaultName;
+          : tpl?.name || (type === 'Fiber Slack Loop' ? 'Fiber Slack Loop' : `New ${type}`);
         const totalPorts = tpl?.totalPorts;
 
         const created = addEquipment({
-          name,
           type,
-          lat: placeLat,
-          lng: placeLng,
           category: tpl?.category || categoryForType(type),
           totalPorts,
           availablePorts: totalPorts,
           notes: tpl?.notes,
           ...tpl,
+          name,
+          lat: placeLat,
+          lng: placeLng,
+          locationMethod: 'map_pick',
         });
-        if (created) {
-          showToast('success', `${type} Placed`, `Added ${created.name} at [${placeLat.toFixed(5)}, ${placeLng.toFixed(5)}].`);
+        if (created && isPole) {
+          // Stay in the pole tool: a street of poles is one tap each until Done.
           ui.select({ type: 'equipment', data: created });
-          ui.setPanelOpen('right', true);
+        } else if (created) {
+          ui.select({ type: 'equipment', data: created });
+          // On a phone the inspector would cover the map; a tap on the pin opens it.
+          if (window.innerWidth >= 768) ui.setPanelOpen('right', true);
           store.setActiveTool('select');
           store.setEquipmentTypeToAdd(null);
           store.setEquipmentDraftTemplate(null);
@@ -264,23 +280,61 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
     const store = useMapStore.getState();
     store.resetSketches();
     store.setActiveTool('select');
+    store.setEquipmentTypeToAdd(null);
+    store.setEquipmentDraftTemplate(null);
   }, []);
+
+  useEffect(() => {
+    if (!movingId && !wizardPicking) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      useMapStore.getState().setMovingEquipmentId(null);
+      if (useUiStore.getState().customerWizardPicking) useUiStore.getState().setCustomerWizardPicking(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [movingId, wizardPicking]);
+
+  const banner =
+    'absolute inset-x-2 top-2 z-[1000] flex flex-wrap items-center gap-3 rounded-xl border border-sky-400/50 bg-slate-900/95 px-4 py-2.5 text-white shadow-2xl backdrop-blur-sm md:inset-x-auto md:left-1/2 md:top-16 md:-translate-x-1/2';
+  const bannerButton =
+    'ml-auto h-[48px] rounded-md bg-white/15 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-white/25 md:h-8 md:px-3 md:text-[12px]';
 
   return (
     <>
       {pickingOnuCustomer && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/95 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-sky-400/50 flex items-center gap-3 backdrop-blur-sm animate-in fade-in">
-          <div className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping" />
-          <div className="text-xs">
-            <span className="font-semibold text-sky-300">ONU Placement Mode:</span> Click map to drop pin for{' '}
-            <strong>{pickingOnuCustomer.name}</strong> ({pickingOnuCustomer.ontSerialNumber})
+        <div className={banner} role="status">
+          <div className="text-[13px]">
+            Tap the map where <strong>{pickingOnuCustomer.name}</strong> is.
+          </div>
+          <button type="button" onClick={() => setPickingOnuCustomer(null)} className={bannerButton}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {wizardPicking && (
+        <div className={banner} role="status">
+          <div className="text-[13px]">Tap the customer’s house on the map.</div>
+          <button
+            type="button"
+            onClick={() => useUiStore.getState().setCustomerWizardPicking(false)}
+            className={bannerButton}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {movingId && (
+        <div className={banner} role="status">
+          <div className="text-[13px]">
+            Drag <strong>{movingName ?? movingId}</strong> to its new place. Its cable ends move with it.
           </div>
           <button
             type="button"
-            onClick={() => setPickingOnuCustomer(null)}
-            className="ml-3 px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-[11px] font-medium transition-colors"
+            onClick={() => useMapStore.getState().setMovingEquipmentId(null)}
+            className={bannerButton}
           >
-            Cancel
+            Cancel move
           </button>
         </div>
       )}

@@ -9,11 +9,11 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { Customer } from '@fibergis/shared';
+import { type Customer, hasRecordedLocation, rxReadingOf } from '@fibergis/shared';
 
 import { Button, cn } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -28,6 +28,7 @@ export const OnuFleetModal: React.FC = () => {
   );
 
   const customers = useNetworkStore((s) => s.customers);
+  const optical = useNetworkStore(selectOpticalSettings);
   const flyToLocation = useMapStore((s) => s.flyTo);
   const showToast = useToastStore((s) => s.show);
 
@@ -44,8 +45,9 @@ export const OnuFleetModal: React.FC = () => {
         c.routerModel.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q);
 
-      const isMapped = c.lat !== 0 && c.lng !== 0;
-      const isLowSignal = c.rxOpticalPowerDbm < -24.0;
+      const isMapped = hasRecordedLocation(c);
+      const { band } = rxReadingOf(c, optical);
+      const isLowSignal = band === 'low_margin' || band === 'bad';
 
       if (!matchesSearch) return false;
       if (statusFilter === 'Active') return c.status === 'Active';
@@ -53,13 +55,16 @@ export const OnuFleetModal: React.FC = () => {
       if (statusFilter === 'Unmapped') return !isMapped;
       return true;
     });
-  }, [customers, searchQuery, statusFilter]);
+  }, [customers, searchQuery, statusFilter, optical]);
 
   if (!isFleetOpen) return null;
 
   const totalCount = customers.length;
-  const unmappedCount = customers.filter((c) => c.lat === 0 && c.lng === 0).length;
-  const lowSignalCount = customers.filter((c) => c.rxOpticalPowerDbm < -24.0).length;
+  const unmappedCount = customers.filter((c) => !hasRecordedLocation(c)).length;
+  const lowSignalCount = customers.filter((c) => {
+    const { band } = rxReadingOf(c, optical);
+    return band === 'low_margin' || band === 'bad';
+  }).length;
 
   const handlePickOnMap = (customer: Customer) => {
     // 1. Set the active ONU customer to place
@@ -70,7 +75,7 @@ export const OnuFleetModal: React.FC = () => {
     showToast(
       'info',
       'Click Map to Place ONU',
-      `Click anywhere on the map to place ONU for ${customer.name} (${customer.ontSerialNumber}).`,
+      `Click the map where the ONU for ${customer.name} is.`,
     );
   };
 
@@ -79,7 +84,7 @@ export const OnuFleetModal: React.FC = () => {
   };
 
   const handleLocate = (customer: Customer) => {
-    if (customer.lat && customer.lng) {
+    if (hasRecordedLocation(customer)) {
       flyToLocation(customer.lat, customer.lng, 18);
       setModalOpen('onuFleet', false);
       showToast('info', 'Located on Map', `Focused on ${customer.name}'s ONT.`);
@@ -87,7 +92,7 @@ export const OnuFleetModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1150] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1150] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
@@ -103,7 +108,7 @@ export const OnuFleetModal: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Live subscriber ONT diagnostics, optical power levels, and geocoded placement
+                Saved ONT records, optical readings and map placement. No live connection.
               </p>
             </div>
           </div>
@@ -184,10 +189,11 @@ export const OnuFleetModal: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredOnus.map((c) => {
-                const rx = c.rxOpticalPowerDbm;
-                const isNormal = rx >= -24.0 && rx <= -8.0;
-                const isWarning = rx < -24.0 && rx >= -27.0;
-                const isMapped = c.lat !== 0 && c.lng !== 0;
+                const reading = rxReadingOf(c, optical);
+                const isNormal = reading.band === 'good';
+                const isWarning = reading.band === 'low_margin';
+                const isUnknown = reading.band === 'unknown';
+                const isMapped = hasRecordedLocation(c);
 
                 return (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
@@ -195,7 +201,7 @@ export const OnuFleetModal: React.FC = () => {
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">
                       <div className="flex items-center gap-2">
                         <HardDrive className="w-4 h-4 text-sky-600 shrink-0" />
-                        <span>{c.ontSerialNumber}</span>
+                        <span>{c.ontSerialNumber || 'Not recorded'}</span>
                       </div>
                     </td>
 
@@ -208,7 +214,7 @@ export const OnuFleetModal: React.FC = () => {
                     {/* Model */}
                     <td className="py-3 px-4 text-slate-600">
                       <div className="truncate max-w-[170px]" title={c.routerModel}>
-                        {c.routerModel}
+                        {c.routerModel || 'Not recorded'}
                       </div>
                     </td>
 
@@ -232,23 +238,25 @@ export const OnuFleetModal: React.FC = () => {
                         <span
                           className={cn(
                             'w-2 h-2 rounded-full',
-                            isNormal ? 'bg-emerald-500' : isWarning ? 'bg-amber-500' : 'bg-red-500',
+                            isUnknown ? 'bg-slate-300' : isNormal ? 'bg-emerald-500' : isWarning ? 'bg-amber-500' : 'bg-red-500',
                           )}
                         />
                         <span className="font-mono font-bold text-slate-900">
-                          {rx.toFixed(1)} dBm
+                          {reading.valueDbm !== undefined ? `${reading.valueDbm.toFixed(1)} dBm` : 'Not recorded'}
                         </span>
                         <span
                           className={cn(
                             'text-[10px] px-1.5 py-0.2 rounded font-medium',
-                            isNormal
-                              ? 'text-emerald-700 bg-emerald-50'
-                              : isWarning
-                                ? 'text-amber-700 bg-amber-50'
-                                : 'text-red-700 bg-red-50',
+                            isUnknown
+                              ? 'text-slate-500 bg-slate-100'
+                              : isNormal
+                                ? 'text-emerald-700 bg-emerald-50'
+                                : isWarning
+                                  ? 'text-amber-700 bg-amber-50'
+                                  : 'text-red-700 bg-red-50',
                           )}
                         >
-                          {isNormal ? 'Normal' : isWarning ? 'Warning' : 'Critical'}
+                          {isUnknown ? 'No reading' : `${reading.originLabel} · ${reading.bandLabel}`}
                         </span>
                       </div>
                     </td>

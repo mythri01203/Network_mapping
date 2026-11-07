@@ -1,0 +1,4 @@
+{
+  "note": "Recorded clips, one per message key: /audio/<lang>/<key>.mp3. List a key here only after its file exists. Telugu and Kannada clips play only once their words are marked reviewed in apps/web/src/i18n/messages.ts. No clips are recorded yet.",
+  "clips": { "en": [], "te": [], "kn": [] }
+}

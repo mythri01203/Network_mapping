@@ -1,5 +1,6 @@
 import type { NetworkSnapshot } from '../model/collections';
 import type { AuditLog, LatLng } from '../model/types';
+import type { OpticalSettings } from './opticalSettings';
 
 /** The mutable network collections that domain commands read and patch. */
 export type NetworkData = Pick<
@@ -54,6 +55,8 @@ export interface CommandContext {
   actor?: string;
   /** Location used when nothing in the network can anchor a new record. */
   fallbackLocation?: LatLng;
+  /** Optical defaults merged with the operator's overrides. Commands use the plain defaults without it. */
+  optical?: OpticalSettings;
 }
 
 export const fail = (title: string, message: string, tone: NoticeTone = 'error'): CommandFailure => ({

@@ -8,6 +8,7 @@ export type MainView =
   | 'cables'
   | 'cable_tv'
   | 'field'
+  | 'agent_tracking'
   | 'operations'
   | 'zones'
   | 'admin';

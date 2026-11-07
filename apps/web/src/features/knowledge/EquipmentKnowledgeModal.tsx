@@ -155,7 +155,7 @@ export const EquipmentKnowledgeModal: React.FC<EquipmentKnowledgeModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+    <div className="modal-sheet fixed inset-0 z-[1200] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[92vh] flex flex-col overflow-hidden">
         {/* Top Google-Style Search Header */}
         <div className="px-6 py-5 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shrink-0 border-b border-indigo-950/50">

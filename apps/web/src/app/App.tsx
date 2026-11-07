@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 
+import { AgentTrackingRuntime } from '../features/agent-tracking/AgentTrackingRuntime';
 import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
 import { ModalHost } from './ModalHost';
@@ -21,11 +22,16 @@ const VIEW_COMPONENTS: Record<Exclude<MainView, 'map'>, React.ComponentType> = {
   customers: lazyView(() => import('../features/customers/CustomerDirectoryView'), 'CustomerDirectoryView'),
   cables: lazyView(() => import('../features/cables/CableInventoryView'), 'CableInventoryView'),
   field: lazyView(() => import('../features/field-work/FieldWorkView'), 'FieldWorkView'),
+  agent_tracking: lazyView(() => import('../features/agent-tracking/AgentTrackingView'), 'AgentTrackingView'),
   cable_tv: lazyView(() => import('../features/cable-tv/CableTVView'), 'CableTVView'),
   operations: lazyView(() => import('../features/operations/OperationsHubView'), 'OperationsHubView'),
   zones: lazyView(() => import('../features/zones/ZoneManagementView'), 'ZoneManagementView'),
   admin: lazyView(() => import('../features/settings/AdminConfigView'), 'AdminConfigView'),
 };
+
+/** The simple phone capture flow. Full screen, without the engineer shell around it. */
+const CaptureApp = lazyView(() => import('../features/capture/CaptureApp'), 'CaptureApp');
+export const CAPTURE_PATH = '/capture';
 
 const ViewFallback: React.FC = () => (
   <div className="flex flex-1 items-center justify-center bg-slate-50" role="status" aria-label="Loading view">
@@ -35,10 +41,24 @@ const ViewFallback: React.FC = () => (
 
 const AppContent: React.FC = () => {
   const activeView = useActiveView();
+  const capture = useLocation().pathname.toLowerCase().startsWith(CAPTURE_PATH);
 
   useEffect(() => {
+    if (capture) return;
     document.title = activeView === 'map' ? 'FiberGIS · Network Mapping' : `${VIEW_META[activeView].label} · FiberGIS`;
-  }, [activeView]);
+  }, [activeView, capture]);
+
+  if (capture) {
+    return (
+      <>
+        <Suspense fallback={<ViewFallback />}>
+          <CaptureApp />
+        </Suspense>
+        <ConfirmDialogHost />
+        <ToastNotifications />
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 font-sans">
@@ -55,6 +75,7 @@ const AppContent: React.FC = () => {
           </Routes>
         </Suspense>
       </div>
+      <AgentTrackingRuntime />
       <ModalHost />
       <ConfirmDialogHost />
       <ToastNotifications />

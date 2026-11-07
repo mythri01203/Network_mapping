@@ -1,9 +1,9 @@
-import type { NetworkSnapshot, ParsedBackup } from '@fibergis/shared';
+import type { CollectionName, NetworkSnapshot, ParsedBackup } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { readJson, writeJson } from '../lib/storage';
 import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
-import { initialSyncState, type SyncPhase, useSyncStore } from '../stores/syncStore';
+import { initialSyncState, type RefusedRecord, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
 import {
   buildChangeSet,
@@ -18,6 +18,28 @@ import {
   sameValue,
 } from './changeTracking';
 import { type ApiClient, apiClient, describeApiError, isTransientError } from './client';
+
+type RecordKey = { collection: CollectionName; id: string };
+
+const flatten = (pending: PendingIds): RecordKey[] =>
+  (Object.entries(pending) as [CollectionName, string[]][]).flatMap(([collection, ids]) =>
+    ids.map((id) => ({ collection, id })),
+  );
+
+const toPending = (keys: readonly RecordKey[]): PendingIds => {
+  const result: PendingIds = {};
+  for (const { collection, id } of keys) (result[collection] ??= []).push(id);
+  return result;
+};
+
+/** What a person calls a record, for messages about it. */
+function recordLabel({ collection, id }: RecordKey, snapshot: NetworkSnapshot): string {
+  const record = (snapshot[collection] as readonly { id: string; name?: string; title?: string }[]).find(
+    (item) => item.id === id,
+  );
+  const name = record?.name ?? record?.title;
+  return name && name !== id ? `${name} (${id})` : id;
+}
 
 interface SyncMeta {
   /** Server revision the cached collections were last reconciled with; null before first contact. */
@@ -37,6 +59,13 @@ const isSyncMeta = (value: unknown): boolean => {
   );
 };
 
+/** One line for the sync status: which record, why, and what to do next. */
+const describeRefusal = (records: readonly RefusedRecord[]): string => {
+  const [first] = records;
+  const more = records.length > 1 ? ` and ${records.length - 1} more` : '';
+  return `${first.label}${more} was not sent. ${first.reason} Correct it, then tap Retry now.`;
+};
+
 /** Browsers cap `keepalive` request bodies at 64 KiB. */
 const KEEPALIVE_BODY_LIMIT = 60_000;
 
@@ -48,7 +77,7 @@ export interface SyncEngine {
   stop(): void;
   /** Sends pending local changes now instead of waiting for the debounce. */
   flush(): Promise<void>;
-  /** Clears a refused-change error and tries the server again. */
+  /** Tries the server again, including records it refused earlier. */
   retry(): Promise<void>;
   /** Drops unsent local edits and reloads the network from the server. */
   discardLocalChanges(): Promise<void>;
@@ -57,6 +86,8 @@ export interface SyncEngine {
   /** Replaces the collections in a backup on the server, or locally while offline. */
   restore(backup: ParsedBackup): Promise<SyncOutcome>;
   isConnected(): boolean;
+  /** Records the server has not acknowledged yet: waiting, being sent, or refused. */
+  unsentIds(): PendingIds;
 }
 
 export interface SyncEngineOptions {
@@ -89,7 +120,8 @@ export function createSyncEngine({
   let sending: PendingIds | null = null;
   let link: 'connecting' | 'online' | 'offline' = 'connecting';
   let linkError: string | null = null;
-  let rejection: string | null = null;
+  /** Records the server refused. They stay in this browser and do not hold up anything else. */
+  let refused: RefusedRecord[] = [];
   let lastSyncedAt: number | null = null;
   let applyingRemote = false;
   let retryAttempt = 0;
@@ -112,7 +144,10 @@ export function createSyncEngine({
     return run;
   };
 
-  const unsent = (): PendingIds => (sending ? mergePending(meta.pending, sending) : meta.pending);
+  const refusedIds = (): PendingIds =>
+    toPending(refused.map(({ collection, id }) => ({ collection: collection as CollectionName, id })));
+
+  const unsent = (): PendingIds => mergePending(meta.pending, refusedIds(), sending ?? {});
 
   // Until the server acknowledges a batch, its ids stay in the persisted pending set.
   const persistMeta = () => writeJson(SYNC_META_STORAGE_KEY, { revision: meta.revision, pending: unsent() });
@@ -120,7 +155,7 @@ export function createSyncEngine({
   const updateStatus = () => {
     const pendingCount = countPending(unsent());
     let phase: SyncPhase;
-    if (rejection) phase = 'error';
+    if (refused.length > 0) phase = 'error';
     else if (link !== 'online') phase = link;
     else if (sending) phase = 'saving';
     else if (pendingCount > 0) phase = 'pending';
@@ -130,7 +165,8 @@ export function createSyncEngine({
       revision: meta.revision,
       pendingCount,
       lastSyncedAt,
-      error: rejection ?? (link === 'offline' ? linkError : null),
+      error: refused[0] ? describeRefusal(refused) : link === 'offline' ? linkError : null,
+      refused,
     });
   };
 
@@ -151,7 +187,7 @@ export function createSyncEngine({
   };
 
   const scheduleFlush = () => {
-    if (!started || link !== 'online' || rejection || isEmptyPending(meta.pending)) return;
+    if (!started || link !== 'online' || isEmptyPending(meta.pending)) return;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => void flush(), debounceMs);
     maxWaitTimer ??= setTimeout(() => void flush(), maxWaitMs);
@@ -188,13 +224,54 @@ export function createSyncEngine({
       goOffline(error);
       return;
     }
-    const message = describeApiError(error);
-    if (rejection !== message) {
-      showToast('error', 'Server Rejected Changes', `${message} Your edits are kept in this browser.`);
-    }
-    rejection = message;
+    showToast('error', 'Server Refused The Change', `${describeApiError(error)} Your edits are kept in this browser.`);
     updateStatus();
   };
+
+  /**
+   * Sends one group of records. When the server refuses the group, it is split in half until the
+   * refused record stands alone, so one bad record cannot hold back the rest. Stops at a connection
+   * failure, handing back what was not sent. Returns how many writes reached the server.
+   */
+  async function sendSplitting(keys: RecordKey[], notSent: RecordKey[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    if (link !== 'online') {
+      notSent.push(...keys);
+      return 0;
+    }
+    try {
+      const result = await client.applyChanges(buildChangeSet(toPending(keys), getNetworkSnapshot()));
+      meta.revision = result.revision;
+      return result.upserted + result.deleted;
+    } catch (error) {
+      if (isTransientError(error)) {
+        notSent.push(...keys);
+        goOffline(error);
+        return 0;
+      }
+      return refuseOrSplit(keys, error, notSent);
+    }
+  }
+
+  /** After a refusal: a lone record is refused by name; a group is split and each half tried again. */
+  async function refuseOrSplit(keys: RecordKey[], error: unknown, notSent: RecordKey[]): Promise<number> {
+    if (keys.length === 1) {
+      const [key] = keys;
+      refused = [
+        ...refused.filter((item) => !(item.collection === key.collection && item.id === key.id)),
+        {
+          ...key,
+          label: recordLabel(key, getNetworkSnapshot()),
+          reason: describeApiError(error),
+        },
+      ];
+      return 0;
+    }
+    const middle = Math.ceil(keys.length / 2);
+    const first = await sendSplitting(keys.slice(0, middle), notSent);
+    const second = await sendSplitting(keys.slice(middle), notSent);
+    return first + second;
+  }
 
   async function connect(): Promise<void> {
     clearTimeout(reconnectTimer);
@@ -226,7 +303,7 @@ export function createSyncEngine({
     persistMeta();
     updateStatus();
     startPolling();
-    if (!rejection && !isEmptyPending(meta.pending)) await send();
+    if (!isEmptyPending(meta.pending)) await send();
   }
 
   async function send(): Promise<void> {
@@ -242,15 +319,37 @@ export function createSyncEngine({
     try {
       result = await client.applyChanges(buildChangeSet(batch, getNetworkSnapshot()));
     } catch (error) {
-      meta.pending = mergePending(batch, meta.pending);
+      if (isTransientError(error)) {
+        meta.pending = mergePending(batch, meta.pending);
+        sending = null;
+        persistMeta();
+        handleFailure(error);
+        return;
+      }
+      // The server refused this batch: send what it will take and report the rest by name.
+      const known = new Set(refused.map((item) => `${item.collection}/${item.id}`));
+      const notSent: RecordKey[] = [];
+      await refuseOrSplit(flatten(batch), error, notSent);
+      meta.pending = mergePending(toPending(notSent), meta.pending);
       sending = null;
+      const fresh = refused.filter((item) => !known.has(`${item.collection}/${item.id}`));
+      if (fresh.length > 0) {
+        const [first] = fresh;
+        const more = fresh.length > 1 ? ` and ${fresh.length - 1} more` : '';
+        showToast(
+          'error',
+          'One Item Was Not Sent',
+          `${first.label}${more} was refused. Everything else was sent. It stays in this browser: correct it, then tap Retry in the sync menu.`,
+        );
+      }
+      lastSyncedAt = Date.now();
       persistMeta();
-      handleFailure(error);
+      updateStatus();
+      if (link === 'online') await connect();
       return;
     }
 
     sending = null;
-    rejection = null;
     const wrote = result.upserted + result.deleted > 0;
     const someoneElseWrote = expected !== null && result.revision !== (wrote ? expected + 1 : expected);
     meta.revision = result.revision;
@@ -280,8 +379,9 @@ export function createSyncEngine({
     const changed = changedIds(prev, state);
     if (isEmptyPending(changed)) return;
     meta.pending = mergePending(meta.pending, changed);
-    // New edits may fix whatever the server refused, so give it another try.
-    rejection = null;
+    // An edit may fix what the server refused, so that record gets another try.
+    const edited = new Set(flatten(changed).map((key) => `${key.collection}/${key.id}`));
+    refused = refused.filter((item) => !edited.has(`${item.collection}/${item.id}`));
     persistMeta();
     updateStatus();
     scheduleFlush();
@@ -350,7 +450,8 @@ export function createSyncEngine({
 
     retry: () =>
       exclusive(async () => {
-        rejection = null;
+        meta.pending = mergePending(meta.pending, refusedIds());
+        refused = [];
         retryAttempt = 0;
         updateStatus();
         if (link === 'online') await send();
@@ -360,7 +461,7 @@ export function createSyncEngine({
     discardLocalChanges: () =>
       exclusive(async () => {
         meta.pending = {};
-        rejection = null;
+        refused = [];
         persistMeta();
         updateStatus();
         await connect();
@@ -374,7 +475,7 @@ export function createSyncEngine({
           try {
             await client.reset();
             meta.pending = meta.pending.catalog ? { catalog: meta.pending.catalog } : {};
-            rejection = null;
+            refused = [];
             persistMeta();
             await connect();
             return 'server';
@@ -398,7 +499,7 @@ export function createSyncEngine({
           try {
             const result = await client.restore(backup);
             meta.pending = omitCollections(meta.pending, result.restored);
-            rejection = null;
+            refused = refused.filter((item) => !result.restored.includes(item.collection as CollectionName));
             persistMeta();
             await connect();
             if (backup.projectStartPoint) useNetworkStore.getState().setProjectStartPoint(backup.projectStartPoint);
@@ -416,6 +517,8 @@ export function createSyncEngine({
       }),
 
     isConnected: () => started && link === 'online',
+
+    unsentIds: () => unsent(),
   };
 }
 

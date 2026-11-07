@@ -9,8 +9,15 @@ export const CapacityDashboardModal: React.FC = () => {
   const { isCapacityDashboardOpen, setModalOpen } = useUiStore(
     useShallow((s) => ({ isCapacityDashboardOpen: s.modals.capacityDashboard, setModalOpen: s.setModalOpen })),
   );
-  const { cables, customers, splitters, faults } = useNetworkStore(
-    useShallow((s) => ({ cables: s.cables, customers: s.customers, splitters: s.splitters, faults: s.faults })),
+  const { cables, customers, splitters, faults, equipments, closures } = useNetworkStore(
+    useShallow((s) => ({
+      cables: s.cables,
+      customers: s.customers,
+      splitters: s.splitters,
+      faults: s.faults,
+      equipments: s.equipment,
+      closures: s.closures,
+    })),
   );
 
   if (!isCapacityDashboardOpen) return null;
@@ -27,6 +34,8 @@ export const CapacityDashboardModal: React.FC = () => {
   const damagedCores = cables.reduce((acc, c) => acc + c.cores.filter((core) => core.status === 'Damaged').length, 0);
 
   const coreUtilizationPct = totalCores > 0 ? Math.round((usedCores / totalCores) * 100) : 0;
+  const pct = (n: number) => (totalCores > 0 ? (n / totalCores) * 100 : 0);
+  const count = (test: (e: (typeof equipments)[number]) => boolean) => equipments.filter(test).length;
 
   const totalSplitterPorts = splitters.reduce((acc, s) => acc + s.outputPorts.length, 0);
   const usedSplitterPorts = splitters.reduce(
@@ -37,7 +46,7 @@ export const CapacityDashboardModal: React.FC = () => {
     totalSplitterPorts > 0 ? Math.round((usedSplitterPorts / totalSplitterPorts) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
@@ -48,7 +57,7 @@ export const CapacityDashboardModal: React.FC = () => {
             <div>
               <h2 className="font-bold text-sm text-slate-900">Network Capacity & Infrastructure Analytics</h2>
               <p className="text-[11px] text-slate-500">
-                Real-time inventory KPIs, fiber core utilization & subscriber density
+                Counts from saved records. No live connection.
               </p>
             </div>
           </div>
@@ -78,8 +87,10 @@ export const CapacityDashboardModal: React.FC = () => {
                 <span className="text-[10px] font-bold uppercase tracking-wider">Active Subscribers</span>
                 <Users className="w-4 h-4" />
               </div>
-              <div className="font-extrabold text-xl text-emerald-950">{customers.length} FTTH ONTs</div>
-              <div className="text-[10px] text-emerald-600 mt-0.5">100% path verified</div>
+              <div className="font-extrabold text-xl text-emerald-950">{customers.length} customers</div>
+              <div className="text-[10px] text-emerald-600 mt-0.5">
+                {customers.filter((c) => !!c.oltId).length} of {customers.length} linked to an OLT
+              </div>
             </div>
 
             <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200/80">
@@ -115,22 +126,22 @@ export const CapacityDashboardModal: React.FC = () => {
             <div className="w-full h-4 bg-slate-200 rounded-full overflow-hidden flex border border-slate-300">
               <div
                 className="bg-blue-600 h-full"
-                style={{ width: `${(usedCores / totalCores) * 100}%` }}
+                style={{ width: `${pct(usedCores)}%` }}
                 title="In Use"
               />
               <div
                 className="bg-amber-500 h-full"
-                style={{ width: `${(reservedCores / totalCores) * 100}%` }}
+                style={{ width: `${pct(reservedCores)}%` }}
                 title="Reserved"
               />
               <div
                 className="bg-rose-500 h-full"
-                style={{ width: `${(damagedCores / totalCores) * 100}%` }}
+                style={{ width: `${pct(damagedCores)}%` }}
                 title="Damaged"
               />
               <div
                 className="bg-emerald-500 h-full"
-                style={{ width: `${(availableCores / totalCores) * 100}%` }}
+                style={{ width: `${pct(availableCores)}%` }}
                 title="Available"
               />
             </div>
@@ -161,22 +172,23 @@ export const CapacityDashboardModal: React.FC = () => {
               <div className="font-bold text-xs text-slate-900 border-b pb-1.5">Central Office & Distribution Hubs</div>
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
-                  <span>OLT Central Line Terminals:</span> <span className="font-bold">2 units (Huawei & Nokia)</span>
+                  <span>OLTs:</span> <span className="font-bold">{count((e) => e.type === 'OLT')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>ODF Distribution Bays:</span> <span className="font-bold">2 units (432 ports)</span>
+                  <span>ODFs:</span> <span className="font-bold">{count((e) => e.type === 'ODF')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>FDMS Street Cabinets:</span> <span className="font-bold">3 cabinets</span>
+                  <span>FDMS Street Cabinets:</span> <span className="font-bold">{count((e) => e.type === 'FDMS')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>FDT Distribution Points:</span> <span className="font-bold">5 cabinets</span>
+                  <span>FDT Distribution Points:</span> <span className="font-bold">{count((e) => e.type === 'FDT')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>FAT Terminal Boxes:</span> <span className="font-bold">8 terminals</span>
+                  <span>Terminal Boxes:</span>{' '}
+                  <span className="font-bold">{count((e) => e.type === 'FAT' || e.type.includes('Terminal Box'))}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Joint Closures (Splice Hubs):</span> <span className="font-bold">6 closures</span>
+                  <span>Joint Closures:</span> <span className="font-bold">{closures.length}</span>
                 </div>
               </div>
             </div>
@@ -185,19 +197,22 @@ export const CapacityDashboardModal: React.FC = () => {
               <div className="font-bold text-xs text-slate-900 border-b pb-1.5">Supporting Assets & Cable TV</div>
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
-                  <span>Telecom & Electric Poles:</span> <span className="font-bold">10 poles</span>
+                  <span>Poles:</span> <span className="font-bold">{count((e) => e.type.includes('Pole'))}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Underground Chambers / Manholes:</span> <span className="font-bold">5 manholes</span>
+                  <span>Manholes and chambers:</span>{' '}
+                  <span className="font-bold">{count((e) => /Manhole|Chamber/i.test(e.type))}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>CATV Optical Nodes:</span> <span className="font-bold">3 optical nodes</span>
+                  <span>CATV Optical Nodes:</span> <span className="font-bold">{count((e) => e.type === 'CATV Optical Node')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>CATV RF Amplifiers:</span> <span className="font-bold">5 amplifiers</span>
+                  <span>CATV RF Amplifiers:</span>{' '}
+                  <span className="font-bold">{count((e) => /Amplifier/i.test(e.type))}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Coaxial Cable Spans:</span> <span className="font-bold">1 RG-11 trunk span</span>
+                  <span>Coaxial cables:</span>{' '}
+                  <span className="font-bold">{cables.filter((c) => c.cableCategory === 'Coaxial').length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Active Network Faults:</span>{' '}

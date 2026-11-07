@@ -6,9 +6,12 @@ import {
   createEquipment,
   deleteEquipment,
   deleteImageAnnotation,
+  moveEquipment,
   saveImageAnnotation,
   updateEquipmentPort,
 } from '../src/domain/equipment';
+import { polylineLengthMeters } from '../src/domain/geo';
+import { equipmentSchema } from '../src/model/schemas';
 import { cable, customer, emptyNetwork, equipment, NOW, smallNetwork, splitter } from './fixtures';
 
 const ctx = { now: NOW, actor: 'Planner User' };
@@ -41,6 +44,89 @@ describe('createEquipment', () => {
     expect(result.value.logicalPorts).toHaveLength(result.value.totalPorts!);
     expect(result.patch.equipment?.map((e) => e.id)).toEqual(['FAT-04', 'FAT-05']);
     expect(result.audit[0]).toMatchObject({ action: 'EQUIPMENT_CREATED', assetId: 'FAT-05' });
+  });
+});
+
+describe('createEquipment facts', () => {
+  it('saves no made-up area, street, manufacturer or model', () => {
+    const result = createEquipment(emptyNetwork(), { name: 'Box', type: 'FAT', lat: 17.5, lng: 78.5 }, ctx);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.area).toBe('');
+    expect(result.value.street).toBe('');
+    expect(result.value.manufacturer).toBeUndefined();
+    expect(result.value.model).toBeUndefined();
+    expect(equipmentSchema.safeParse(result.value).success).toBe(true);
+  });
+
+  it('keeps what the person gave', () => {
+    const result = createEquipment(
+      emptyNetwork(),
+      { name: 'Box', type: 'FAT', lat: 17.5, lng: 78.5, area: 'Ward 4', manufacturer: 'Syrotech' },
+      ctx,
+    );
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value).toMatchObject({ area: 'Ward 4', manufacturer: 'Syrotech' });
+  });
+});
+
+describe('moveEquipment', () => {
+  const network = () => ({
+    ...emptyNetwork(),
+    equipment: [equipment({ id: 'OLT-01', type: 'OLT', lat: 17, lng: 78 }), equipment({ id: 'FAT-01', type: 'FAT', lat: 17.01, lng: 78.01 })],
+    cables: [
+      cable({
+        id: 'C-1',
+        startEquipmentId: 'OLT-01',
+        endEquipmentId: 'FAT-01',
+        lengthMeters: 999,
+        coordinates: [
+          [17, 78],
+          [17.005, 78.005],
+          [17.01, 78.01],
+        ],
+      }),
+      cable({ id: 'C-2', coordinates: [[1, 1], [2, 2]] }),
+      cable({ id: 'C-3', endEquipmentId: 'FAT-01', coordinates: [] }),
+    ],
+  });
+
+  it('moves the matching cable end and recalculates length', () => {
+    const result = moveEquipment(network(), 'FAT-01', 17.02, 78.02);
+    if (!result.ok) throw new Error(result.error.message);
+    const next = applyPatch(network(), result.patch);
+    expect(next.equipment.find((e) => e.id === 'FAT-01')).toMatchObject({ lat: 17.02, lng: 78.02 });
+    const moved = next.cables.find((c) => c.id === 'C-1')!;
+    expect(moved.coordinates).toEqual([
+      [17, 78],
+      [17.005, 78.005],
+      [17.02, 78.02],
+    ]);
+    expect(moved.lengthMeters).toBe(Math.round(polylineLengthMeters(moved.coordinates)));
+    expect(moved.lengthMeters).not.toBe(999);
+    expect(result.value.movedCableIds).toEqual(['C-1']);
+  });
+
+  it('moves the start end when the equipment is at the start', () => {
+    const result = moveEquipment(network(), 'OLT-01', 16.99, 77.99);
+    if (!result.ok) throw new Error(result.error.message);
+    const moved = applyPatch(network(), result.patch).cables.find((c) => c.id === 'C-1')!;
+    expect(moved.coordinates[0]).toEqual([16.99, 77.99]);
+    expect(moved.coordinates.at(-1)).toEqual([17.01, 78.01]);
+  });
+
+  it('leaves unconnected cables alone and describes one change', () => {
+    const data = network();
+    const result = moveEquipment(data, 'FAT-01', 17.02, 78.02);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.patch.cables!.find((c) => c.id === 'C-2')).toBe(data.cables[1]);
+    expect(result.patch.cables!.find((c) => c.id === 'C-3')).toBe(data.cables[2]);
+    expect(result.audit).toHaveLength(1);
+    expect(result.audit[0].action).toBe('EQUIPMENT_MOVED');
+  });
+
+  it('rejects missing equipment and bad coordinates', () => {
+    expect(moveEquipment(network(), 'NOPE', 17, 78).ok).toBe(false);
+    expect(moveEquipment(network(), 'FAT-01', 95, 78).ok).toBe(false);
   });
 });
 

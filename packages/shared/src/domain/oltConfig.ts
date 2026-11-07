@@ -1,3 +1,4 @@
+import { PON_TECHNOLOGIES, type PonTechnology } from '../model/enums';
 import type { Equipment, EquipmentPort, OltConfig, PonPort } from '../model/types';
 
 /**
@@ -17,7 +18,7 @@ export function buildOltPonPorts(
     return {
       id,
       portNumber,
-      technology: olt.technology === 'EPON' ? 'EPON' : 'GPON',
+      technology: olt.technology,
       status: 'Available',
       colorName,
       connectedCustomersCount: 0,
@@ -49,7 +50,7 @@ export const STANDARD_PORT_COLORS: StandardPortColor[] = [
 export interface OltDescriptionParams {
   name: string;
   id?: string;
-  technology: 'EPON' | 'GPON';
+  technology: PonTechnology;
   manufacturer?: string;
   model?: string;
   area?: string;
@@ -86,8 +87,8 @@ export function generateOltDescription(params: OltDescriptionParams): string {
     lines.push(`OLT ID: ${params.id}`);
   }
   lines.push(`Technology: ${params.technology}`);
-  lines.push(`Manufacturer: ${params.manufacturer || 'Syrotech'}`);
-  lines.push(`Model: ${params.model || `${params.technology} ${params.totalPorts}-Port OLT`}`);
+  lines.push(`Manufacturer: ${params.manufacturer || 'Not recorded'}`);
+  lines.push(`Model: ${params.model || 'Not recorded'}`);
 
   if (params.area || params.street) {
     const loc = [params.street, params.area].filter(Boolean).join(', ');
@@ -149,7 +150,7 @@ export function generateOltDescription(params: OltDescriptionParams): string {
 export function buildOltLogicalPorts(
   oltId: string,
   totalPorts: number,
-  technology: 'EPON' | 'GPON',
+  technology: PonTechnology,
   portColorMap: Record<string, string> = {},
 ): EquipmentPort[] {
   return Array.from({ length: totalPorts }, (_, i) => {
@@ -173,7 +174,7 @@ export function buildOltLogicalPorts(
 
 /**
  * Validates OLT configuration rules according to Module 10 specifications:
- * - Technology must be EPON or GPON
+ * - Technology must be one of the PON technologies
  * - Total ports must be positive
  * - Port names must be unique
  */
@@ -184,8 +185,8 @@ export function validateOltConfig(olt: Partial<Equipment> & { oltConfig?: Partia
   const errors: string[] = [];
 
   const tech = olt.oltConfig?.technology || olt.technology;
-  if (!tech || (tech !== 'GPON' && tech !== 'EPON')) {
-    errors.push('An OLT must have a valid technology selected (EPON or GPON).');
+  if (!tech || !(PON_TECHNOLOGIES as readonly string[]).includes(tech)) {
+    errors.push(`An OLT must have a valid technology selected (${PON_TECHNOLOGIES.join(', ')}).`);
   }
 
   const portCount = olt.oltConfig?.ponPortCount || olt.totalPorts || 0;

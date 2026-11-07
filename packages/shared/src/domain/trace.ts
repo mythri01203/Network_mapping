@@ -1,13 +1,20 @@
 import type { Cable, Customer, Equipment, Fault, JointClosure, Splitter, TracePathNode } from '../model/types';
+import { hasRecordedLocation } from './defaults';
 import { polylineLengthMeters } from './geo';
+import {
+  DEFAULT_OPTICAL_SETTINGS,
+  fiberLossDb,
+  type OpticalSettings,
+  opticsClassForTechnology,
+  rxBandFor,
+} from './opticalSettings';
+import { budgetStatusForBand, rxReadingOf } from './rxReading';
 
-// Planning values for a GPON downstream (1490 nm) optical link budget.
-export const FIBER_ATTENUATION_DB_PER_KM = 0.35;
-export const CONNECTOR_LOSS_DB = 0.5;
-export const DEFAULT_SPLICE_LOSS_DB = 0.1;
-export const RX_WARNING_DBM = -25;
-export const RX_SENSITIVITY_DBM = -28;
-export const DEFAULT_TX_POWER_DBM = 3;
+/** Downstream wavelength used for the path loss shown in this trace. */
+const DOWNSTREAM_NM = 1490;
+
+export const RX_WARNING_DBM = DEFAULT_OPTICAL_SETTINGS.rx.goodFloorDbm;
+export const RX_SENSITIVITY_DBM = DEFAULT_OPTICAL_SETTINGS.rx.sensitivityDbm;
 
 export interface TraceData {
   equipment: Equipment[];
@@ -27,9 +34,15 @@ export interface TraceSummary {
   totalLengthMeters: number;
   totalLossDb: number;
   txPowerDbm?: number;
+  /** Worked out from the recorded launch and estimated loss. Absent when the launch is not recorded. */
   estimatedRxDbm?: number;
+  /** A real meter or device reading only. */
   measuredRxDbm?: number;
+  /** The customer's reading with its origin, for example "-20.1 dBm (Estimated)" or "Not recorded". */
+  rxText?: string;
   budgetStatus: BudgetStatus;
+  /** False when a link on the path is missing. Such a trace never carries a pass. */
+  pathComplete: boolean;
   downstreamCustomerCount: number;
   warnings: string[];
 }
@@ -52,12 +65,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const isTrunkCable = (c: Cable) => c.cableCategory !== 'Coaxial' && c.type !== 'Drop Fiber';
 const isCatv = (eq?: Equipment) => eq?.category === 'Cable TV Infrastructure';
 
-export const budgetStatusFor = (rx?: number): BudgetStatus => {
-  if (rx === undefined || rx === null || Number.isNaN(rx)) return 'Unknown';
-  if (rx < RX_SENSITIVITY_DBM) return 'Fail';
-  if (rx < RX_WARNING_DBM) return 'Warning';
-  return 'Pass';
-};
+/** Rates a receive level against the bands. Too much light fails too: 0 dBm is never a pass. */
+export const budgetStatusFor = (rx?: number, settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS): BudgetStatus =>
+  budgetStatusForBand(rxBandFor(rx, settings));
 
 const equipmentNodeType = (eq: Equipment): TracePathNode['type'] => {
   if (eq.type === 'OLT') return 'OLT';
@@ -85,6 +95,10 @@ const cableStatus = (c: Cable): TracePathNode['status'] => {
 
 const cableLength = (c: Cable) =>
   c.lengthMeters > 0 ? c.lengthMeters : Math.round(polylineLengthMeters(c.coordinates || []));
+
+/** Trunk cables that end at this equipment. More than one means the upstream path is ambiguous. */
+export const upstreamCandidates = (equipmentId: string, data: Pick<TraceData, 'cables'>) =>
+  data.cables.filter((c) => isTrunkCable(c) && c.endEquipmentId === equipmentId);
 
 /**
  * Walks trunk cables (end → start) from an equipment back to its serving OLT.
@@ -158,20 +172,8 @@ export function collectDownstream(equipmentId: string, data: TraceData) {
   return { cableIds: [...cableIds], equipmentIds: [...equipmentIds], customers };
 }
 
-const findPatchOdf = (olt: Equipment, data: TraceData) =>
-  data.equipment
-    .filter((e) => e.type === 'ODF')
-    .map((e) => ({
-      e,
-      d: polylineLengthMeters([
-        [olt.lat, olt.lng],
-        [e.lat, e.lng],
-      ]),
-    }))
-    .filter((x) => x.d <= 250)
-    .sort((a, b) => a.d - b.d)[0]?.e;
-
-const findPon = (olt: Equipment, feederCableId?: string, ponPortId?: string) =>
+/** The PON port explicitly linked to this feeder, or named by the record. Never a guess. */
+export const findPon = (olt: Equipment, feederCableId?: string, ponPortId?: string) =>
   olt.ponPorts?.find((p) => !!feederCableId && p.connectedFeederCableId === feederCableId) ||
   olt.ponPorts?.find((p) => !!ponPortId && p.id === ponPortId);
 
@@ -189,10 +191,27 @@ class PathBuilder {
   lengthMeters = 0;
   lossDb = 0;
   warnings: string[] = [];
+  /** Set by `gap`: a link or value on the path itself is missing. */
+  incomplete = false;
   private closureIds = new Set<string>();
   private plannedCableIds = new Set<string>();
+  private data: TraceData;
+  private settings: OpticalSettings;
 
-  constructor(private data: TraceData) {}
+  constructor(data: TraceData, settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS) {
+    this.data = data;
+    this.settings = settings;
+  }
+
+  /** Records a missing link or value. The trace stops counting as complete. */
+  gap(message: string) {
+    this.incomplete = true;
+    this.warnings.push(message);
+  }
+
+  get connectorLossDb() {
+    return this.settings.connectorPairDb;
+  }
 
   planCables(ids: (string | undefined)[]) {
     ids.forEach((id) => id && this.plannedCableIds.add(id));
@@ -203,7 +222,7 @@ class PathBuilder {
     this.nodes.push({ ...node, lossDb: round2(lossDb), cumulativeLossDb: round2(this.lossDb) });
   }
 
-  addEquipment(eq: Equipment, details: string, connectorLoss = CONNECTOR_LOSS_DB) {
+  addEquipment(eq: Equipment, details: string, connectorLoss = this.settings.connectorPairDb) {
     this.equipmentIds.push(eq.id);
     this.add(
       {
@@ -246,6 +265,7 @@ class PathBuilder {
       this.warnings.push(`Core ${coreNumber} on ${cable.id} is ${core.status}.`);
     }
     const coreText = core ? ` | Core ${core.coreNumber} (${core.colorName})` : '';
+    if (length <= 0) this.gap(`${cable.id} has no length recorded, so its loss is not counted.`);
     const coords = cable.coordinates || [];
     const mid = coords[Math.floor(coords.length / 2)];
     this.add(
@@ -253,13 +273,13 @@ class PathBuilder {
         type: nodeType,
         id: cable.id,
         name: `${label}: ${cable.name}`,
-        details: `${cable.fiberCount}F ${cable.installationType} | ${length} m${coreText}`,
+        details: `${cable.fiberCount}F ${cable.installationType ?? 'installation not recorded'} | ${length} m${coreText}`,
         status,
         lat: mid?.[0],
         lng: mid?.[1],
         lengthMeters: length,
       },
-      (length / 1000) * FIBER_ATTENUATION_DB_PER_KM,
+      fiberLossDb(length, DOWNSTREAM_NM, this.settings),
     );
     this.addClosuresOn(cable);
   }
@@ -276,7 +296,7 @@ class PathBuilder {
         const splices = cl.splices.filter((s) => s.inputCableId === cable.id || s.outputCableId === cable.id);
         const avgLoss = splices.length
           ? splices.reduce((sum, s) => sum + (s.spliceLossDb || 0), 0) / splices.length
-          : DEFAULT_SPLICE_LOSS_DB;
+          : this.settings.fusionSpliceDb;
         const bad = splices.some((s) => s.status === 'Failed' || s.status === 'Damaged');
         if (bad) this.warnings.push(`Closure ${cl.id} has failed/damaged splice records.`);
         this.add(
@@ -313,7 +333,10 @@ class PathBuilder {
   }
 
   finalize(
-    summary: Omit<TraceSummary, 'totalLengthMeters' | 'totalLossDb' | 'estimatedRxDbm' | 'budgetStatus' | 'warnings'>,
+    summary: Omit<
+      TraceSummary,
+      'totalLengthMeters' | 'totalLossDb' | 'estimatedRxDbm' | 'budgetStatus' | 'pathComplete' | 'warnings'
+    >,
     extraCableIds: string[] = [],
     extraEquipmentIds: string[] = [],
   ): TraceResult {
@@ -327,7 +350,9 @@ class PathBuilder {
         totalLengthMeters: Math.round(this.lengthMeters),
         totalLossDb: round2(this.lossDb),
         estimatedRxDbm,
-        budgetStatus: budgetStatusFor(summary.measuredRxDbm ?? estimatedRxDbm),
+        // No verdict on a broken path: a partial total would look healthier than it is.
+        budgetStatus: this.incomplete ? 'Unknown' : budgetStatusFor(summary.measuredRxDbm ?? estimatedRxDbm, this.settings),
+        pathComplete: !this.incomplete,
         warnings: this.warnings,
       },
     };
@@ -335,8 +360,9 @@ class PathBuilder {
 }
 
 /**
- * Adds OLT → PON → ODF → (cable, equipment)* hops for the route that ends at `endEquipment`.
- * `endEquipment` itself is not added unless it is the OLT. Returns the PON transmit power when known.
+ * Adds OLT → PON → (cable, equipment)* hops for the route that ends at `endEquipment`. An ODF appears
+ * only when a cable links it, never for being nearby. `endEquipment` itself is not added unless it is
+ * the OLT. Returns the PON transmit power only when it is on record.
  */
 function buildTrunk(
   builder: PathBuilder,
@@ -351,35 +377,29 @@ function buildTrunk(
 
   if (!olt) {
     if (!isCatv(endEquipment)) {
-      builder.warnings.push(`No upstream OLT found for ${endEquipment.id}; the route is incomplete.`);
+      builder.gap(`No cable links ${endEquipment.id} back to an OLT, so the route is incomplete.`);
     }
   } else {
     const feederId = hops[0]?.cable.id ?? opts.firstCableId;
     const pon = findPon(olt, feederId, opts.ponPortId);
-    txPowerDbm = pon?.txPowerDbm ?? pon?.signalDbm ?? DEFAULT_TX_POWER_DBM;
+    txPowerDbm = pon?.txPowerDbm;
     builder.addEquipment(olt, [olt.technology || 'PON', 'OLT', olt.model].filter(Boolean).join(' | '), 0);
     if (pon) {
       builder.add({
         type: 'PON',
         id: `${olt.id}/${pon.id}`,
         name: `PON Port ${pon.id}${pon.slotCardPort ? ` (${pon.slotCardPort})` : ''}`,
-        details: `Tx ${txPowerDbm >= 0 ? '+' : ''}${txPowerDbm} dBm | ${pon.connectedCustomersCount} customer(s) | ${pon.status}`,
+        details: `${txPowerDbm !== undefined ? `Tx ${txPowerDbm >= 0 ? '+' : ''}${txPowerDbm} dBm` : 'Tx not recorded'} | ${pon.connectedCustomersCount} customer(s) | ${pon.status}`,
         status: pon.status === 'Faulty' ? 'Faulty' : pon.status === 'Active' ? 'Normal' : 'Warning',
       });
     } else if (feederId) {
-      builder.warnings.push(
-        `No PON port on ${olt.id} is mapped to ${feederId}; assumed Tx +${DEFAULT_TX_POWER_DBM} dBm.`,
-      );
-    }
-    if (feederId) {
-      const odf = findPatchOdf(olt, data);
-      if (odf && odf.id !== endEquipment.id) builder.addEquipment(odf, 'Central office patching (connector pair)');
+      builder.gap(`No PON port on ${olt.id} is linked to ${feederId}.`);
     }
   }
 
   hops.forEach((hop, idx) => {
     if (idx > 0 && hop.from) {
-      builder.addEquipment(hop.from, `${hop.from.type} cross-connect | ${hop.from.area}`);
+      builder.addEquipment(hop.from, [`${hop.from.type} cross-connect`, hop.from.area].filter(Boolean).join(' | '));
       // Two-stage splitting: a splitter inside this cabinet fed by the previous cable.
       const prevCableId = hops[idx - 1].cable.id;
       const cabinet = hop.from;
@@ -395,14 +415,22 @@ function buildTrunk(
   return txPowerDbm;
 }
 
-export function traceCustomer(customer: Customer, data: TraceData): TraceResult {
-  const builder = new PathBuilder(data);
+export function traceCustomer(
+  customer: Customer,
+  data: TraceData,
+  settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
+): TraceResult {
+  const builder = new PathBuilder(data, settings);
   const fat = data.equipment.find((e) => e.id === customer.terminalBoxId);
   const splitter = data.splitters.find((s) => s.id === customer.splitterId);
   let txPowerDbm: number | undefined;
 
   if (!fat) {
-    builder.warnings.push(`Terminal box ${customer.terminalBoxId} no longer exists.`);
+    builder.gap(
+      customer.terminalBoxId
+        ? `Terminal box ${customer.terminalBoxId} no longer exists.`
+        : `${customer.name} has no terminal box linked.`,
+    );
   } else {
     const preferred = [
       customer.feederCableId,
@@ -423,7 +451,7 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
       const port = splitter.outputPorts.find((p) => p.portNumber === customer.splitterOutputPort);
       builder.addSplitter(splitter, `Output port ${customer.splitterOutputPort}`, fat, port?.status === 'Faulty');
     } else {
-      builder.warnings.push(`Splitter ${customer.splitterId} not found.`);
+      builder.gap(customer.splitterId ? `Splitter ${customer.splitterId} not found.` : `${customer.name} has no splitter recorded.`);
     }
   }
 
@@ -431,51 +459,38 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
   if (drop) {
     builder.addCable(drop, 'Drop', 'Drop Cable', customer.fiberCore);
   } else {
-    // Unmapped drop: estimate route length as 1.2× the straight-line distance.
-    const estimated = fat
-      ? Math.round(
-          polylineLengthMeters([
-            [fat.lat, fat.lng],
-            [customer.lat, customer.lng],
-          ]) * 1.2,
-        )
-      : 0;
-    builder.lengthMeters += estimated;
-    builder.add(
-      {
-        type: 'Drop',
-        id: customer.dropCableId || `${customer.id}-DROP`,
-        name: `Drop Cable${customer.dropCableId ? ` (${customer.dropCableId})` : ''}`,
-        details: `Not mapped on GIS | estimated ${estimated} m`,
-        status: 'Warning',
-        lengthMeters: estimated,
-      },
-      (estimated / 1000) * FIBER_ATTENUATION_DB_PER_KM,
-    );
-    builder.warnings.push('Drop cable is not mapped on GIS; its length was estimated.');
+    builder.add({
+      type: 'Drop',
+      id: customer.dropCableId || `${customer.id}-DROP`,
+      name: `Drop Cable${customer.dropCableId ? ` (${customer.dropCableId})` : ''}`,
+      details: 'Not on the map | length not recorded',
+      status: 'Warning',
+    });
+    builder.gap('The drop cable is not on the map, so its length and loss are not counted.');
   }
 
-  const measured = budgetStatusFor(customer.rxOpticalPowerDbm);
+  const reading = rxReadingOf(customer, settings);
+  const located = hasRecordedLocation(customer);
   builder.add(
     {
       type: 'ONT',
-      id: customer.ontSerialNumber,
-      name: `Customer ONT (${customer.ontSerialNumber})`,
-      details: `${customer.routerModel} | Measured Rx ${customer.rxOpticalPowerDbm} dBm`,
-      status: measured === 'Fail' ? 'Faulty' : measured === 'Warning' ? 'Warning' : 'Normal',
-      lat: customer.lat,
-      lng: customer.lng,
+      id: customer.ontSerialNumber || `${customer.id}-ONT`,
+      name: `Customer ONT (${customer.ontSerialNumber || 'serial not recorded'})`,
+      details: `${customer.routerModel || 'Model not recorded'} | Rx ${reading.text}`,
+      status: reading.band === 'bad' || reading.band === 'too_much_light' ? 'Faulty' : reading.band === 'low_margin' ? 'Warning' : 'Normal',
+      lat: located ? customer.lat : undefined,
+      lng: located ? customer.lng : undefined,
     },
-    CONNECTOR_LOSS_DB,
+    builder.connectorLossDb,
   );
   builder.add({
     type: 'Customer',
     id: customer.id,
     name: customer.name,
-    details: `${customer.serviceType} | ${customer.plan} | IP ${customer.ipAddress} | ${customer.status}`,
+    details: [customer.serviceType, customer.plan, customer.ipAddress && `IP ${customer.ipAddress}`, customer.status].filter(Boolean).join(' | '),
     status: customer.status === 'Active' ? 'Normal' : 'Warning',
-    lat: customer.lat,
-    lng: customer.lng,
+    lat: located ? customer.lat : undefined,
+    lng: located ? customer.lng : undefined,
   });
   builder.applyFaults(customer.id);
 
@@ -484,13 +499,18 @@ export function traceCustomer(customer: Customer, data: TraceData): TraceResult 
     targetLabel: `${customer.name} (${customer.id})`,
     kind: 'customer',
     txPowerDbm,
-    measuredRxDbm: customer.rxOpticalPowerDbm,
+    measuredRxDbm: reading.isMeasured ? reading.valueDbm : undefined,
+    rxText: reading.text,
     downstreamCustomerCount: 1,
   });
 }
 
-export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
-  const builder = new PathBuilder(data);
+export function traceEquipment(
+  eq: Equipment,
+  data: TraceData,
+  settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
+): TraceResult {
+  const builder = new PathBuilder(data, settings);
   const downstream = collectDownstream(eq.id, data);
   let txPowerDbm: number | undefined;
 
@@ -505,7 +525,7 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
         ? data.cables.find((c) => c.id === pon.connectedFeederCableId)
         : undefined;
       if (pon.connectedFeederCableId && !feeder) {
-        builder.warnings.push(`${eq.id} ${pon.id} references missing cable ${pon.connectedFeederCableId}.`);
+        builder.gap(`${eq.id} ${pon.id} references missing cable ${pon.connectedFeederCableId}.`);
       }
       builder.add({
         type: 'PON',
@@ -540,15 +560,19 @@ export function traceEquipment(eq: Equipment, data: TraceData): TraceResult {
   );
 }
 
-export function traceCable(cable: Cable, data: TraceData): TraceResult {
-  const builder = new PathBuilder(data);
+export function traceCable(
+  cable: Cable,
+  data: TraceData,
+  settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
+): TraceResult {
+  const builder = new PathBuilder(data, settings);
   const start = cable.startEquipmentId ? data.equipment.find((e) => e.id === cable.startEquipmentId) : undefined;
   const end = cable.endEquipmentId ? data.equipment.find((e) => e.id === cable.endEquipmentId) : undefined;
   const isCoax = cable.cableCategory === 'Coaxial';
   let txPowerDbm: number | undefined;
 
   if (!start) {
-    builder.warnings.push(`${cable.id} has no start equipment mapped.`);
+    builder.gap(`${cable.id} has no start equipment linked.`);
   } else if (isCoax || isCatv(start)) {
     builder.addEquipment(start, `${start.type} | cable origin`, 0);
   } else {
@@ -560,7 +584,7 @@ export function traceCable(cable: Cable, data: TraceData): TraceResult {
   const role = cableRole(cable, start?.type === 'OLT');
   builder.addCable(cable, role.type, role.label);
   if (end) builder.addEquipment(end, `${end.type} | cable termination`);
-  else builder.warnings.push(`${cable.id} has no end equipment mapped.`);
+  else builder.gap(`${cable.id} has no end equipment linked.`);
   builder.applyFaults();
 
   const downstream =
@@ -578,21 +602,41 @@ export function traceCable(cable: Cable, data: TraceData): TraceResult {
   );
 }
 
-/** Estimated downstream Rx for a new subscriber on a FAT splitter (used during provisioning). */
-export function estimateRxForSplitter(fat: Equipment, splitter: Splitter, data: TraceData, dropLengthMeters = 0) {
-  const builder = new PathBuilder(data);
+/**
+ * Estimated downstream Rx for a new subscriber on a FAT splitter (used during provisioning).
+ * `rxDbm` exists only when the path reaches an OLT port with a recorded launch power; otherwise
+ * `rxRangeDbm` gives what the class launch range allows for the same loss.
+ */
+export function estimateRxForSplitter(
+  fat: Equipment,
+  splitter: Splitter,
+  data: TraceData,
+  dropLengthMeters = 0,
+  settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
+) {
+  const builder = new PathBuilder(data, settings);
   const hops = findUpstreamChain(fat.id, data, [splitter.inputPort.connectedCableId || '']);
   const tx = buildTrunk(builder, hops, fat, data, { lastCore: splitter.inputPort.connectedCore });
   builder.addEquipment(fat, fat.type);
   builder.addSplitter(splitter, 'provisioning', fat);
-  const dropLoss = (dropLengthMeters / 1000) * FIBER_ATTENUATION_DB_PER_KM + CONNECTOR_LOSS_DB;
+  const dropLoss = fiberLossDb(dropLengthMeters, DOWNSTREAM_NM, settings) + settings.connectorPairDb;
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : undefined;
   const pon = olt ? findPon(olt, hops[0]?.cable.id) : undefined;
+  const lossDb = round2(builder.lossDb + dropLoss);
+  const opticsClass = opticsClassForTechnology(pon?.technology ?? olt?.technology);
+  const { launchMinDbm, launchMaxDbm } = settings.classes[opticsClass];
   return {
     olt,
     pon,
     hops,
-    rxDbm: tx !== undefined ? round1(tx - builder.lossDb - dropLoss) : undefined,
+    lossDb,
+    launchDbm: tx,
+    pathComplete: !builder.incomplete,
+    rxDbm: tx !== undefined ? round1(tx - lossDb) : undefined,
+    rxRangeDbm:
+      olt && launchMinDbm !== undefined && launchMaxDbm !== undefined
+        ? { min: round1(launchMinDbm - lossDb), max: round1(launchMaxDbm - lossDb) }
+        : undefined,
   };
 }
 
@@ -600,7 +644,11 @@ export function estimateRxForSplitter(fat: Equipment, splitter: Splitter, data: 
  * Resolves any searchable identifier (customer ID or ONT serial, equipment, cable, `OLT/PON` port,
  * fault, closure or splitter) to the fiber path that serves it.
  */
-export function resolveTraceTarget(targetId: string, data: TraceData): TraceResult | null {
+export function resolveTraceTarget(
+  targetId: string,
+  data: TraceData,
+  settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
+): TraceResult | null {
   const id = targetId.trim();
   if (!id) return null;
   const findEquipment = (equipmentId?: string) =>
@@ -608,13 +656,13 @@ export function resolveTraceTarget(targetId: string, data: TraceData): TraceResu
   const findCable = (cableId?: string) => (cableId ? data.cables.find((c) => c.id === cableId) : undefined);
 
   const customer = data.customers.find((c) => c.id === id || c.ontSerialNumber === id);
-  if (customer) return traceCustomer(customer, data);
+  if (customer) return traceCustomer(customer, data, settings);
 
   const eq = findEquipment(id);
-  if (eq) return traceEquipment(eq, data);
+  if (eq) return traceEquipment(eq, data, settings);
 
   const cable = findCable(id);
-  if (cable) return traceCable(cable, data);
+  if (cable) return traceCable(cable, data, settings);
 
   // "OLT-01/PON-03" or a bare PON port ID: trace the feeder leaving that PON.
   const [oltPart, ponPart] = id.includes('/') ? id.split('/') : [undefined, id];
@@ -624,29 +672,29 @@ export function resolveTraceTarget(targetId: string, data: TraceData): TraceResu
   const pon = olt?.ponPorts?.find((p) => p.id === ponPart);
   if (olt && pon) {
     const feeder = findCable(pon.connectedFeederCableId);
-    return feeder ? traceCable(feeder, data) : traceEquipment(olt, data);
+    return feeder ? traceCable(feeder, data, settings) : traceEquipment(olt, data, settings);
   }
 
   const fault = data.faults.find((f) => f.id === id);
   if (fault) {
     const faultCable = findCable(fault.affectedCableId);
-    if (faultCable) return traceCable(faultCable, data);
+    if (faultCable) return traceCable(faultCable, data, settings);
     const faultEq = findEquipment(fault.affectedEquipmentId);
-    if (faultEq) return traceEquipment(faultEq, data);
+    if (faultEq) return traceEquipment(faultEq, data, settings);
     const faultCustomer = data.customers.find((c) => fault.affectedCustomerIds.includes(c.id));
-    return faultCustomer ? traceCustomer(faultCustomer, data) : null;
+    return faultCustomer ? traceCustomer(faultCustomer, data, settings) : null;
   }
 
   const closure = data.closures.find((c) => c.id === id);
   if (closure) {
     const closureCable = findCable(closure.cableAId) ?? findCable(closure.cableBId);
-    return closureCable ? traceCable(closureCable, data) : null;
+    return closureCable ? traceCable(closureCable, data, settings) : null;
   }
 
   const splitter = data.splitters.find((s) => s.id === id);
   if (splitter) {
     const host = findEquipment(splitter.terminalBoxId);
-    return host ? traceEquipment(host, data) : null;
+    return host ? traceEquipment(host, data, settings) : null;
   }
   return null;
 }

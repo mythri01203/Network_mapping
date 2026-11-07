@@ -1,6 +1,7 @@
 /**
  * Failure-tolerant access to `localStorage`. Storage can be missing (tests), disabled (private
- * browsing) or full (quota); every caller then simply keeps working with in-memory state.
+ * browsing) or full (quota). Callers keep working with in-memory state, but a failed write is reported
+ * so no screen can claim data is saved on this device when it is not.
  */
 export const STORAGE_PREFIX = 'fiber_gis_';
 
@@ -25,16 +26,32 @@ export function readJson<T>(key: string, fallback: T, isValid: (value: unknown) 
   }
 }
 
-/** Stores `value` as JSON, or removes the key when `value` is null/undefined. */
-export function writeJson(key: string, value: unknown): void {
+type WriteListener = (key: string, ok: boolean) => void;
+const writeListeners = new Set<WriteListener>();
+
+/** Hears the outcome of every cache write. Returns a function that stops listening. */
+export function onStorageWrite(listener: WriteListener): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
+/**
+ * Stores `value` as JSON, or removes the key when `value` is null/undefined. Returns false when the
+ * write failed, usually because storage is full; listeners hear about it either way.
+ */
+export function writeJson(key: string, value: unknown): boolean {
+  let ok = true;
   try {
     const storage = browserStorage();
-    if (!storage) return;
-    if (value === null || value === undefined) storage.removeItem(storageKey(key));
-    else storage.setItem(storageKey(key), JSON.stringify(value));
+    if (storage) {
+      if (value === null || value === undefined) storage.removeItem(storageKey(key));
+      else storage.setItem(storageKey(key), JSON.stringify(value));
+    }
   } catch {
-    // Quota exceeded: the in-memory state remains authoritative for this session.
+    ok = false;
   }
+  writeListeners.forEach((listener) => listener(key, ok));
+  return ok;
 }
 
 export function removeKeys(keys: readonly string[]): void {

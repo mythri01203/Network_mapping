@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import type L from 'leaflet';
 
+import { hasRecordedLocation } from '@fibergis/shared';
+
 import { useMapStore } from '../../../stores/mapStore';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { useUiStore } from '../../../stores/uiStore';
@@ -20,7 +22,7 @@ export function CustomerLayer({ map }: { map: L.Map }) {
 
   const markers = useMemo<MarkerSpec[]>(() => {
     if (!visible || networkMode === 'CableTV') return [];
-    return customers.map((c) => ({
+    return customers.filter(hasRecordedLocation).map((c) => ({
       id: c.id,
       latlng: [c.lat, c.lng],
       icon: customerMarkerIcon(c.status, { selected: c.id === selectedId, traced: false }),

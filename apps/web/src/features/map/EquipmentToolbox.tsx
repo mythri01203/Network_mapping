@@ -200,7 +200,9 @@ export const EquipmentToolbox: React.FC = () => {
   );
 
   const catalog = useNetworkStore((s) => s.catalog) || [];
-  const [isOpen, setIsOpen] = useState(true);
+  const activeTool = useMapStore((s) => s.activeTool);
+  // Open on a desk; closed on a phone, where it would cover the whole map.
+  const [isOpen, setIsOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
@@ -245,20 +247,31 @@ export const EquipmentToolbox: React.FC = () => {
 
   const handleDragStart = (e: React.DragEvent, item: ToolboxItem) => {
     e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, item.type);
-    e.dataTransfer.setData('text/plain', JSON.stringify({ type: item.type, name: item.name, totalPorts: item.defaultPorts }));
+    const isPole = item.type.includes('Pole');
+    e.dataTransfer.setData(
+      'text/plain',
+      JSON.stringify({ type: item.type, ...(isPole ? {} : { name: item.name }), totalPorts: item.defaultPorts }),
+    );
     e.dataTransfer.effectAllowed = 'copy';
   };
 
   const handleClickItem = (item: ToolboxItem) => {
     setActiveTool('add_equipment');
     setEquipmentTypeToAdd(item.type);
+    const isPole = item.type.includes('Pole');
+    // Poles leave out the name so each one gets the next number.
     setEquipmentDraftTemplate({
-      name: item.name,
+      ...(isPole ? {} : { name: item.name }),
       totalPorts: item.defaultPorts,
       category: item.category,
       notes: item.description,
     });
-    showToast('info', `Click Map to Place ${item.name}`, 'Click anywhere on the GIS map canvas to place this equipment.');
+    if (window.innerWidth < 768) setIsOpen(false);
+    showToast(
+      'info',
+      `Tap the map to place ${isPole ? 'poles' : item.name}`,
+      isPole ? 'Each tap adds the next numbered pole. Tap Done when finished.' : 'Tap the place on the map.',
+    );
   };
 
   const handleSaveCustomEquipment = (e: React.FormEvent) => {
@@ -293,7 +306,7 @@ export const EquipmentToolbox: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="absolute top-16 left-4 z-[440] bg-slate-900/95 hover:bg-slate-800 text-white px-3 py-2 rounded-xl shadow-xl border border-slate-700/80 flex items-center gap-2 text-xs font-semibold backdrop-blur-sm transition-all animate-in fade-in"
+          className={`absolute top-2 left-2 z-[440] h-[48px] bg-slate-900/95 hover:bg-slate-800 text-white px-3 py-2 rounded-xl shadow-xl border border-slate-700/80 items-center gap-2 text-xs font-semibold backdrop-blur-sm transition-all animate-in fade-in md:top-16 md:left-4 md:h-auto ${activeTool === 'select' ? 'flex' : 'hidden md:flex'}`}
           title="Open Equipment Toolbox"
         >
           <Boxes className="w-4 h-4 text-sky-400" />
@@ -304,7 +317,7 @@ export const EquipmentToolbox: React.FC = () => {
 
       {/* Expanded Left Equipment Toolbox */}
       {isOpen && (
-        <div className="absolute top-16 left-4 z-[440] w-80 max-w-[calc(100%-2rem)] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-slate-700/80 overflow-hidden flex flex-col max-h-[82vh] animate-in fade-in slide-in-from-left-4 select-none">
+        <div className="absolute inset-x-2 top-2 bottom-[68px] z-[460] md:inset-x-auto md:bottom-auto md:top-16 md:left-4 w-auto md:w-80 max-w-[calc(100%-1rem)] md:max-w-[calc(100%-2rem)] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-slate-700/80 overflow-hidden flex flex-col max-h-[82vh] animate-in fade-in slide-in-from-left-4 select-none">
           {/* Header */}
           <div className="px-4 py-3 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/80 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -320,8 +333,9 @@ export const EquipmentToolbox: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="flex h-[48px] w-[48px] items-center justify-center md:h-auto md:w-auto md:p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               title="Collapse Toolbox"
+              aria-label="Collapse Toolbox"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -419,7 +433,7 @@ export const EquipmentToolbox: React.FC = () => {
 
       {/* Add Custom Equipment Modal */}
       {showAddCustomModal && (
-        <div className="fixed inset-0 z-[1250] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+        <div className="modal-sheet fixed inset-0 z-[1250] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col text-slate-800">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">

@@ -28,6 +28,8 @@ export function startCableFrom(equipment: Equipment): void {
   const cableType = STARTING_CABLE_TYPE[equipment.type];
   if (cableType) map.setCableTypeToDraw(cableType);
   map.setDrawingPoints([[equipment.lat, equipment.lng]]);
+  // The person chose this start, so the cable form takes it as confirmed.
+  map.setCableDraftDefaults({ ...(map.cableDraftDefaults ?? {}), startEquipmentId: equipment.id });
   map.setActiveTool('draw_cable');
-  showToast('info', `Drawing from ${equipment.name}`, 'Click the map to add route points, then press Enter to finish.');
+  showToast('info', `Drawing from ${equipment.name}`, 'Tap the map to add route points. Tap the box pin to end on it, then Finish.');
 }

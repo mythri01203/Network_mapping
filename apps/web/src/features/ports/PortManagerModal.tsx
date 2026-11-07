@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Cpu, Grid, HelpCircle, Radio, Table, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { generateLogicalPorts, type LogicalPortStatus, type PonTechnology, summarizePorts } from '@fibergis/shared';
+import { generateLogicalPorts, type LogicalPortStatus, summarizePorts } from '@fibergis/shared';
 
 import { requestConfirm } from '../../stores/confirmStore';
 import { updateEquipmentPort } from '../../stores/networkActions';
@@ -30,57 +30,36 @@ export const PortManagerModal: React.FC = () => {
   const equipment = selectedObject?.type === 'equipment' ? selectedObject.data : null;
   const rawPorts = useMemo(() => (equipment ? generateLogicalPorts(equipment) : []), [equipment]);
 
-  // Enhance ports with slotCardPort (0/1/1 format), technology, feeder, splitter, ONTs, optical telemetry
+  // Each port shows only what its own records say. A link nobody recorded shows as "Not recorded".
   const enrichedPorts = useMemo(() => {
     if (!equipment) return [];
-    const baseTech: PonTechnology = equipment.technology || 'GPON';
-
-    return rawPorts.map((port, idx) => {
-      // Calculate realistic slot/card/port e.g. 0/1/1 through 0/2/8
-      const cardNum = Math.floor(idx / 8) + 1;
-      const portOnCard = (idx % 8) + 1;
-      const slotCardPort = `0/${cardNum}/${portOnCard}`;
-
-      // Alternate tech if combo or assign per card
-      let portTech: PonTechnology = baseTech;
-      if (baseTech === 'Combo PON') {
-        portTech = cardNum === 1 ? 'GPON' : 'XGS-PON';
-      }
-
-      // Check connected feeder cable
-      const feeder = cables.find((c) => c.type === 'Main Feeder Fiber');
-      const feederName = feeder?.name || 'Trunk Feeder Cable 01';
-
-      // Connected splitter
-      const splitter = splitters[idx % (splitters.length || 1)];
-      const splitterName = splitter ? `${splitter.name} (${splitter.ratio})` : 'PLC 1:8 Splitter Cassette';
-
-      // Connected ONTs / Subscribers
-      const portCusts = customers.filter(
-        (c) => c.oltId === equipment.id && c.ponPort === `PON-${(idx + 1).toString().padStart(2, '0')}`,
-      );
-      const connectedOnts = port.status === 'Used' ? portCusts.length || 24 + (idx % 12) : 0;
-
-      // Optical Power
-      const txPowerDbm = +(3.2 + (idx % 4) * 0.2).toFixed(2);
-      const rxPowerDbm = +(-18.4 - (idx % 5) * 1.1).toFixed(2);
-      const opticalStatus = rxPowerDbm <= -26 ? 'Warning' : 'Normal';
+    return rawPorts.map((port) => {
+      const pon = equipment.ponPorts?.find((p) => p.portNumber === port.portNumber);
+      const feederId = pon?.connectedFeederCableId ?? port.connectedCableId;
+      const feeder = feederId ? cables.find((c) => c.id === feederId) : undefined;
+      const splitterId = pon?.connectedSplitterId ?? port.connectedSplitterId;
+      const splitter = splitterId ? splitters.find((s) => s.id === splitterId) : undefined;
+      const connectedOnts =
+        equipment.type === 'OLT'
+          ? customers.filter((c) => c.oltId === equipment.id && !!pon && c.ponPort === pon.id).length
+          : port.customerId
+            ? 1
+            : 0;
 
       return {
         ...port,
-        slotCardPort,
-        technology: portTech,
-        connectedFeederId: feeder?.id || 'CBL-FEEDER-01',
-        connectedFeederName: feederName,
-        connectedSplitterName: splitterName,
+        slotCardPort: port.slotCardPort || pon?.slotCardPort || pon?.id || `Port ${port.portNumber}`,
+        technology: port.technology ?? pon?.technology ?? equipment.technology,
+        connectedFeederName: feeder ? feeder.name : feederId ? `${feederId} (no longer on the map)` : 'Not recorded',
+        connectedSplitterName: splitter ? `${splitter.name} (${splitter.ratio})` : 'Not recorded',
         connectedOnts,
-        txPowerDbm,
-        rxPowerDbm,
-        opticalStatus,
-        lastUpdated: 'Live Telemetry (Just Now)',
+        txPowerDbm: pon?.txPowerDbm,
+        rxPowerDbm: pon?.rxPowerDbm,
+        lastUpdated: pon?.lastUpdated,
       };
     });
   }, [equipment, rawPorts, cables, splitters, customers]);
+  const readingOrigin = equipment?.isSampleData ? 'Sample data' : 'Saved reading';
 
   const summary = summarizePorts(rawPorts);
 
@@ -110,7 +89,7 @@ export const PortManagerModal: React.FC = () => {
   const isOlt = equipment.type === 'OLT';
 
   return (
-    <div className="fixed inset-0 z-[1150] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+    <div className="modal-sheet fixed inset-0 z-[1150] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 to-blue-950 text-white">
@@ -124,12 +103,12 @@ export const PortManagerModal: React.FC = () => {
                   {isOlt ? `OLT PON Card & Port Management · ${equipment.name}` : `Port Manager · ${equipment.name}`}
                 </h2>
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-full">
-                  {equipment.technology || 'GPON Architecture'}
+                  {equipment.technology || 'Technology not recorded'}
                 </span>
               </div>
               <p className="text-xs text-slate-300">
                 {isOlt
-                  ? 'Organized slot/card/port grid mapping feeder cables, splitters, subscriber ONTs, and optical power telemetry.'
+                  ? 'PON ports with the feeder cables, splitters and customers recorded on each. No live connection to the OLT.'
                   : 'Track logical equipment termination ports separate from physical fiber cable cores.'}
               </p>
             </div>
@@ -161,7 +140,7 @@ export const PortManagerModal: React.FC = () => {
           </div>
           <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 shadow-2xs">
             <div className="font-extrabold text-emerald-700 text-base">{summary.used}</div>
-            <div className="text-[11px] text-emerald-800 font-semibold">In Use / Online</div>
+            <div className="text-[11px] text-emerald-800 font-semibold">In use</div>
           </div>
           <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200 shadow-2xs">
             <div className="font-extrabold text-blue-700 text-base">{summary.available}</div>
@@ -272,7 +251,7 @@ export const PortManagerModal: React.FC = () => {
                                       : 'bg-purple-100 text-purple-800 border border-purple-200'
                                 }`}
                               >
-                                {port.technology}
+                                {port.technology ?? 'Not recorded'}
                               </span>
                             </td>
                             <td className="px-3 py-2">
@@ -398,7 +377,7 @@ export const PortManagerModal: React.FC = () => {
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500 font-medium">Technology:</span>
-                  <span className="font-bold text-slate-900">{selected.technology}</span>
+                  <span className="font-bold text-slate-900">{selected.technology ?? 'Not recorded'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500 font-medium">Connected Feeder:</span>
@@ -414,25 +393,34 @@ export const PortManagerModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Live Optical Power Telemetry Box */}
+              {/* Saved optical readings: there is no live connection to the OLT */}
               <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="flex items-center gap-1 font-bold text-sky-400">
-                    <Radio className="w-3.5 h-3.5" /> Optical Power Telemetry
+                    <Radio className="w-3.5 h-3.5" /> Optical power
                   </span>
-                  <span className="text-[10px] font-mono text-emerald-400">{selected.opticalStatus}</span>
+                  <span className="text-[10px] font-mono text-slate-300">No live connection</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center pt-1">
                   <div className="bg-slate-800 p-2 rounded-lg border border-slate-700">
                     <span className="text-[10px] text-slate-400 block font-semibold">Tx Power</span>
-                    <span className="font-mono text-sm font-bold text-sky-400">+{selected.txPowerDbm} dBm</span>
+                    <span className="font-mono text-sm font-bold text-sky-400">
+                      {selected.txPowerDbm !== undefined ? `${selected.txPowerDbm} dBm` : 'Not recorded'}
+                    </span>
                   </div>
                   <div className="bg-slate-800 p-2 rounded-lg border border-slate-700">
                     <span className="text-[10px] text-slate-400 block font-semibold">Rx Power</span>
-                    <span className="font-mono text-sm font-bold text-emerald-400">{selected.rxPowerDbm} dBm</span>
+                    <span className="font-mono text-sm font-bold text-emerald-400">
+                      {selected.rxPowerDbm !== undefined ? `${selected.rxPowerDbm} dBm` : 'Not recorded'}
+                    </span>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono text-center">{selected.lastUpdated}</div>
+                {(selected.txPowerDbm !== undefined || selected.rxPowerDbm !== undefined) && (
+                  <div className="text-[10px] text-slate-400 font-mono text-center">
+                    {readingOrigin}
+                    {selected.lastUpdated ? ` · read ${selected.lastUpdated}` : ''}
+                  </div>
+                )}
               </div>
 
               {/* Status Action Buttons */}
@@ -460,7 +448,7 @@ export const PortManagerModal: React.FC = () => {
 
         {/* Footer */}
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 text-xs text-slate-500">
-          <div>Verified against ITU-T G.984 and IEEE 802.3ah telecommunication specifications.</div>
+          <div>Shows saved records only. No live connection to the OLT.</div>
           <button
             onClick={() => setModalOpen('portManager', false)}
             className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition-colors"
