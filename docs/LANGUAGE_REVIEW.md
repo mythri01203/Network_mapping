@@ -2,7 +2,7 @@
 
 **Status: every Telugu and Kannada text in the field capture flow is a DRAFT.** It was written without a native speaker or a field crew. Each string is marked `reviewed: false` in `apps/web/src/i18n/messages.ts`, and nothing on screen says it has been checked. The language picker labels both languages "Draft words, being checked".
 
-Engineer screens are English only. Only the phone capture flow (`/capture`) is translated.
+Engineer screens are English only. Only the phone capture flow (`/capture`), the technician's jobs (`/jobs`, Phase 8: keys `jobs.*`) and the "Someone else changed this" choice (`conflict.*`) are translated. The Phase 8 strings are drafts written the same way, with the same review needed; "TEST", "Allow" and similar English words inside them are deliberate.
 
 ## What needs the owner
 
@@ -173,3 +173,61 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `common.tryAgain` | Try again | మళ్ళీ ప్రయత్నించండి | ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ |
 | `common.listen` | Listen | వినండి | ಕೇಳಿ |
 | `storage.failed` | Phone storage is not working. Work cannot be saved. Call your supervisor. | ఫోన్ స్టోరేజ్ పనిచేయడం లేదు. పని సేవ్ కాదు. సూపర్‌వైజర్‌కు కాల్ చేయండి. | ಫೋನ್ ಸ್ಟೋರೇಜ್ ಕೆಲಸ ಮಾಡುತ್ತಿಲ್ಲ. ಕೆಲಸ ಉಳಿಯುವುದಿಲ್ಲ. ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ. |
+| `jobs.tile` | My jobs | నా పనులు | ನನ್ನ ಕೆಲಸಗಳು |
+| `jobs.who` | Who are you? | మీరు ఎవరు? | ನೀವು ಯಾರು? |
+| `jobs.notListed` | My name is not here | నా పేరు ఇక్కడ లేదు | ನನ್ನ ಹೆಸರು ಇಲ್ಲಿ ಇಲ್ಲ |
+| `jobs.notListedHelp` | Ask the office to put your name on your job. | మీ పని మీద మీ పేరు పెట్టమని ఆఫీస్‌ను అడగండి. | ನಿಮ್ಮ ಕೆಲಸಕ್ಕೆ ನಿಮ್ಮ ಹೆಸರು ಹಾಕಲು ಆಫೀಸ್‌ಗೆ ಕೇಳಿ. |
+| `jobs.notMe` | Not me | నేను కాదు | ನಾನಲ್ಲ |
+| `jobs.none` | No jobs for you now. | ఇప్పుడు మీకు పనులు లేవు. | ಈಗ ನಿಮಗೆ ಕೆಲಸಗಳಿಲ್ಲ. |
+| `jobs.finished` | Finished jobs | పూర్తయిన పనులు | ಮುಗಿದ ಕೆಲಸಗಳು |
+| `jobs.statusNew` | New job | కొత్త పని | ಹೊಸ ಕೆಲಸ |
+| `jobs.statusStarted` | Started | మొదలైంది | ಆರಂಭವಾಗಿದೆ |
+| `jobs.statusHold` | Stopped for now | ప్రస్తుతానికి ఆపారు | ಸದ್ಯಕ್ಕೆ ನಿಲ್ಲಿಸಲಾಗಿದೆ |
+| `jobs.statusCheck` | Repair done. Check needed. | రిపేర్ అయింది. చెక్ చేయాలి. | ರಿಪೇರಿ ಆಗಿದೆ. ಪರಿಶೀಲನೆ ಬೇಕು. |
+| `jobs.statusDone` | Done | పూర్తయింది | ಮುಗಿದಿದೆ |
+| `jobs.test` | TEST job. Not real. | TEST పని. నిజం కాదు. | TEST ಕೆಲಸ. ನಿಜವಲ್ಲ. |
+| `jobs.where` | Go to: {place} | ఇక్కడికి వెళ్ళండి: {place} | ಇಲ್ಲಿಗೆ ಹೋಗಿ: {place} |
+| `jobs.navigate` | Show the way | దారి చూపించు | ದಾರಿ ತೋರಿಸಿ |
+| `jobs.start` | Start job | పని మొదలుపెట్టండి | ಕೆಲಸ ಆರಂಭಿಸಿ |
+| `jobs.photoBefore` | Photo before | ముందు ఫోటో | ಮೊದಲಿನ ಫೋಟೋ |
+| `jobs.photoAfter` | Photo after | తర్వాత ఫోటో | ನಂತರದ ಫೋಟೋ |
+| `jobs.cameraBefore` | Photo of the problem before you touch it. | తాకే ముందు సమస్య ఫోటో తీయండి. | ಮುಟ್ಟುವ ಮೊದಲು ಸಮಸ್ಯೆಯ ಫೋಟೋ ತೆಗೆಯಿರಿ. |
+| `jobs.cameraAfter` | Photo of the repair when it is finished. | రిపేర్ అయ్యాక దాని ఫోటో తీయండి. | ರಿಪೇರಿ ಮುಗಿದ ಮೇಲೆ ಅದರ ಫೋಟೋ ತೆಗೆಯಿರಿ. |
+| `jobs.cameraService` | Photo of the house device with its lights on. | లైట్లు వెలుగుతున్న ఇంటి పరికరం ఫోటో తీయండి. | ದೀಪಗಳು ಉರಿಯುತ್ತಿರುವ ಮನೆಯ ಸಾಧನದ ಫೋಟೋ ತೆಗೆಯಿರಿ. |
+| `jobs.steps` | Tap each step when it is done | ప్రతి దశ పూర్తయ్యాక దాన్ని నొక్కండి | ಪ್ರತಿ ಹಂತ ಮುಗಿದಾಗ ಅದನ್ನು ಒತ್ತಿರಿ |
+| `jobs.material` | Material used | వాడిన సామాను | ಬಳಸಿದ ಸಾಮಗ್ರಿ |
+| `jobs.materialWhat` | What did you use? | మీరు ఏమి వాడారు? | ನೀವು ಏನು ಬಳಸಿದಿರಿ? |
+| `jobs.materialHow` | How many {unit}? | ఎన్ని {unit}? | ಎಷ್ಟು {unit}? |
+| `jobs.mat.drop` | House wire | ఇంటి వైర్ | ಮನೆ ವೈರ್ |
+| `jobs.mat.connector` | Connector | కనెక్టర్ | ಕನೆಕ್ಟರ್ |
+| `jobs.mat.sleeve` | Splice sleeve | స్ప్లైస్ స్లీవ్ | ಸ್ಪ್ಲೈಸ್ ಸ್ಲೀವ್ |
+| `jobs.mat.patch` | Patch cord | ప్యాచ్ కార్డ్ | ಪ್ಯಾಚ್ ಕಾರ್ಡ್ |
+| `jobs.mat.splitter` | Splitter (divider) | స్ప్లిటర్ (విభాజకం) | ಸ್ಪ್ಲಿಟರ್ (ವಿಭಾಜಕ) |
+| `jobs.unit.m` | metres | మీటర్లు | ಮೀಟರ್ |
+| `jobs.unit.pcs` | pieces | ముక్కలు | ತುಂಡುಗಳು |
+| `jobs.note` | Add a note | నోట్ రాయండి | ಟಿಪ್ಪಣಿ ಬರೆಯಿರಿ |
+| `jobs.noteHint` | Write what you found. You can leave this out. | మీరు ఏమి చూశారో రాయండి. రాయకపోయినా పరవాలేదు. | ನೀವು ಏನು ಕಂಡಿರಿ ಎಂದು ಬರೆಯಿರಿ. ಬರೆಯದಿದ್ದರೂ ಪರವಾಗಿಲ್ಲ. |
+| `jobs.hold` | Stop for now | ప్రస్తుతానికి ఆపండి | ಸದ್ಯಕ್ಕೆ ನಿಲ್ಲಿಸಿ |
+| `jobs.resume` | Start again | మళ్ళీ మొదలుపెట్టండి | ಮತ್ತೆ ಆರಂಭಿಸಿ |
+| `jobs.repairDone` | Repair done | రిపేర్ అయింది | ರಿಪೇರಿ ಆಗಿದೆ |
+| `jobs.needAfter` | First take the photo after the repair. | ముందు రిపేర్ తర్వాత ఫోటో తీయండి. | ಮೊದಲು ರಿಪೇರಿಯ ನಂತರದ ಫೋಟೋ ತೆಗೆಯಿರಿ. |
+| `jobs.checkTitle` | Check the repair | రిపేర్‌ను చెక్ చేయండి | ರಿಪೇರಿಯನ್ನು ಪರಿಶೀಲಿಸಿ |
+| `jobs.checkReading` | Light level reading | లైట్ లెవెల్ రీడింగ్ | ಲೈಟ್ ಲೆವೆಲ್ ರೀಡಿಂಗ್ |
+| `jobs.checkPhoto` | Photo of the working device | పనిచేస్తున్న పరికరం ఫోటో | ಕೆಲಸ ಮಾಡುತ್ತಿರುವ ಸಾಧನದ ಫೋಟೋ |
+| `jobs.checkWhere` | At which house did you check? | ఏ ఇంటి దగ్గర చెక్ చేశారు? | ಯಾವ ಮನೆಯಲ್ಲಿ ಪರಿಶೀಲಿಸಿದಿರಿ? |
+| `jobs.checkSaved` | Check saved. The office will close the job. | చెక్ సేవ్ అయింది. ఆఫీస్ పనిని ముగిస్తుంది. | ಪರಿಶೀಲನೆ ಉಳಿಸಲಾಗಿದೆ. ಆಫೀಸ್ ಕೆಲಸವನ್ನು ಮುಗಿಸುತ್ತದೆ. |
+| `jobs.saved` | Saved | సేవ్ అయింది | ಉಳಿಸಲಾಗಿದೆ |
+| `jobs.backToJob` | Back to the job | పనికి తిరిగి వెళ్ళండి | ಕೆಲಸಕ್ಕೆ ಹಿಂತಿರುಗಿ |
+| `jobs.myJobs` | All my jobs | నా అన్ని పనులు | ನನ್ನ ಎಲ್ಲಾ ಕೆಲಸಗಳು |
+| `jobs.closed` | This job is finished. Call the office if something is wrong. | ఈ పని పూర్తయింది. ఏదైనా తప్పు ఉంటే ఆఫీస్‌కు కాల్ చేయండి. | ಈ ಕೆಲಸ ಮುಗಿದಿದೆ. ಏನಾದರೂ ತಪ್ಪಿದ್ದರೆ ಆಫೀಸ್‌ಗೆ ಕರೆ ಮಾಡಿ. |
+| `jobs.notSaved` | Not saved. Try again. | సేవ్ కాలేదు. మళ్ళీ ప్రయత్నించండి. | ಉಳಿಸಲಾಗಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ. |
+| `conflict.title` | Someone else changed this | ఇంకొకరు దీన్ని మార్చారు | ಬೇರೆಯವರು ಇದನ್ನು ಬದಲಾಯಿಸಿದ್ದಾರೆ |
+| `conflict.body` | While you worked, someone else changed {label}. Both versions are kept. Choose one. | మీరు పని చేస్తున్నప్పుడు ఇంకొకరు {label} మార్చారు. రెండూ దాచి ఉంచాము. ఒకటి ఎంచుకోండి. | ನೀವು ಕೆಲಸ ಮಾಡುವಾಗ ಬೇರೆಯವರು {label} ಬದಲಾಯಿಸಿದರು. ಎರಡನ್ನೂ ಉಳಿಸಲಾಗಿದೆ. ಒಂದನ್ನು ಆಯ್ಕೆಮಾಡಿ. |
+| `conflict.theirs` | Theirs (office) | వారిది (ఆఫీస్) | ಅವರದು (ಆಫೀಸ್) |
+| `conflict.mine` | Mine (this phone) | నాది (ఈ ఫోన్) | ನನ್ನದು (ಈ ಫೋನ್) |
+| `conflict.keepTheirs` | Keep theirs | వారిది ఉంచండి | ಅವರದನ್ನು ಇಡಿ |
+| `conflict.keepMine` | Keep mine | నాది ఉంచండి | ನನ್ನದನ್ನು ಇಡಿ |
+| `conflict.office` | Office decides | ఆఫీస్ నిర్ణయిస్తుంది | ಆಫೀಸ್ ನಿರ್ಧರಿಸುತ್ತದೆ |
+| `conflict.more` | {count} more changes | ఇంకా {count} మార్పులు | ಇನ್ನೂ {count} ಬದಲಾವಣೆಗಳು |
+| `conflict.deleted` | Deleted | తొలగించారు | ಅಳಿಸಲಾಗಿದೆ |
+| `conflict.kept` | Both versions are kept. The office can see them. | రెండూ దాచి ఉంచాము. ఆఫీస్ చూడగలదు. | ಎರಡನ್ನೂ ಉಳಿಸಲಾಗಿದೆ. ಆಫೀಸ್ ನೋಡಬಹುದು. |

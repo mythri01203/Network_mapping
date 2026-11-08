@@ -20,7 +20,17 @@ export const API_PREFIX = '/api/v1';
 export interface ChangeSet {
   upserts?: Partial<NetworkSnapshot>;
   deletes?: Partial<Record<CollectionName, string[]>>;
+  /**
+   * Optional per-record version checks (Phase 8): the version each upserted or deleted record had
+   * when this client last read it. If the stored version differs, someone else changed it, and the
+   * whole change set is refused with `version_conflict` and the current record. Records with no
+   * entry here are written as before (last write wins), so older clients keep working.
+   */
+  expect?: Partial<Record<CollectionName, Record<string, number>>>;
 }
+
+/** Version of each record, per collection: the network revision of the write that last stored it. */
+export type RecordVersions = Partial<Record<CollectionName, Record<string, number>>>;
 
 const collectionMap = <T extends z.ZodType>(item: (name: CollectionName) => T) =>
   z.strictObject(Object.fromEntries(COLLECTION_NAMES.map((name) => [name, z.array(item(name)).optional()])));
@@ -28,17 +38,33 @@ const collectionMap = <T extends z.ZodType>(item: (name: CollectionName) => T) =
 export const changeSetSchema = z.strictObject({
   upserts: collectionMap((name) => COLLECTION_SCHEMAS[name]).optional(),
   deletes: collectionMap(() => z.string().min(1)).optional(),
+  expect: z
+    .strictObject(Object.fromEntries(COLLECTION_NAMES.map((name) => [name, z.record(z.string().min(1), z.number().int().nonnegative()).optional()])))
+    .optional(),
 }) as unknown as z.ZodType<ChangeSet>;
 
 export interface NetworkResponse {
   revision: number;
   data: NetworkSnapshot;
+  /** Present on servers since Phase 8. Clients that ignore it keep last-write-wins behaviour. */
+  versions?: RecordVersions;
 }
 
 export interface ChangeResult {
   revision: number;
   upserted: number;
   deleted: number;
+  /** The new version of every record this change wrote. */
+  versions?: RecordVersions;
+}
+
+/** One record that changed on the server since the client read it. `record` is null when it was deleted. */
+export interface VersionConflict {
+  collection: CollectionName;
+  id: string;
+  expected: number;
+  current: number | null;
+  record: Record<string, unknown> | null;
 }
 
 export interface HealthResponse {
@@ -72,6 +98,8 @@ export interface ApiErrorBody {
   error: string;
   message: string;
   issues?: { path: string; message: string }[];
+  /** With `version_conflict`: each record someone else changed, with the version now stored. */
+  conflicts?: VersionConflict[];
 }
 
 // --- Backups -------------------------------------------------------------------------------------

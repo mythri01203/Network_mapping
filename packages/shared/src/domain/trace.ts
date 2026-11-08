@@ -1,6 +1,8 @@
 import type { Cable, Customer, Equipment, Fault, JointClosure, Splitter, TracePathNode } from '../model/types';
 import { hasRecordedLocation } from './defaults';
+import { type CorePathResult, traceCoreUpstream, traceCustomerCores } from './fiberPath';
 import { polylineLengthMeters } from './geo';
+import { calculateOpticalLossBudget, resolveSplitterLoss, type SplitterLossSpec } from './lossEngine';
 import {
   DEFAULT_OPTICAL_SETTINGS,
   fiberLossDb,
@@ -43,6 +45,8 @@ export interface TraceSummary {
   budgetStatus: BudgetStatus;
   /** False when a link on the path is missing. Such a trace never carries a pass. */
   pathComplete: boolean;
+  /** 'core' when the customer's fibers are recorded end to end; otherwise only cables were followed. */
+  level?: 'core' | 'cable';
   downstreamCustomerCount: number;
   warnings: string[];
 }
@@ -193,9 +197,13 @@ class PathBuilder {
   warnings: string[] = [];
   /** Set by `gap`: a link or value on the path itself is missing. */
   incomplete = false;
+  /** The parts the one loss calculation adds up. */
+  private connectorPairs = 0;
+  private splitterSpecs: SplitterLossSpec[] = [];
+  private spliceLossDb = 0;
   private closureIds = new Set<string>();
   private plannedCableIds = new Set<string>();
-  private data: TraceData;
+  readonly data: TraceData;
   private settings: OpticalSettings;
 
   constructor(data: TraceData, settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS) {
@@ -222,7 +230,33 @@ class PathBuilder {
     this.nodes.push({ ...node, lossDb: round2(lossDb), cumulativeLossDb: round2(this.lossDb) });
   }
 
-  addEquipment(eq: Equipment, details: string, connectorLoss = this.settings.connectorPairDb) {
+  /** Fiber length that has no hop of its own, such as a planned drop. */
+  addDistance(meters: number) {
+    this.lengthMeters += Math.max(0, meters);
+  }
+
+  /** The one loss calculation, over the same parts the hops show. */
+  totalLossDb(): number {
+    return calculateOpticalLossBudget(
+      {
+        totalDistanceMeters: this.lengthMeters,
+        wavelengthNm: DOWNSTREAM_NM,
+        splitters: this.splitterSpecs,
+        connectorsCount: this.connectorPairs,
+        recordedSpliceLossDb: round2(this.spliceLossDb),
+      },
+      this.settings,
+    ).totalLossDb;
+  }
+
+  /** One estimated connector pair. */
+  connector(): number {
+    this.connectorPairs += 1;
+    return this.settings.connectorPairDb;
+  }
+
+  addEquipment(eq: Equipment, details: string, withConnector = true) {
+    const connectorLoss = withConnector ? this.connector() : 0;
     this.equipmentIds.push(eq.id);
     this.add(
       {
@@ -239,17 +273,20 @@ class PathBuilder {
   }
 
   addSplitter(sp: Splitter, details: string, at?: Equipment, portFaulty = false) {
+    const spec: SplitterLossSpec = { ratio: sp.ratio, ...(sp.insertionLossDb > 0 ? { lossDb: sp.insertionLossDb } : {}) };
+    this.splitterSpecs.push(spec);
+    const loss = resolveSplitterLoss(spec, this.settings) ?? 0;
     this.add(
       {
         type: 'Splitter',
         id: sp.id,
         name: sp.name,
-        details: `Ratio ${sp.ratio} | ${details} | Insertion loss ${sp.insertionLossDb} dB`,
+        details: `Ratio ${sp.ratio} | ${details} | Insertion loss ${loss} dB`,
         status: sp.status === 'Faulty' || portFaulty ? 'Faulty' : sp.status === 'Maintenance' ? 'Warning' : 'Normal',
         lat: at?.lat,
         lng: at?.lng,
       },
-      sp.insertionLossDb,
+      loss,
     );
   }
 
@@ -295,8 +332,9 @@ class PathBuilder {
         this.closureIds.add(cl.id);
         const splices = cl.splices.filter((s) => s.inputCableId === cable.id || s.outputCableId === cable.id);
         const avgLoss = splices.length
-          ? splices.reduce((sum, s) => sum + (s.spliceLossDb || 0), 0) / splices.length
+          ? splices.reduce((sum, s) => sum + (s.spliceLossDb ?? this.settings.fusionSpliceDb), 0) / splices.length
           : this.settings.fusionSpliceDb;
+        this.spliceLossDb += avgLoss;
         const bad = splices.some((s) => s.status === 'Failed' || s.status === 'Damaged');
         if (bad) this.warnings.push(`Closure ${cl.id} has failed/damaged splice records.`);
         this.add(
@@ -315,7 +353,8 @@ class PathBuilder {
   }
 
   applyFaults(customerId?: string) {
-    const active = this.data.faults.filter((f) => f.status !== 'Resolved');
+    // Open, real faults only: a TEST fault never marks a real path as faulty.
+    const active = this.data.faults.filter((f) => !f.isTest && !['Resolved', 'Verified', 'Closed'].includes(f.status));
     this.nodes.forEach((n) => {
       const fault = active.find(
         (f) =>
@@ -340,15 +379,17 @@ class PathBuilder {
     extraCableIds: string[] = [],
     extraEquipmentIds: string[] = [],
   ): TraceResult {
-    const estimatedRxDbm = summary.txPowerDbm !== undefined ? round1(summary.txPowerDbm - this.lossDb) : undefined;
+    const totalLossDb = this.totalLossDb();
+    const estimatedRxDbm = summary.txPowerDbm !== undefined ? round1(summary.txPowerDbm - totalLossDb) : undefined;
     return {
       nodes: this.nodes,
       cableIds: [...new Set([...this.cableIds, ...extraCableIds])],
       equipmentIds: [...new Set([...this.equipmentIds, ...extraEquipmentIds])],
       summary: {
         ...summary,
+        level: 'cable',
         totalLengthMeters: Math.round(this.lengthMeters),
-        totalLossDb: round2(this.lossDb),
+        totalLossDb,
         estimatedRxDbm,
         // No verdict on a broken path: a partial total would look healthier than it is.
         budgetStatus: this.incomplete ? 'Unknown' : budgetStatusFor(summary.measuredRxDbm ?? estimatedRxDbm, this.settings),
@@ -383,7 +424,7 @@ function buildTrunk(
     const feederId = hops[0]?.cable.id ?? opts.firstCableId;
     const pon = findPon(olt, feederId, opts.ponPortId);
     txPowerDbm = pon?.txPowerDbm;
-    builder.addEquipment(olt, [olt.technology || 'PON', 'OLT', olt.model].filter(Boolean).join(' | '), 0);
+    builder.addEquipment(olt, [olt.technology || 'PON', 'OLT', olt.model].filter(Boolean).join(' | '), false);
     if (pon) {
       builder.add({
         type: 'PON',
@@ -481,7 +522,7 @@ export function traceCustomer(
       lat: located ? customer.lat : undefined,
       lng: located ? customer.lng : undefined,
     },
-    builder.connectorLossDb,
+    builder.connector(),
   );
   builder.add({
     type: 'Customer',
@@ -493,6 +534,11 @@ export function traceCustomer(
     lng: located ? customer.lng : undefined,
   });
   builder.applyFaults(customer.id);
+
+  // Fiber by fiber: a complete core path replaces the cable route; a broken one names its gap.
+  const core = traceCustomerCores(customer, data, { settings });
+  if (core.complete) return resultFromCorePath(customer, core, builder, settings);
+  for (const gap of core.gaps) builder.gap(`Fiber by fiber: ${gap}`);
 
   return builder.finalize({
     targetId: customer.id,
@@ -518,7 +564,7 @@ export function traceEquipment(
     builder.addEquipment(
       eq,
       `${eq.technology || 'PON'} OLT | ${downstream.customers.length} downstream customer(s)`,
-      0,
+      false,
     );
     (eq.ponPorts || []).forEach((pon) => {
       const feeder = pon.connectedFeederCableId
@@ -574,7 +620,7 @@ export function traceCable(
   if (!start) {
     builder.gap(`${cable.id} has no start equipment linked.`);
   } else if (isCoax || isCatv(start)) {
-    builder.addEquipment(start, `${start.type} | cable origin`, 0);
+    builder.addEquipment(start, `${start.type} | cable origin`, false);
   } else {
     const hops = findUpstreamChain(start.id, data);
     builder.planCables([cable.id]);
@@ -614,21 +660,60 @@ export function estimateRxForSplitter(
   dropLengthMeters = 0,
   settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS,
 ) {
+  // When the splitter input is linked to a fiber that is recorded back to a PON port, that path is
+  // the answer, including a patch through an ODF that no cable shows.
+  const input = splitter.inputPort;
+  if (input.connectedCableId && input.connectedCore) {
+    const up = traceCoreUpstream(input.connectedCableId, input.connectedCore, data, { settings });
+    if (up.complete && up.olt && up.pon) {
+      const lossDb = calculateOpticalLossBudget(
+        {
+          totalDistanceMeters: up.parts.distanceMeters + Math.max(0, dropLengthMeters),
+          wavelengthNm: DOWNSTREAM_NM,
+          splitters: [...up.parts.splitters, { ratio: splitter.ratio, ...(splitter.insertionLossDb > 0 ? { lossDb: splitter.insertionLossDb } : {}) }],
+          // The box's output adapter and the ONT, on top of the ports already on the path.
+          connectorsCount: up.parts.connectorPairs + 2,
+          recordedSpliceLossDb: up.parts.spliceLossDb,
+        },
+        settings,
+      ).totalLossDb;
+      const tx = up.pon.txPowerDbm;
+      const cls = up.pon.opticsClass ?? opticsClassForTechnology(up.pon.technology ?? up.olt.technology);
+      const range = settings.classes[cls];
+      return {
+        olt: up.olt,
+        pon: up.pon,
+        hops: findUpstreamChain(fat.id, data, [input.connectedCableId]),
+        /** OLT first, from the recorded fibers. */
+        cableIds: [...up.cableIds].reverse(),
+        lossDb,
+        launchDbm: tx,
+        pathComplete: true,
+        rxDbm: tx !== undefined ? round1(tx - lossDb) : undefined,
+        rxRangeDbm:
+          range.launchMinDbm !== undefined && range.launchMaxDbm !== undefined
+            ? { min: round1(range.launchMinDbm - lossDb), max: round1(range.launchMaxDbm - lossDb) }
+            : undefined,
+      };
+    }
+  }
   const builder = new PathBuilder(data, settings);
   const hops = findUpstreamChain(fat.id, data, [splitter.inputPort.connectedCableId || '']);
   const tx = buildTrunk(builder, hops, fat, data, { lastCore: splitter.inputPort.connectedCore });
   builder.addEquipment(fat, fat.type);
   builder.addSplitter(splitter, 'provisioning', fat);
-  const dropLoss = fiberLossDb(dropLengthMeters, DOWNSTREAM_NM, settings) + settings.connectorPairDb;
+  builder.addDistance(dropLengthMeters);
+  builder.connector();
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : undefined;
   const pon = olt ? findPon(olt, hops[0]?.cable.id) : undefined;
-  const lossDb = round2(builder.lossDb + dropLoss);
+  const lossDb = builder.totalLossDb();
   const opticsClass = opticsClassForTechnology(pon?.technology ?? olt?.technology);
   const { launchMinDbm, launchMaxDbm } = settings.classes[opticsClass];
   return {
     olt,
     pon,
     hops,
+    cableIds: hops.map((h) => h.cable.id),
     lossDb,
     launchDbm: tx,
     pathComplete: !builder.incomplete,
@@ -697,4 +782,70 @@ export function resolveTraceTarget(
     return host ? traceEquipment(host, data, settings) : null;
   }
   return null;
+}
+
+const CORE_NODE_TYPES: Record<string, TracePathNode['type']> = {
+  patch: 'Equipment',
+  odf: 'ODF',
+  splice: 'Closure',
+  splitter: 'Splitter',
+  ont: 'ONT',
+};
+
+/** A customer whose fibers are recorded end to end: the nodes and totals come from the core path. */
+function resultFromCorePath(customer: Customer, core: CorePathResult, cableBuilder: PathBuilder, settings: OpticalSettings): TraceResult {
+  const builder = new PathBuilder(cableBuilder.data, settings);
+  for (const step of core.steps) {
+    const cable = step.cableId ? builder.data.cables.find((c) => c.id === step.cableId) : undefined;
+    const status = step.status === 'broken' ? 'Faulty' : step.status === 'warning' ? 'Warning' : 'Normal';
+    if (step.kind === 'olt' && core.olt && core.pon) {
+      builder.add({ type: 'OLT', id: core.olt.id, name: core.olt.name, details: step.detail, status, lat: step.lat, lng: step.lng });
+      builder.add(
+        { type: 'PON', id: `${core.olt.id}/${core.pon.id}`, name: `PON Port ${core.pon.id}${core.pon.vendorAddress ? ` (${core.pon.vendorAddress})` : ''}`, details: step.detail, status },
+        step.lossDb ?? 0,
+      );
+      continue;
+    }
+    const type = cable ? cableRole(cable, false).type : (CORE_NODE_TYPES[step.kind] ?? 'Equipment');
+    builder.add(
+      { type, id: step.id, name: step.title, details: step.detail, status, lat: step.lat, lng: step.lng, lengthMeters: step.lengthMeters },
+      step.kind === 'cable' ? fiberLossDb(step.lengthMeters ?? 0, DOWNSTREAM_NM, settings) : (step.lossDb ?? 0),
+    );
+  }
+  const located = hasRecordedLocation(customer);
+  builder.add({
+    type: 'Customer',
+    id: customer.id,
+    name: customer.name,
+    details: [customer.serviceType, customer.plan, customer.status].filter(Boolean).join(' | '),
+    status: customer.status === 'Active' ? 'Normal' : 'Warning',
+    lat: located ? customer.lat : undefined,
+    lng: located ? customer.lng : undefined,
+  });
+  builder.applyFaults(customer.id);
+  const down = core.directions.find((d) => d.direction === 'downstream')?.budget;
+  const reading = rxReadingOf(customer, settings);
+  const measuredRxDbm = reading.isMeasured ? reading.valueDbm : undefined;
+  const estimatedRxDbm = down?.expectedRxDbm;
+  return {
+    nodes: builder.nodes,
+    cableIds: core.cableIds,
+    equipmentIds: [...new Set([...(core.olt ? [core.olt.id] : []), ...core.equipmentIds])],
+    summary: {
+      targetId: customer.id,
+      targetLabel: `${customer.name} (${customer.id})`,
+      kind: 'customer',
+      level: 'core',
+      totalLengthMeters: Math.round(core.parts.distanceMeters),
+      totalLossDb: down?.totalLossDb ?? 0,
+      txPowerDbm: core.pon?.txPowerDbm,
+      estimatedRxDbm,
+      measuredRxDbm,
+      rxText: reading.text,
+      budgetStatus: budgetStatusFor(measuredRxDbm ?? estimatedRxDbm, settings),
+      pathComplete: true,
+      downstreamCustomerCount: 1,
+      warnings: [...builder.warnings, ...core.warnings],
+    },
+  };
 }

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { type CableType, DEFAULT_OPTICAL_SETTINGS, type Equipment, type EquipmentType } from '@fibergis/shared';
+import { type CableType, DEFAULT_OPTICAL_SETTINGS, type Equipment, type EquipmentType, isFaultOpen } from '@fibergis/shared';
 
 import { currentGpsPosition, gpsFailureMessage } from '../../lib/browser';
 import { useBikerStore } from '../../stores/bikerStore';
@@ -258,10 +258,10 @@ export const BikerModePanel: React.FC = () => {
         lng: e.lng,
       })),
       ...faults
-        .filter((f) => f.status !== 'Resolved')
+        .filter(isFaultOpen)
         .map((f) => ({
           id: f.id,
-          name: `[Outage] ${f.title}`,
+          name: `${f.isTest ? '[TEST, not real]' : '[Outage]'} ${f.title}`,
           type: 'Fault Hazard',
           category: 'Faults',
           lat: f.affectedLocation.lat,

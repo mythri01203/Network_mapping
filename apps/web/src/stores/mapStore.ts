@@ -42,6 +42,9 @@ export const DEFAULT_LAYERS: Record<string, boolean> = {
   cableTv: true,
   faults: true,
   labels: true,
+  spans: true,
+  ducts: true,
+  slackLoops: true,
 };
 
 export const DEFAULT_LAYER_OPACITY: Record<string, number> = {
@@ -76,8 +79,14 @@ export interface CableDraftDefaults {
   colorHex?: string;
 }
 
+/** What the line tool is drawing. A duct is a structure: it never becomes a cable. */
+export type DrawTarget = 'cable' | 'duct';
+
 export interface MapState {
   activeTool: MapTool;
+  drawTarget: DrawTarget;
+  /** The structure a person chose as the duct's start with "Start duct here". */
+  ductStartId: string | null;
   cableDraftDefaults: CableDraftDefaults | null;
   equipmentTypeToAdd: EquipmentType | null;
   equipmentDraftTemplate: Partial<Equipment> | null;
@@ -97,6 +106,7 @@ export interface MapState {
   tileProvider: TileProvider;
 
   setActiveTool: (tool: MapTool) => void;
+  startDuct: (from: { id: string; lat: number; lng: number }) => void;
   setMovingEquipmentId: (id: string | null) => void;
   setEquipmentTypeToAdd: (type: EquipmentType | null) => void;
   setEquipmentDraftTemplate: (template: Partial<Equipment> | null) => void;
@@ -121,6 +131,8 @@ export const useMapStore = create<MapState>()(
   persist(
     (set) => ({
       activeTool: 'select',
+      drawTarget: 'cable',
+      ductStartId: null,
       cableDraftDefaults: null,
       equipmentTypeToAdd: null,
       equipmentDraftTemplate: null,
@@ -136,7 +148,21 @@ export const useMapStore = create<MapState>()(
       tileProvider: 'google_streets',
 
       // Picking any other tool ends a move, so a pin is never left draggable by accident.
-      setActiveTool: (activeTool) => set({ activeTool, movingEquipmentId: null }),
+      // Leaving the line tool also forgets a duct being drawn, so the next line is a cable again.
+      setActiveTool: (activeTool) =>
+        set({
+          activeTool,
+          movingEquipmentId: null,
+          ...(activeTool === 'draw_cable' ? {} : { drawTarget: 'cable' as const, ductStartId: null }),
+        }),
+      startDuct: (from) =>
+        set({
+          activeTool: 'draw_cable',
+          drawTarget: 'duct',
+          ductStartId: from.id,
+          drawingPoints: [[from.lat, from.lng]],
+          movingEquipmentId: null,
+        }),
       setMovingEquipmentId: (movingEquipmentId) => set({ movingEquipmentId }),
       setEquipmentTypeToAdd: (equipmentTypeToAdd) => set({ equipmentTypeToAdd }),
       setEquipmentDraftTemplate: (equipmentDraftTemplate) => set({ equipmentDraftTemplate }),
@@ -153,7 +179,8 @@ export const useMapStore = create<MapState>()(
       setLayerOpacity: (layer, opacity) =>
         set((s) => ({ layerOpacity: { ...s.layerOpacity, [layer]: Math.min(1, Math.max(0, opacity)) } })),
       setTileProvider: (tileProvider) => set({ tileProvider }),
-      resetSketches: () => set({ drawingPoints: [], measuringPoints: [], cableDraftDefaults: null }),
+      resetSketches: () =>
+        set({ drawingPoints: [], measuringPoints: [], cableDraftDefaults: null, drawTarget: 'cable', ductStartId: null }),
     }),
     {
       name: preferenceKey('map'),

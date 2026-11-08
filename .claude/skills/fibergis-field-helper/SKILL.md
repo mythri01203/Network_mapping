@@ -29,7 +29,7 @@ A printable version for workers: `docs/FIELD_WORKER_GUIDE.md`. Keep it in step w
 
 **Before the first time:** the phone asks "Use your camera?" and "Know your location?". Tap **Allow** both times. Tapped **Block** by mistake? Tap the lock next to the web address, then **Permissions**, then **Allow**. On a phone the address must start with **https**; if the screen says "This address is not secure", tell the owner (`docs/DEPLOYMENT_GUIDE.md`).
 
-**Add a pole:** 1. Tap **Add pole**. 2. Stand back, fit the whole pole in the frame, tap **Take photo**. 3. Wait for the green tick; never walk closer for it. 4. If it asks **Is it the same pole?**, tap the pole if it is, or **No, a new one**. 5. Point at the tag, or tap **No tag**. 6. Tap **Cable pole**, **Electric pole** or **Don't know**. 7. Tap **Cement**, **Iron**, **Wood** or **Don't know**. 8. Check the card, tap **Save**. Then **Next pole** goes straight to the camera. "Next pole" only remembers the order; it does not draw or claim a cable.
+**Add a pole:** 1. Tap **Add pole**. 2. Stand back, fit the whole pole in the frame, tap **Take photo**. 3. Wait for the green tick; never walk closer for it. 4. If it asks **Is it the same pole?**, tap the pole if it is, or **No, a new one**. 5. Point at the tag, or tap **No tag**. 6. Tap **Cable pole**, **Electric pole** or **Don't know**. 7. Tap **Cement**, **Iron**, **Wood** or **Don't know**. 8. Check the card, tap **Save**. Then **Next pole** goes straight to the camera. "Next pole" only remembers the order; it does not claim a cable. The office sees a dashed line between the two poles and confirms it or removes it.
 
 **Add a box:** **Add box**, photo, tag or **No tag**, **Street box**, **Joint box** or **Don't know**, **Save**.
 
@@ -47,11 +47,29 @@ A printable version for workers: `docs/FIELD_WORKER_GUIDE.md`. Keep it in step w
 
 **It works without signal:** captures save on the phone and send later. The map picture needs internet. The app itself opens offline only after one visit with signal, and only on an https address.
 
+## My jobs (technician, phone)
+
+Since Phase 8 a technician does an office job on the phone at **/jobs**: tap **My jobs** on the Field capture home. Checked only by a script at phone size with a fake camera, never by a technician or on a real phone.
+
+1. **Who are you?** Tap your name (names come from the jobs the office made). Not there: the office must put your name on the job. This is a choice on the phone, not a login.
+2. Tap the job. **TEST job. Not real.** in purple means a practice job.
+3. **Show the way** opens the bike map with real GPS. Do not touch the phone while riding.
+4. **Start job**, then the camera: **Photo before**.
+5. Tap each step when done. **Material used**: tap the picture, type how many, **Save**. **Add a note** if needed.
+6. **Photo after**, then **Repair done**.
+7. **Check the repair**: **Light level reading** (house, meter photo, digits only, **Save**; saved as measured in the field with the photo) or **Photo of the working device**.
+8. It says **Check saved. The office will close the job.** The phone never closes the job or the fault.
+
+Every save shows **Saved** and **Undo** (takes back only that one thing; the office still sees it was taken back). **Stop for now** pauses the job with a reason; **Start again** resumes. The top right box is the same **Saved on phone / Sending / Sent to office**.
+
+**Someone else changed this:** shown when the phone was offline and the office changed the same job (or any record) meanwhile. Both versions are kept. **Keep theirs**, **Keep mine**, or **Office decides** (the office then picks in **Operations**, **Changed twice**, with **Use the phone version** or **Keep the office version**).
+
 **Example.** "How do I add a pole?"
 
 > 1. On the map, tap **Equipment**.
 > 2. Find **Telecom Pole (T-Crossarm)** and tap it.
 > 3. Tap the empty map where the pole stands.
+> 4. If it asks **Is this the same one?**, a pole is already mapped there. Tap **Same one: show it** if it is that pole, or **No, add a new one** if it really is another pole.
 >
 > You will see the pole on the map, named with the next number. Keep tapping for each pole. Tap **Done** when finished.
 
@@ -117,7 +135,7 @@ You will see the customer with a line to the box. That line is the house wire. T
 **5. Check it**
 Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find it, type the name in the search bar at the top and choose it. On the right, read **SERVICE PATH**. "Not linked" means that part is missing. This is the check to trust.
 
-**Trace service path** shows more detail. It no longer guesses: any missing link is listed in red at the top and marked in the chain, and a path with a missing link shows no pass. It checks cables, not single fibers, so it still cannot prove light reaches the house. Do not send a crew based on it alone.
+**Trace service path** shows more detail. It no longer guesses: any missing link is listed in red at the top and marked in the chain, and a path with a missing link shows no pass. Under **Fiber by fiber** it says **Every fiber recorded** when the office has recorded each fiber, splice and patch from the machine to the house; then it follows that exact fiber and gives the light budget both ways. If it says **Cables only**, it names the first fiber link nobody has recorded yet, and it cannot prove light reaches the house. Do not send a crew based on it alone.
 
 **Tell them:** this only records the work on the map. **Activate Subscriber** does not turn on internet on the real machine. A light level always says where it came from: **Estimated**, **Measured**, **Sample data** or **Not recorded**. Only **Measured** is a real reading, and there is no live link to the machines.
 
@@ -125,17 +143,29 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 
 **Add any other item:** tap **Equipment**, tap the item, tap the map.
 
+**Record fibers, splices and patches (office):** tap a cable, open **Fibers**, tap **Fiber layout and colours** and choose the colour order and fibers per tube from the drum sheet. Tap a fiber to reserve or release it. Tap a closure pin and **Set up closure**, then **Splices and trays**: choose the tray, the fiber coming from the machine side and the fiber going to customers; nothing is chosen for you. Tap an ODF and add its panel, then tap a port to record the feeder fiber behind it and the patch to the OLT port. Tap a box and **Add splitter**, choosing the fiber that feeds it. A fiber already used, or a second splice on one fiber, is refused and the message says why.
+
+**Which poles carry a cable, which cables are on a pole (office):** tap the cable and read **Poles supporting this route**, or tap the pole and read **Cables on this pole**. "No cables are recorded" means nobody has recorded it yet; a cable drawn past a pole does not count. To record them, tap the cable, tap **Find poles near this line**, tick only the poles you know carry it, choose **Planned**, **Built** or **Verified on site**, and tap **Save**.
+
+**Dashed line between two poles (office):** a worker captured them one after the other with **Next pole**. Tap the line, then **Yes, built**, **Yes, planned** or **Not a span**. The same list is in **Operations**, **Field captures**, under **Spans to confirm**.
+
+**Bring in a Google Earth file (office):** open **Administration**, **Backup & KML**, tap **Import KML or KMZ (preview first)** and choose the file. For each group, say what it is, or **Do not import**, and whether it is **Already in the street** or **Only planned**. Read the list of what cannot be imported and why. Nothing is connected for you. **Undo** removes the whole import.
+
 **Move a box or pole:** tap it, open **Tools**, tap **Move this item**, then drag the pin. Its cable ends move with it, as one step you can undo. Pins cannot be dragged otherwise.
 
 **House in the wrong place, or no place:** open the customer. A yellow box says **House location not recorded**; tap **Use my GPS** or **Pick on map**.
 
-**Report a problem:** tap the bell icon at the top, or the blue **Create** button in the menu and then **Report a fault**. Then tap **Report Outage**. On a phone the bell is hidden: open the menu first.
+**Report a problem (office):** tap the bell icon at the top, or the blue **Create** button in the menu and then **Report a fault**, or **Operations** then **Faults and alarms**. The window **Faults and field work** opens. It says **No live connection**: there is no link to the real machines, so every alarm is typed by a person, comes from the field, or is a TEST. Tap **Report Outage** (it covers damage too), choose what happened and what it is on, tap **Save the report**. On a phone the bell is hidden: open the menu first.
 
-**Work orders:** open **Operations**, tap **Create Work Order**.
+**Practice with a TEST event (office):** in the same window tap **Make a TEST event**, choose a splitter, tick the customers, tap **Make TEST event**. Everything it makes says **TEST · not real**, is not counted as an outage, and is left out of reports unless **Include TEST events** is ticked.
+
+**Find the likely cause (office):** open **Suspected causes**. It says, for example, "5 of 6 customers recorded on splitter Splitter 2 are reported down (1 have no alarm)" with **low**, **medium** or **high** confidence. It is always a suspicion, never proof of a cut. A yellow box **Not recorded, so less sure** names missing links. Tap **Open a fault for this**. The fault lists the customers on recorded paths, and apart from them **May be affected, path not fully recorded**. **Who is affected?** answers the same for any cable, fiber, closure, splitter, PON port, pole or span.
+
+**Work orders (office):** in the fault, tap **Make a work order**, type the technician's name and the steps, tap **Make the work order**. Or open **Operations**, tap **Create Work Order**. A fault or work order closes only with a check: a light reading measured in the field (from **My jobs**), a photo, or **Record office check**. Without one, **Close the fault** is refused with a plain message, and the server refuses it too. The fault shows the whole **Repair, check and resolution history**.
 
 **Track a duty day:** open **Agent Tracking**. Type your name. Tap **Start Duty**. Allow location. Keep the page open. Tap **End Duty** when finished. Then tap **CSV** or **PDF** under **Daily report**.
 
-**Navigate on a bike:** open **Field Work**, then **Open Biker Mode**, or tap **Navigate** on a job. Do not touch the phone while riding. **Drop Pole Here** uses your real GPS position and says how accurate it was. With no GPS it saves nothing and says so.
+**Navigate on a bike:** open **Field Work**, then **Open Biker Mode**, or tap **Navigate** on a job (or **Show the way** in **My jobs**). Do not touch the phone while riding. **Drop Pole Here** uses your real GPS position and says how accurate it was. With no GPS it saves nothing and says so.
 
 **Fix a mistake:** tap the Undo arrow (curved arrow on the map toolbar) straight away. It does not work after you close or reload the page. While drawing, use **Undo point** for the last point.
 
@@ -149,7 +179,8 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 | Route line jumps onto a pole | The line joins anything within 30 metres | Tap **Undo point**, then tap further from that pole |
 | Customer shows "Not linked" | Added before the cable, or the cable did not join | Draw the cable to the box, then open the customer and tap **Link to OLT** |
 | Box is not in the customer form | Wrong kind of box | Use **FAT Terminal Box** or **Pole-Mounted Terminal Box** |
-| Cable does not join, thinking of using **Splice (Upstream)** | That button adds a second straight cable | Do not use it for this. Redraw the cable |
+| Cable does not join, thinking of using **Connect what feeds this** (was Splice (Upstream)) | That button adds a second straight cable | Do not use it for this. Redraw the cable |
+| Fibers show only numbers, with a dashed circle and "Blue may not be fiber 1" | Nobody has recorded the cable's colour order | Check the drum sheet. The office records it on the cable under **Fiber layout and colours**. Do not guess from the colour |
 | No location or GPS | Permission off, or no secure link | Allow location, stand under open sky. Over a plain http address that is not this computer, phones block GPS. Ask the owner |
 | Map is blank | No internet | The map pictures need internet |
 | Red "One Item Was Not Sent" | The office refused one item; everything else was sent | The item is still on this phone. Tap the cloud icon at the top to see which one. Correct it, then tap **Retry now** |
@@ -158,10 +189,14 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 | Camera shows a white screen with "Open camera" | The live camera is blocked or missing | Tap **Open camera** to use the phone's own camera app, or allow the camera (lock icon, **Permissions**) |
 | No speaker button | No voice recordings exist yet | Normal for now. Read the words, or ask a buddy |
 | Pin moved by mistake | It can only move after **Move this item** | Tap Undo straight away. The cable ends go back too |
+| **My jobs** shows "No jobs for you now" | The office has not put your name on a job, or you tapped the wrong name | Tap your name at the top, then **Not me**, and choose again. Otherwise call the office |
+| "Someone else changed this" | You worked offline and the office changed the same thing | Nothing is lost. Tap **Office decides** if unsure |
+| **Close the fault** says it cannot be closed yet | No check is recorded | The technician records a light reading or photo in **My jobs**, or the office types what it checked and taps **Record office check** |
 
 ## Honesty rules
 
 - Light levels say where they came from. **Estimated**, **Sample data** and **Not recorded** are not readings; only **Measured** is. There is no link to the real machines yet, and screens say **No live connection**
+- Alarms are typed by people, come from the field, or are **TEST**. A customer with no alarm is not proven to be working. A suspected cause is a suspicion, never proof of a cut
 - The **Cable TV** page is labelled "Example values, not your network"; only its customer names are real records
 - Names typed by staff are not verified, because there is no login
 

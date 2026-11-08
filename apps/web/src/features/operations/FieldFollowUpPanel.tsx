@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
-import { CheckCircle2, MapPin, MapPinOff } from 'lucide-react';
+import { CheckCircle2, MapPin, MapPinOff, Waypoints, X } from 'lucide-react';
 
-import { confirmFieldLocation, fieldFollowUps, type FollowUpItem, photoUrl, resolveFieldSettings } from '@fibergis/shared';
+import { confirmFieldLocation, fieldFollowUps, type FollowUpItem, photoUrl, resolveFieldSettings, type Span } from '@fibergis/shared';
 
 import { useShowOnMap } from '../../app/views';
+import { useMapStore } from '../../stores/mapStore';
 import { useNetworkStore } from '../../stores/networkStore';
+import { deleteSpan, setSpanStatus } from '../../stores/ospActions';
 import { useUiStore } from '../../stores/uiStore';
 
 const reasonText = (item: FollowUpItem) =>
@@ -37,6 +39,15 @@ export function FieldFollowUpPanel() {
 
   const confirm = (item: FollowUpItem) =>
     useNetworkStore.getState().runCommand((data) => confirmFieldLocation(data, item.collection, item.id, `${role} User`));
+
+  const spans = useNetworkStore((s) => s.spans);
+  const proposed = useMemo(() => spans.filter((s) => s.status === 'proposed'), [spans]);
+  const nameOf = (id: string) => equipment.find((e) => e.id === id)?.name ?? `${id} (missing)`;
+  const openSpan = (span: Span) => {
+    const from = equipment.find((e) => e.id === span.fromStructureId);
+    showOnMap({ type: 'span', data: span });
+    if (from) useMapStore.getState().flyTo(from.lat, from.lng, 19);
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-3" data-testid="field-follow-up">
@@ -80,6 +91,50 @@ export function FieldFollowUpPanel() {
                   <CheckCircle2 className="h-3.5 w-3.5" /> Position is right
                 </button>
               )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="pt-2">
+        <h3 className="text-sm font-bold text-slate-800">Spans to confirm</h3>
+        <p className="text-xs text-slate-600">
+          When a worker uses "Next pole", the two poles are joined by a proposed span, drawn dashed. That records the order of the
+          walk, not a cable. Confirm each one, or remove it.
+        </p>
+      </div>
+      {proposed.length === 0 ? (
+        <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-600" data-testid="proposed-spans-empty">
+          No proposed spans.
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white" data-testid="proposed-spans">
+          {proposed.map((span) => (
+            <li key={span.id} className="flex flex-wrap items-center gap-3 p-3" data-testid="proposed-span">
+              <Waypoints className="h-5 w-5 text-orange-800" />
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="font-bold text-slate-900">
+                  {nameOf(span.fromStructureId)} – {nameOf(span.toStructureId)}
+                </div>
+                <div className="text-slate-500">Captured one after the other{span.createdBy ? ` by ${span.createdBy}` : ''}</div>
+              </div>
+              <button type="button" onClick={() => openSpan(span)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500">
+                Show on map
+              </button>
+              <button
+                type="button"
+                onClick={() => setSpanStatus(span.id, 'built')}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Yes, built
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteSpan(span.id)}
+                className="flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+              >
+                <X className="h-3.5 w-3.5" /> Not a span
+              </button>
             </li>
           ))}
         </ul>

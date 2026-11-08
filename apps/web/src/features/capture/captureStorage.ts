@@ -5,6 +5,7 @@ import type {
   Equipment,
   Fault,
   FieldRxReading,
+  JobEventInput,
   PoleMaterial,
   PoleOwnerType,
   RxFields,
@@ -58,14 +59,16 @@ export type OutboxStatus = 'saved' | 'sent' | 'undone';
 /** A finished capture. Kept until the office has both the record and its photos. */
 export interface OutboxEntry {
   id: string;
-  kind: CaptureKind;
-  collection: 'equipment' | 'faults' | 'customers';
+  /** `job`: one thing a technician did on a work order (Phase 8). Its id is the event's id. */
+  kind: CaptureKind | 'job';
+  collection: 'equipment' | 'faults' | 'customers' | 'workOrders';
   recordId: string;
   /** What the worker calls it, such as "Pole-08". */
   label: string;
   record?: Equipment | Fault;
   reading?: FieldRxReading;
   previousRx?: RxFields;
+  jobEvent?: JobEventInput;
   photoIds: string[];
   status: OutboxStatus;
   savedAt: number;

@@ -10,10 +10,14 @@ import {
   sameId,
   succeed,
 } from './command';
+import { connectionUsesOf } from './connectionRules';
 import { defaultPortCount, isValidCoordinate } from './defaults';
+import { fiberCascadeForEquipment } from './fiberCommands';
 import { polylineLengthMeters } from './geo';
 import { equipmentIdPrefix, nextSequentialId, uniqueId } from './ids';
+import { cascadeAudit, ospCascadeForEquipment } from './outsidePlant';
 import { generateLogicalPorts, summarizePorts } from './ports';
+import { createSplitter } from './provisioning';
 import { isoDate } from './time';
 
 export type EquipmentDraft = Partial<Equipment> & { name: string; type: EquipmentType; lat: number; lng: number };
@@ -59,10 +63,18 @@ export function createEquipment(
     logicalPorts: draft.logicalPorts || [],
   };
   const created: Equipment = { ...base, logicalPorts: generateLogicalPorts(base) };
+  // A splitter placed with its ratio gets its port records at once: one splitter model, not two.
+  const splitterRecord =
+    /Splitter/.test(created.type) && created.splitterConfig?.ratio
+      ? createSplitter({ ...data, equipment: [...data.equipment, created] }, { terminalBoxId: created.id, ratio: created.splitterConfig.ratio }, ctx)
+      : undefined;
 
   return succeed(
     created,
-    { equipment: [...data.equipment, created] },
+    {
+      equipment: [...data.equipment, created],
+      ...(splitterRecord?.ok && splitterRecord.patch.splitters ? { splitters: splitterRecord.patch.splitters } : {}),
+    },
     {
       notice: notice('success', 'Equipment Placed', `Successfully mapped ${created.name} (${created.id})`),
       audit: [
@@ -212,25 +224,37 @@ export function deleteEquipment(data: NetworkData, id: string): CommandResult<Eq
     );
   }
 
+  const connectionUses = connectionUsesOf(data, id);
+  if (connectionUses.length > 0) {
+    return fail('Cannot Delete Equipment', `${id}: ${connectionUses.join('; ')}. Change those records first.`);
+  }
+
   const ownedSplitters = data.splitters.filter((s) => s.terminalBoxId === id);
   const splitterNote =
     ownedSplitters.length > 0 ? ` Its ${ownedSplitters.length} splitter(s) will also be removed.` : '';
+  const osp = ospCascadeForEquipment(data, id);
+  const fiber = fiberCascadeForEquipment(data, id);
   return succeed(
     target,
     {
-      equipment: data.equipment.filter((e) => e.id !== id),
+      ...osp.patch,
+      ...(fiber.closures ? { closures: fiber.closures } : {}),
+      equipment: (fiber.equipment ?? data.equipment).filter((e) => e.id !== id),
       ...(ownedSplitters.length > 0 ? { splitters: data.splitters.filter((s) => s.terminalBoxId !== id) } : {}),
     },
     {
-      confirm: `Delete equipment ${id} (${target.name})?${splitterNote} You can undo this with Ctrl+Z.`,
+      confirm: `Delete equipment ${id} (${target.name})?${splitterNote}${osp.summary ? ` ${osp.summary}` : ''}${fiber.summary ? ` ${fiber.summary}` : ''} You can undo this with Ctrl+Z.`,
       notice: notice('info', 'Equipment Deleted', `Removed ${target.name} (${id}). Press Ctrl+Z to undo.`),
       audit: [
-        {
-          action: 'EQUIPMENT_DELETED',
-          details: `Deleted ${target.type} ${id}${ownedSplitters.length ? ` and splitters ${ownedSplitters.map((s) => s.id).join(', ')}` : ''}`,
-          assetId: id,
-          assetType: 'Equipment',
-        },
+        cascadeAudit(
+          {
+            action: 'EQUIPMENT_DELETED',
+            details: `Deleted ${target.type} ${id}${ownedSplitters.length ? ` and splitters ${ownedSplitters.map((s) => s.id).join(', ')}` : ''}`,
+            assetId: id,
+            assetType: 'Equipment',
+          },
+          osp,
+        ),
       ],
     },
   );

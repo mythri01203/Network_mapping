@@ -8,6 +8,7 @@ import {
   type CatalogComponent,
   COLLECTION_NAMES,
   type CollectionName,
+  type ColorScheme,
   type CommandContext,
   type CommandResult,
   type CommandSuccess,
@@ -19,8 +20,12 @@ import {
   type NetworkPatch,
   type NetworkSnapshot,
   type OpticalSettings,
+  type OspSettings,
+  resolveColorSchemes,
   resolveOpticalSettings,
+  resolveOspSettings,
   type Setting,
+  type SyncConflict,
   uniqueId,
   type UserRole,
 } from '@fibergis/shared';
@@ -57,6 +62,16 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   gpsRoutes: 'gps_routes',
   agentTrips: 'agent_trips',
   settings: 'settings',
+  spans: 'spans',
+  attachments: 'attachments',
+  ducts: 'ducts',
+  slackLoops: 'slack_loops',
+  permissions: 'permissions',
+  onts: 'onts',
+  services: 'services',
+  buildings: 'buildings',
+  alarms: 'alarms',
+  syncConflicts: 'sync_conflicts',
 };
 
 export const MAX_AUDIT_LOGS = 500;
@@ -73,6 +88,15 @@ const DATA_KEYS = [
   'workOrders',
   'zones',
   'documents',
+  'spans',
+  'attachments',
+  'ducts',
+  'slackLoops',
+  'permissions',
+  'onts',
+  'services',
+  'buildings',
+  'alarms',
 ] as const satisfies readonly (keyof NetworkData)[];
 
 const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
@@ -81,6 +105,9 @@ const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
   customer: 'customers',
   closure: 'closures',
   fault: 'faults',
+  span: 'spans',
+  duct: 'ducts',
+  slackLoop: 'slackLoops',
 };
 
 export type Command<T> = (data: NetworkData, ctx: CommandContext) => CommandResult<T>;
@@ -126,6 +153,13 @@ export interface NetworkState extends NetworkSnapshot {
   /** Inserts or replaces one operator override. Settings sit outside undo; "Reset" removes them. */
   saveSetting: (setting: Setting) => void;
   deleteSetting: (id: string) => void;
+  /** Inserts or replaces one sync conflict record. Conflicts sit outside undo. */
+  saveSyncConflict: (conflict: SyncConflict) => void;
+  /**
+   * Writes one record as this person's own edit (or deletes it with `null`), so it is sent with
+   * the normal version check. Used when the office chooses the field version of a conflict.
+   */
+  putRecord: (collection: CollectionName, id: string, record: { id: string } | null) => void;
 }
 
 const isRecordArray = (value: unknown): boolean =>
@@ -176,12 +210,12 @@ function syncSelection(before: NetworkData, after: NetworkData): void {
   const key = SELECTION_COLLECTION[selectedObject.type];
   if (before[key] === after[key]) return;
   const id = selectedObject.data.id;
-  const match = (after[key] as { id: string }[]).find((item) => item.id === id);
+  const match = ((after[key] ?? []) as { id: string }[]).find((item) => item.id === id);
   if (match) {
     if (match !== selectedObject.data) select({ type: selectedObject.type, data: match } as SelectedObject);
     return;
   }
-  const existed = (before[key] as { id: string }[]).some((item) => item.id === id);
+  const existed = ((before[key] ?? []) as { id: string }[]).some((item) => item.id === id);
   if (existed) select(null);
 }
 
@@ -200,6 +234,24 @@ export const selectOpticalSettings = (state: Pick<NetworkSnapshot, 'settings'>):
   const records = state.settings ?? [];
   if (opticalCache?.records !== records) opticalCache = { records, merged: resolveOpticalSettings(records) };
   return opticalCache.merged;
+};
+
+let schemeCache: { records: readonly Setting[]; merged: ColorScheme[] } | null = null;
+
+/** Fiber colour schemes: the built-in ones plus the operator's (`fiber.scheme.*` settings). */
+export const selectColorSchemes = (state: Pick<NetworkSnapshot, 'settings'>): ColorScheme[] => {
+  const records = state.settings ?? [];
+  if (schemeCache?.records !== records) schemeCache = { records, merged: resolveColorSchemes(records) };
+  return schemeCache.merged;
+};
+
+let ospCache: { records: readonly Setting[]; merged: OspSettings } | null = null;
+
+/** Pole, route and length limits merged with the operator's overrides. */
+export const selectOspSettings = (state: Pick<NetworkSnapshot, 'settings'>): OspSettings => {
+  const records = state.settings ?? [];
+  if (ospCache?.records !== records) ospCache = { records, merged: resolveOspSettings(records) };
+  return ospCache.merged;
 };
 
 export const useNetworkStore = create<NetworkState>()((set, get) => {
@@ -235,6 +287,7 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       actor: `${role} User`,
       fallbackLocation: state.projectStartPoint ?? undefined,
       optical: selectOpticalSettings(state),
+      schemes: selectColorSchemes(state),
     });
     if (result.ok) return result;
     showToast(result.error.tone, result.error.title, result.error.message);
@@ -339,6 +392,22 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
 
     deleteSetting: (id) => {
       set((s) => ({ settings: s.settings.filter((item) => item.id !== id) }));
+    },
+
+    saveSyncConflict: (conflict) => {
+      set((s) => {
+        const exists = s.syncConflicts.some((c) => c.id === conflict.id);
+        return { syncConflicts: exists ? s.syncConflicts.map((c) => (c.id === conflict.id ? conflict : c)) : [conflict, ...s.syncConflicts] };
+      });
+    },
+
+    putRecord: (collection, id, record) => {
+      const state = get();
+      const list = state[collection] as readonly { id: string }[];
+      const found = list.some((r) => r.id === id);
+      const next = record ? (found ? list.map((r) => (r.id === id ? record : r)) : [...list, record]) : list.filter((r) => r.id !== id);
+      if ((DATA_KEYS as readonly string[]).includes(collection)) commit({ [collection]: next } as NetworkPatch);
+      else set({ [collection]: next } as Partial<NetworkState>);
     },
   };
 });

@@ -2,6 +2,8 @@ import React from 'react';
 import { BarChart3, Cable, Percent, Split, Users, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { isFaultOpen } from '@fibergis/shared';
+
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -217,7 +219,7 @@ export const CapacityDashboardModal: React.FC = () => {
                 <div className="flex justify-between">
                   <span>Active Network Faults:</span>{' '}
                   <span className="font-bold text-rose-600">
-                    {faults.filter((f) => f.status !== 'Resolved').length} active
+                    {faults.filter((f) => isFaultOpen(f) && !f.isTest).length} active
                   </span>
                 </div>
               </div>

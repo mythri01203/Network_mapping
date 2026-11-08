@@ -17,16 +17,27 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import { type Equipment, LOCATION_METHOD_LABELS, RX_BAND_LABELS, rxBandFor } from '@fibergis/shared';
+import { type Equipment, isOdfType, isPoleType, LOCATION_METHOD_LABELS, RX_BAND_LABELS, rxBandFor } from '@fibergis/shared';
 
 import { Badge, Button, KeyValueList } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteEquipment } from '../../stores/networkActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { hostsClosure, hostsSplitters } from '../fiber/fiberUi';
+import { ClosureLinkSection, OdfSection, PonPortSection, SplitterSection } from '../fiber/PlantSections';
+import { BuildingSection } from '../premises/BuildingSection';
 import { navigateToSite, startCableFrom } from './actions';
 import { formatDate, formatUptime, joinPresent, orNotRecorded, presentItems } from './format';
 import { OltSections } from './OltSection';
+import {
+  CablesOnPoleSection,
+  DuctsAtSection,
+  ImportInfoSection,
+  PermissionsSection,
+  PoleDetailsSection,
+  SpansSection,
+} from './osp/StructureSections';
 import { ActionList, ActionRow, InspectorLayout, InspectorSection, PortUsage } from './sections';
 
 const PORT_MANAGED_TYPES = new Set<Equipment['type']>(['OLT', 'ODF', 'FDMS', 'FDT', 'FAT']);
@@ -50,6 +61,9 @@ const withPrefix = (prefix: string, value?: string) =>
   value && (value.toLowerCase().startsWith(prefix.toLowerCase()) ? value : `${prefix} ${value}`);
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+/** Chambers and entries where ducts start and end. */
+const DUCT_ENDS = new Set(['Manhole', 'Handhole', 'Underground Chamber', 'Building Entry Point', 'Junction Point']);
 
 /** Visible on every panel whose numbers describe a type of equipment rather than this one. */
 function ExampleValuesLabel() {
@@ -355,6 +369,11 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
       }
     >
       {isOlt && <OltSections olt={equipment} detailed={detailed} />}
+      {isOlt && <PonPortSection olt={equipment} />}
+      {isOdfType(equipment.type) && <OdfSection odf={equipment} />}
+      {hostsClosure(equipment.type) && <ClosureLinkSection equipment={equipment} />}
+      {hostsSplitters(equipment.type) && <SplitterSection host={equipment} />}
+      {equipment.type === 'Building Entry Point' && <BuildingSection equipment={equipment} />}
 
       {capacity && (
         <InspectorSection title="Capacity" icon={Gauge}>
@@ -369,6 +388,17 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
       {equipment.type === 'CATV Optical Node' && <NodeOpticalPowerSection equipment={equipment} />}
       {equipment.type === 'Fiber Splice Joint' && <SpliceJointSection />}
       {equipment.type === 'Fiber Slack Loop' && <SlackLoopSection />}
+
+      {isPoleType(equipment.type) && (
+        <>
+          <CablesOnPoleSection equipment={equipment} />
+          <PoleDetailsSection equipment={equipment} />
+          <SpansSection equipment={equipment} />
+          <PermissionsSection equipment={equipment} />
+        </>
+      )}
+      {DUCT_ENDS.has(equipment.type) && <DuctsAtSection equipment={equipment} />}
+      {equipment.importInfo && <ImportInfoSection info={equipment.importInfo} />}
 
       <InspectorSection title="Details" icon={Info}>
         <KeyValueList items={details} />
@@ -397,7 +427,9 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
               icon={GitMerge}
               label="Splice records"
               hint="Fusion splices inside this closure"
-              onClick={() => setModalOpen('splicing', true)}
+              onClick={() =>
+                useUiStore.getState().openSplicing(useNetworkStore.getState().closures.find((c) => c.equipmentId === equipment.id)?.id ?? null)
+              }
             />
           )}
           {(equipment.type.includes('Splitter') ||
@@ -410,8 +442,8 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
             equipment.type === 'Fiber Joint Closure') && (
             <ActionRow
               icon={GitMerge}
-              label="Splice (Upstream)"
-              hint="Connect inbound optical feed from upstream OLT/Splitter"
+              label="Connect what feeds this"
+              hint="Draws a straight cable from what you choose"
               onClick={() => openSpliceModal(equipment)}
             />
           )}

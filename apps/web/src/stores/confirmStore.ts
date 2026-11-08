@@ -5,6 +5,8 @@ export interface ConfirmOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** A photo of the item the question is about, such as the existing pole in "Is this the same one?". */
+  imageUrl?: string;
   /** `danger` styles the confirm button for destructive actions. */
   tone?: 'default' | 'danger';
 }

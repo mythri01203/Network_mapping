@@ -54,10 +54,18 @@ export function omitCollections(pending: PendingIds, names: readonly CollectionN
   return result;
 }
 
-/** Pending ids become upserts when the record still exists locally and deletes otherwise. */
-export function buildChangeSet(pending: PendingIds, snapshot: NetworkSnapshot): ChangeSet {
+/** `collection/id`, the key the sync engine uses for one record. */
+export const recordKey = (collection: CollectionName, id: string): string => `${collection}/${id}`;
+
+/**
+ * Pending ids become upserts when the record still exists locally and deletes otherwise. With
+ * `bases` (the server version each record was edited from), the change set asks the server to
+ * refuse any record someone else changed since; records with no base are sent as before.
+ */
+export function buildChangeSet(pending: PendingIds, snapshot: NetworkSnapshot, bases: Readonly<Record<string, number>> = {}): ChangeSet {
   const upserts: Record<string, Identified[]> = {};
   const deletes: Record<string, string[]> = {};
+  const expect: Record<string, Record<string, number>> = {};
   for (const name of COLLECTION_NAMES) {
     const ids = pending[name];
     if (!ids?.length) continue;
@@ -66,12 +74,22 @@ export function buildChangeSet(pending: PendingIds, snapshot: NetworkSnapshot): 
       const record = local.get(id);
       if (record) (upserts[name] ??= []).push(record);
       else (deletes[name] ??= []).push(id);
+      const base = bases[recordKey(name, id)];
+      if (base !== undefined) (expect[name] ??= {})[id] = base;
     }
   }
   return {
     ...(Object.keys(upserts).length > 0 ? { upserts: upserts as ChangeSet['upserts'] } : {}),
     ...(Object.keys(deletes).length > 0 ? { deletes } : {}),
+    ...(Object.keys(expect).length > 0 ? { expect } : {}),
   };
+}
+
+/** Top-level fields whose values differ between two versions of a record. */
+export function changedFields(a: Record<string, unknown> | null, b: Record<string, unknown> | null): string[] {
+  if (!a || !b) return [];
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].filter((key) => !sameValue(a[key], b[key])).sort();
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Cable, Customer, Equipment, FiberTraceHop, PonPort, Splitter } from '../model/types';
 import { hasRecordedLocation } from './defaults';
+import { type CorePathResult, type CorePathStep, traceCustomerCores } from './fiberPath';
 import { polylineLengthMeters } from './geo';
 import { calculateOpticalLossBudget, type OpticalLossBudgetResult, type SplitterLossSpec } from './lossEngine';
 import {
@@ -42,6 +43,91 @@ export interface OpticalTraceResult {
   spliceRecordsCounted: number;
   /** The customer's reading, labelled with its origin. */
   rxReading?: RxReading;
+  /** The core-by-core trace for a customer. When it is complete, the hops and budget come from it. */
+  corePath?: CorePathResult;
+  /** 'core' when every fiber on the path is recorded; 'cable' when only cables could be followed. */
+  level?: 'core' | 'cable';
+}
+
+const CORE_HOP_TYPES: Record<CorePathStep['kind'], string> = {
+  olt: 'OLT',
+  patch: 'Patch',
+  odf: 'ODF',
+  cable: 'Distribution',
+  splice: 'Closure',
+  splitter: 'Splitter',
+  ont: 'ONT',
+  gap: 'Gap',
+};
+
+/** Hops and budget from a complete core-level path, at the wavelength asked for. */
+function resultFromCorePath(
+  customer: Customer,
+  core: CorePathResult,
+  data: TraceData,
+  wavelengthNm: WavelengthNm,
+  settings: OpticalSettings,
+  options: OpticalTraceOptions,
+): OpticalTraceResult {
+  let distance = 0;
+  let loss = 0;
+  const hops: FiberTraceHop[] = core.steps.map((step, i) => {
+    const cable = step.cableId ? data.cables.find((c) => c.id === step.cableId) : undefined;
+    const hopLossDb = step.kind === 'cable' ? fiberLossDb(step.lengthMeters ?? 0, wavelengthNm, settings) : (step.lossDb ?? 0);
+    distance += step.lengthMeters ?? 0;
+    loss = Math.round((loss + hopLossDb) * 100) / 100;
+    return {
+      index: i + 1,
+      id: step.id,
+      name: step.title,
+      type: cable ? hopTypeForCable(cable) : CORE_HOP_TYPES[step.kind],
+      status: step.status === 'broken' ? 'Faulty' : step.status === 'warning' ? 'Warning' : 'Normal',
+      lat: step.lat,
+      lng: step.lng,
+      ...(step.kind === 'olt' && core.pon ? { portId: core.pon.id, portName: core.pon.vendorAddress ?? core.pon.slotCardPort ?? core.pon.id } : {}),
+      coreNumber: step.core,
+      coreColorName: step.identity?.fiberColor?.name,
+      coreColorHex: step.identity?.fiberColor?.hex,
+      hopDistanceMeters: step.lengthMeters ?? 0,
+      cumulativeDistanceMeters: Math.round(distance),
+      hopLossDb,
+      cumulativeLossDb: loss,
+      details: step.detail,
+      ...(step.kind === 'splitter' ? { splitRatio: data.splitters.find((s) => s.id === step.id)?.ratio } : {}),
+    };
+  });
+  const rxReading = rxReadingOf(customer, settings);
+  const budget = calculateOpticalLossBudget(
+    {
+      totalDistanceMeters: core.parts.distanceMeters,
+      wavelengthNm,
+      splitters: core.parts.splitters,
+      connectorsCount: core.parts.connectorPairs,
+      recordedSpliceLossDb: core.parts.spliceLossDb,
+      opticsClass: options.opticsClass ?? core.opticsClass,
+      oltTxPowerDbm: options.oltTxPowerDbm ?? core.pon?.txPowerDbm,
+      measuredRxDbm: rxReading.isMeasured && wavelengthNm !== 1310 ? rxReading.valueDbm : undefined,
+    },
+    settings,
+  );
+  return {
+    targetId: customer.id,
+    targetLabel: `${customer.name} (ONT: ${customer.ontSerialNumber || 'serial not recorded'})`,
+    targetKind: 'customer',
+    customer,
+    hops,
+    budget,
+    cableIds: core.cableIds,
+    equipmentIds: [...new Set([...(core.olt ? [core.olt.id] : []), ...core.equipmentIds])],
+    warnings: [],
+    notes: [...core.warnings.map((w) => `Check: ${w}`), ...core.notes],
+    complete: true,
+    connectorPairsCounted: core.parts.connectorPairs,
+    spliceRecordsCounted: core.parts.splicesRecorded,
+    rxReading,
+    corePath: core,
+    level: 'core',
+  };
 }
 
 const cableLengthMeters = (c: Cable): number =>
@@ -85,6 +171,10 @@ export function traceOpticalPath(
 
   const settings = options.settings ?? DEFAULT_OPTICAL_SETTINGS;
   const wavelengthNm = options.wavelengthNm ?? 1490;
+  // A customer is traced fiber by fiber first. Only when that chain is complete does the result
+  // say so; otherwise the cable-level route is shown with the exact fiber gap named.
+  const corePath = customer ? traceCustomerCores(customer, data, { settings }) : undefined;
+  if (customer && corePath?.complete) return resultFromCorePath(customer, corePath, data, wavelengthNm, settings, options);
   const warnings: string[] = [];
   const notes: string[] = [];
   const hops: FiberTraceHop[] = [];
@@ -455,6 +545,9 @@ export function traceOpticalPath(
     settings,
   );
 
+  if (corePath && !corePath.complete) {
+    for (const gap of corePath.gaps) warnings.push(`Fiber by fiber: ${gap}`);
+  }
   const complete = warnings.length === 0;
   if (!complete) {
     budget.verdict = 'Incomplete';
@@ -493,5 +586,7 @@ export function traceOpticalPath(
     connectorPairsCounted: connectorPairs,
     spliceRecordsCounted: spliceRecords,
     rxReading,
+    corePath,
+    level: 'cable',
   };
 }

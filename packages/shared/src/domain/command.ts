@@ -1,12 +1,26 @@
+import type { ColorScheme } from '../fiber/colors';
 import type { NetworkSnapshot } from '../model/collections';
 import type { AuditLog, LatLng } from '../model/types';
 import type { OpticalSettings } from './opticalSettings';
+
+/** Outside-plant collections added in Phase 3. Optional so callers built before them keep working. */
+export const OSP_COLLECTIONS = ['spans', 'attachments', 'ducts', 'slackLoops', 'permissions'] as const;
+export type OspCollection = (typeof OSP_COLLECTIONS)[number];
+
+/** Customer and connection collections added in Phase 5. Optional for the same reason. */
+export const CONNECTION_COLLECTIONS = ['onts', 'services', 'buildings'] as const;
+export type ConnectionCollection = (typeof CONNECTION_COLLECTIONS)[number];
+
+/** Alarms added in Phase 8. Optional for the same reason. */
+export const FAULT_COLLECTIONS = ['alarms'] as const;
+export type FaultCollection = (typeof FAULT_COLLECTIONS)[number];
 
 /** The mutable network collections that domain commands read and patch. */
 export type NetworkData = Pick<
   NetworkSnapshot,
   'equipment' | 'cables' | 'splitters' | 'closures' | 'customers' | 'faults' | 'workOrders' | 'zones' | 'documents'
->;
+> &
+  Partial<Pick<NetworkSnapshot, OspCollection | ConnectionCollection | FaultCollection>>;
 
 /** Replacement arrays for the collections a command changed. Untouched collections are omitted. */
 export type NetworkPatch = Partial<NetworkData>;
@@ -57,6 +71,8 @@ export interface CommandContext {
   fallbackLocation?: LatLng;
   /** Optical defaults merged with the operator's overrides. Commands use the plain defaults without it. */
   optical?: OpticalSettings;
+  /** Colour schemes, built in plus the operator's. Commands use the built-in ones without it. */
+  schemes?: readonly ColorScheme[];
 }
 
 export const fail = (title: string, message: string, tone: NoticeTone = 'error'): CommandFailure => ({

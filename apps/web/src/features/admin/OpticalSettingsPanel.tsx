@@ -12,6 +12,7 @@ import { logAudit } from '../../stores/networkActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { ColorSchemesPanel } from './ColorSchemesPanel';
 
 const GROUPS: OpticalSettingGroup[] = [
   'Fiber loss',
@@ -21,6 +22,7 @@ const GROUPS: OpticalSettingGroup[] = [
   'Class budgets',
   'ONT receive levels',
   'Margins',
+  'Path checks',
 ];
 
 function SettingRow({ def }: { def: OpticalSettingDef }) {
@@ -174,6 +176,7 @@ export const OpticalSettingsPanel: React.FC = () => {
           </div>
         </section>
       ))}
+      <ColorSchemesPanel />
     </div>
   );
 };

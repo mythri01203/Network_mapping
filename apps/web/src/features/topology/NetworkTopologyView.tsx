@@ -19,12 +19,16 @@ import { useShallow } from 'zustand/react/shallow';
 import { rxReadingOf } from '@fibergis/shared';
 
 import { useOpenView } from '../../app/views';
+import { Tabs } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
 import { traceNetworkPath } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { ReconciliationPanel } from './ReconciliationPanel';
+import { ServiceTopologyPanel } from './ServiceTopologyPanel';
 
-export const NetworkTopologyView: React.FC = () => {
+/** The older picture: equipment grouped by type. It shows tiers, not recorded connections. */
+const EquipmentTiersView: React.FC = () => {
   const { equipments, customers, faults } = useNetworkStore(
     useShallow((s) => ({ equipments: s.equipment, customers: s.customers, faults: s.faults })),
   );
@@ -525,6 +529,36 @@ export const NetworkTopologyView: React.FC = () => {
           </aside>
         )}
       </div>
+    </div>
+  );
+};
+
+type TopologyTab = 'service' | 'checks' | 'tiers';
+
+/** Topology: the logical service tree from recorded links, reading and length checks, and the older type view. */
+export const NetworkTopologyView: React.FC = () => {
+  const [tab, setTab] = useState<TopologyTab>('service');
+  return (
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-slate-50">
+      <div className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-2">
+        <Tabs<TopologyTab>
+          items={[
+            { id: 'service', label: 'Service tree (from records)' },
+            { id: 'checks', label: 'Readings and lengths' },
+            { id: 'tiers', label: 'Equipment by type' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+      {tab === 'service' && <ServiceTopologyPanel />}
+      {tab === 'checks' && <ReconciliationPanel />}
+      {tab === 'tiers' && (
+        <>
+          <p className="shrink-0 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">Grouped by equipment type only. It does not show which things are connected; use the service tree for that.</p>
+          <EquipmentTiersView />
+        </>
+      )}
     </div>
   );
 };

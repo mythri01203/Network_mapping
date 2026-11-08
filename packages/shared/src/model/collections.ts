@@ -2,18 +2,28 @@ import { z } from 'zod';
 
 import {
   agentTripSchema,
+  alarmSchema,
+  attachmentSchema,
   auditLogSchema,
+  buildingSchema,
   cableSchema,
   catalogComponentSchema,
   customerSchema,
+  ductSchema,
   equipmentSchema,
   faultSchema,
   gpsRouteSchema,
   jointClosureSchema,
   networkDocumentSchema,
   networkZoneSchema,
+  ontSchema,
+  permissionSchema,
+  serviceSchema,
   settingSchema,
+  slackLoopSchema,
+  spanSchema,
   splitterSchema,
+  syncConflictSchema,
   workOrderSchema,
 } from './schemas';
 
@@ -36,6 +46,16 @@ export const COLLECTION_SCHEMAS = {
   gpsRoutes: gpsRouteSchema,
   agentTrips: agentTripSchema,
   settings: settingSchema,
+  spans: spanSchema,
+  attachments: attachmentSchema,
+  ducts: ductSchema,
+  slackLoops: slackLoopSchema,
+  permissions: permissionSchema,
+  onts: ontSchema,
+  services: serviceSchema,
+  buildings: buildingSchema,
+  alarms: alarmSchema,
+  syncConflicts: syncConflictSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

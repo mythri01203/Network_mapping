@@ -23,7 +23,7 @@ import {
 import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { UserRole } from '@fibergis/shared';
+import { isFaultOpen, type UserRole } from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import {
@@ -260,7 +260,7 @@ export const TopNavBar: React.FC = () => {
   // resetToSampleData asks for confirmation itself.
   const handleReset = () => void resetToSampleData();
 
-  const activeFaultsCount = faults.filter((f) => f.status !== 'Resolved').length;
+  const activeFaultsCount = faults.filter((f) => isFaultOpen(f) && !f.isTest).length;
   const view = VIEW_META[activeView];
   const showDropdown = open && query.trim().length > 0;
 
@@ -582,6 +582,15 @@ export const TopNavBar: React.FC = () => {
                 hint=".kml"
                 onClick={() => {
                   exportKML();
+                  close();
+                }}
+              />
+              <MenuItem
+                icon={Upload}
+                label="Import KML or KMZ…"
+                hint="preview first"
+                onClick={() => {
+                  useUiStore.getState().setModalOpen('kmlImport', true);
                   close();
                 }}
               />

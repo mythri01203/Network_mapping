@@ -32,6 +32,8 @@ export interface SyncState {
   refused: RefusedRecord[];
   /** The last write to this browser's storage failed, so "Saved" must not show. */
   cacheWriteFailed: boolean;
+  /** Records (`collection/id`) someone else changed at the same time, waiting for a person's choice. */
+  held: string[];
 }
 
 export const initialSyncState: SyncState = {
@@ -42,6 +44,7 @@ export const initialSyncState: SyncState = {
   error: null,
   refused: [],
   cacheWriteFailed: false,
+  held: [],
 };
 
 /** Read-only view of the sync engine for the UI; only the engine and storage reports write to it. */

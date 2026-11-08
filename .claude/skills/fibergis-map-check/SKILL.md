@@ -15,7 +15,7 @@ From the project root:
 node .claude/skills/fibergis-map-check/scripts/check_network.mjs
 ```
 
-This reads `http://localhost:5000/api/v1/network`. Options:
+This reads `http://localhost:5000/api/v1/network`, with a plain GET. Options:
 
 | Option | Use |
 |---|---|
@@ -46,6 +46,11 @@ Always include the limit: **passing this check does not prove the map matches th
 - Whether readings are real. It flags 0 dBm, but cannot otherwise separate estimates from measurements, since the app stores both in one field
 - Loss budgets across a whole path
 - Cable TV levels, because the data does not exist yet
+- Predicted against measured light and drawn against sheath against OTDR length per cable: the app does these (Topology, Readings and lengths), not this script
+- Whether a disconnected customer really was unplugged. It checks that their output and fiber were released and that services ended (Phase 5 rules), from the records only
+- Whether a cable is really on a pole. It checks attachment records and flags one far from the drawn line, but a missing attachment is only a note, and a cable drawn past a pole is never counted as attached
+- Whether a fault's suspected cause is right, or whether a repair really worked. It checks (Phase 8) that no device alarm is stored while no OLT is connected, that TEST is labelled TEST, that nothing is verified or closed without a check, and flags an open fault whose affected customers now have broken paths. The suspicion itself is worked out in the app from core-level paths, not here
+- Why two people changed one record. It only counts conflicts waiting for a choice; both versions are in the app under Operations, Changed twice
 
 Rule meanings, evidence and how to add rules: `references/rules.md`.
 

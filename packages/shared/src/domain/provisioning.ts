@@ -1,13 +1,16 @@
-import type { SplitterRatio } from '../model/enums';
-import type { Cable, Customer, Equipment, Splitter } from '../model/types';
-import { type CommandContext, type CommandResult, fail, type NetworkData, notice, sameId, succeed } from './command';
+import type { SplitterKind, SplitterRatio } from '../model/enums';
+import type { Cable, CoreAssignment, Customer, Equipment, Splitter, SplitterPort } from '../model/types';
+import { applyPatch, type CommandContext, type CommandResult, fail, type NetworkData, notice, sameId, succeed } from './command';
 import { buildCores, hasRecordedLocation, isValidCoordinate } from './defaults';
+import { activeAssignment, checkedFiberChange, completeCores, type SplitterInput } from './fiberCommands';
+import { coreKey, newFiberId } from './fiberIndex';
+import { traceCoreUpstream } from './fiberPath';
 import { polylineLengthMeters } from './geo';
 import { nextSequentialId } from './ids';
 import { DEFAULT_OPTICAL_SETTINGS } from './opticalSettings';
 import { setPortUsage } from './ports';
 import { isoDate } from './time';
-import { estimateRxForSplitter, findUpstreamChain } from './trace';
+import { estimateRxForSplitter } from './trace';
 
 export type CustomerDraft = Partial<Customer>;
 
@@ -20,6 +23,29 @@ export interface SplitterDraft {
   name?: string;
   terminalBoxId: string;
   ratio: SplitterRatio;
+  kind?: SplitterKind;
+  /** Unequal coupler such as "90/10". Makes a two-output splitter with a loss per output. */
+  couplerRatio?: string;
+  /** The exact fiber or upstream splitter output that feeds the input, chosen by a person. */
+  input?: SplitterInput;
+}
+
+/** Two outputs for an unequal coupler, each with its configured loss: the larger share is the through leg. */
+function couplerPorts(couplerRatio: string, ctx: CommandContext): SplitterPort[] | string {
+  const shares = couplerRatio.split('/').map((x) => Number(x.trim()));
+  if (shares.length !== 2 || shares.some((x) => !Number.isFinite(x) || x <= 0) || Math.abs(shares[0] + shares[1] - 100) > 0.5) {
+    return 'Write the coupler split as two shares that add to 100, such as 90/10.';
+  }
+  const optical = ctx.optical ?? DEFAULT_OPTICAL_SETTINGS;
+  const big = Math.max(...shares);
+  const key = `${big}/${100 - big}`;
+  const loss = optical.couplers[key];
+  return shares.map((share, i) => ({
+    portNumber: i + 1,
+    label: `${share}% leg`,
+    status: 'Available' as const,
+    ...(loss ? { lossDb: share === big ? loss.throughDb : loss.tapDb } : {}),
+  }));
 }
 
 /** Installs a splitter in a terminal box so that subscribers can be provisioned on its output ports. */
@@ -42,26 +68,49 @@ export function createSplitter(
     return fail('Duplicate Splitter ID', `Splitter ${id} already exists.`);
   }
 
-  const outputCount = Number(draft.ratio.split(':')[1]);
-  const feedCable = findUpstreamChain(terminal.id, data).at(-1)?.cable;
+  const ratio: SplitterRatio = draft.couplerRatio ? '1:2' : draft.ratio;
+  const outputCount = Number(ratio.split(':')[1]);
+  const coupler = draft.couplerRatio ? couplerPorts(draft.couplerRatio, ctx) : undefined;
+  if (typeof coupler === 'string') return fail('Coupler split', coupler);
+  // The input is linked only to what a person chose. A cable ending at the box is not proof.
+  const input = draft.input;
   const created: Splitter = {
     id,
-    name: draft.name?.trim() || `${draft.ratio} PLC Splitter (${terminal.id})`,
+    name: draft.name?.trim() || (draft.couplerRatio ? `${draft.couplerRatio} coupler (${terminal.id})` : `${ratio} PLC Splitter (${terminal.id})`),
     terminalBoxId: terminal.id,
-    ratio: draft.ratio,
-    insertionLossDb: (ctx.optical ?? DEFAULT_OPTICAL_SETTINGS).splitterDb[draft.ratio],
+    ratio,
+    insertionLossDb: draft.couplerRatio ? 0 : (ctx.optical ?? DEFAULT_OPTICAL_SETTINGS).splitterDb[ratio],
+    lossSource: 'Settings default (proposed). Replace with the datasheet value.',
+    kind: draft.kind ?? (draft.couplerRatio ? 'FBT' : 'PLC'),
+    ...(draft.couplerRatio ? { couplerRatio: draft.couplerRatio } : {}),
     status: 'Active',
-    inputPort: { id: `${id}-IN`, connectedCableId: feedCable?.id },
-    outputPorts: Array.from({ length: outputCount }, (_, i) => ({
-      portNumber: i + 1,
-      label: `OUT-${String(i + 1).padStart(2, '0')}`,
-      status: 'Available' as const,
-    })),
+    installedAt: isoDate(ctx.now),
+    inputPort: {
+      id: `${id}-IN`,
+      ...(input && 'cableId' in input ? { connectedCableId: input.cableId, connectedCore: input.core } : {}),
+      ...(input && 'splitterId' in input ? { connectedSplitterId: input.splitterId, connectedSplitterPort: input.port } : {}),
+    },
+    outputPorts:
+      coupler ??
+      Array.from({ length: outputCount }, (_, i) => ({
+        portNumber: i + 1,
+        label: `OUT-${String(i + 1).padStart(2, '0')}`,
+        status: 'Available' as const,
+      })),
   };
-
-  return succeed(
+  const splitters = [
+    ...data.splitters.map((s) =>
+      input && 'splitterId' in input && s.id === input.splitterId
+        ? { ...s, outputPorts: s.outputPorts.map((p) => (p.portNumber === input.port ? { ...p, status: 'Occupied' as const } : p)) }
+        : s,
+    ),
     created,
-    { splitters: [...data.splitters, created] },
+  ];
+
+  return checkedFiberChange(
+    data,
+    { splitters },
+    created,
     {
       notice: notice('success', 'Splitter Installed', `Added ${created.ratio} splitter ${id} to ${terminal.id}.`),
       audit: [
@@ -73,6 +122,7 @@ export function createSplitter(
         },
       ],
     },
+    ctx,
   );
 }
 
@@ -202,6 +252,19 @@ export function provisionCustomer(
             connectedToEquipmentId: fat.id,
             connectedPort: `${splitter.id}/OUT-${port.portNumber}`,
             remarks: `Drop to ${id}`,
+            assignments: [
+              {
+                id: newFiberId('CA'),
+                kind: 'in_use' as const,
+                use: `Customer ${id}`,
+                source: `${splitter.id} output ${port.portNumber}`,
+                destination: `ONT of ${name}`,
+                customerId: id,
+                effectiveFrom: isoDate(ctx.now),
+                createdAt: (ctx.now ?? new Date()).toISOString(),
+                ...(ctx.actor ? { createdBy: ctx.actor } : {}),
+              },
+            ],
           }
         : core,
     ),
@@ -210,8 +273,8 @@ export function provisionCustomer(
 
   const optical = ctx.optical ?? DEFAULT_OPTICAL_SETTINGS;
   const estimate = estimateRxForSplitter(fat, splitter, data, dropLength, optical);
-  const feederHop = estimate.hops[0];
-  const distributionHop = estimate.hops.length > 1 ? estimate.hops[estimate.hops.length - 1] : undefined;
+  const feederId = estimate.cableIds[0];
+  const distributionId = estimate.cableIds.length > 1 ? estimate.cableIds[estimate.cableIds.length - 1] : undefined;
 
   const customer: Customer = {
     id,
@@ -233,8 +296,8 @@ export function provisionCustomer(
     installationDate: isoDate(ctx.now),
     oltId: draft.oltId || estimate.olt?.id || '',
     ponPort: draft.ponPort || estimate.pon?.id || '',
-    feederCableId: draft.feederCableId || feederHop?.cable.id || '',
-    distributionCableId: draft.distributionCableId || distributionHop?.cable.id || feederHop?.cable.id || '',
+    feederCableId: draft.feederCableId || feederId || '',
+    distributionCableId: draft.distributionCableId || distributionId || feederId || '',
     terminalBoxId: fat.id,
     splitterId: splitter.id,
     splitterOutputPort: port.portNumber,
@@ -276,6 +339,8 @@ export function provisionCustomer(
                   connectedCustomerId: id,
                   connectedCustomerName: name,
                   connectedDropCableId: dropId,
+                  connectedCore: 1,
+                  connectedAt: (ctx.now ?? new Date()).toISOString(),
                 },
           ),
         },
@@ -287,22 +352,20 @@ export function provisionCustomer(
   if (estimate.rxDbm !== undefined && estimate.rxDbm < optical.rx.goodFloorDbm) {
     warnings.push(`estimated Rx ${estimate.rxDbm} dBm is weak`);
   }
+  const basePatch = { cables: [...data.cables, dropCable], splitters, equipment, customers: [...data.customers, customer] };
+  const marked = markServingCores(applyPatch(data, basePatch), splitter.id, ctx);
   const rxNote = estimate.rxDbm !== undefined ? ` (estimated Rx ${estimate.rxDbm} dBm)` : '';
   const warningNote = warnings.length ? `. Check: ${warnings.join('; ')}` : '';
+  const coreNote = `${marked.marked.length ? `. Fibers marked in use: ${marked.marked.join(', ')}` : ''}${marked.note ? `. Note: ${marked.note}` : ''}`;
 
   return succeed(
     { customer, dropCable },
-    {
-      cables: [...data.cables, dropCable],
-      splitters,
-      equipment,
-      customers: [...data.customers, customer],
-    },
+    { ...basePatch, cables: marked.cables },
     {
       notice: notice(
         warnings.length ? 'warning' : 'success',
         estimate.olt ? 'Customer Connected' : 'Customer Saved, Not Linked',
-        `Activated ${name} on ${fat.id} port ${port.portNumber} via ${dropId}${rxNote}${warningNote}`,
+        `Activated ${name} on ${fat.id} port ${port.portNumber} via ${dropId}${rxNote}${coreNote}${warningNote}`,
       ),
       audit: [
         {
@@ -392,8 +455,8 @@ export function relinkCustomer(
     return fail('Cannot Link Yet', `No cable connects ${fat.name} to an OLT. Draw that cable first, ending on the box.`, 'warning');
   }
 
-  const feederHop = estimate.hops[0];
-  const distributionHop = estimate.hops.length > 1 ? estimate.hops[estimate.hops.length - 1] : undefined;
+  const feederId = estimate.cableIds[0];
+  const distributionId = estimate.cableIds.length > 1 ? estimate.cableIds[estimate.cableIds.length - 1] : undefined;
   const servesAlready = customer.oltId === estimate.olt.id && customer.ponPort === estimate.pon?.id;
   // A real reading stays. An unrecorded value or an older estimate gets the new estimate, if any.
   const keepsReading = customer.rxSource === 'field_measured' || customer.rxSource === 'device_reported';
@@ -405,8 +468,8 @@ export function relinkCustomer(
     ...reading,
     oltId: estimate.olt.id,
     ponPort: estimate.pon?.id ?? '',
-    feederCableId: feederHop?.cable.id ?? '',
-    distributionCableId: distributionHop?.cable.id ?? feederHop?.cable.id ?? '',
+    feederCableId: feederId ?? '',
+    distributionCableId: distributionId ?? feederId ?? '',
   };
 
   const servingPonId = estimate.pon?.id;
@@ -451,11 +514,70 @@ export function relinkCustomer(
       audit: [
         {
           action: 'CUSTOMER_RELINKED',
-          details: `${customer.id} linked to ${estimate.olt.id}${estimate.pon ? ` ${estimate.pon.id}` : ''} via ${estimate.hops.map((h) => h.cable.id).join(', ')}`,
+          details: `${customer.id} linked to ${estimate.olt.id}${estimate.pon ? ` ${estimate.pon.id}` : ''} via ${estimate.cableIds.join(', ')}`,
           assetId: customer.id,
           assetType: 'Customer',
         },
       ],
     },
   );
+}
+
+/**
+ * Marks the feeder and distribution fibers that carry a splitter's light as in use, following the
+ * recorded core path from the splitter input back to the PON port. A fiber already given to this
+ * PON tree is left as it is; one reserved or used for something else is reported, not overwritten.
+ * When the path is not recorded core by core, nothing is guessed: the first missing link is returned.
+ */
+export function markServingCores(
+  data: NetworkData,
+  splitterId: string,
+  ctx: CommandContext = {},
+): { cables: Cable[]; marked: string[]; note?: string } {
+  const splitter = data.splitters.find((s) => s.id === splitterId);
+  const input = splitter?.inputPort;
+  if (!splitter || !input?.connectedCableId || !input.connectedCore) {
+    return { cables: data.cables, marked: [], note: `feeder and distribution fibers were not marked: the input of ${splitterId} is not linked to a fiber` };
+  }
+  const path = traceCoreUpstream(input.connectedCableId, input.connectedCore, data, { settings: ctx.optical });
+  const tree = path.olt && path.pon ? { oltId: path.olt.id, ponPortId: path.pon.id, use: `PON ${path.olt.id} / ${path.pon.id}` } : undefined;
+  if (!tree) {
+    return { cables: data.cables, marked: [], note: `feeder and distribution fibers were not marked: ${path.gaps[0] ?? 'the fiber path does not reach an OLT port'}` };
+  }
+  const wanted = new Set(path.coreKeys);
+  const marked: string[] = [];
+  const conflicts: string[] = [];
+  const now = ctx.now ?? new Date();
+  const cables = data.cables.map((cable) => {
+    if (!path.cableIds.includes(cable.id)) return cable;
+    let changed = false;
+    const cores = completeCores(cable).map((core) => {
+      if (!wanted.has(coreKey(cable.id, core.coreNumber))) return core;
+      const active = activeAssignment(core);
+      if (active) {
+        if (active.oltId !== tree.oltId || active.ponPortId !== tree.ponPortId) conflicts.push(`${cable.id} fiber ${core.coreNumber} is ${active.kind === 'reserved' ? 'reserved' : 'used'} for ${active.use}`);
+        return core;
+      }
+      changed = true;
+      marked.push(`${cable.id} fiber ${core.coreNumber}`);
+      const assignment: CoreAssignment = {
+        id: newFiberId('CA'),
+        kind: 'in_use',
+        use: tree.use,
+        oltId: tree.oltId,
+        ponPortId: tree.ponPortId,
+        destination: `Splitter ${splitter.id}`,
+        effectiveFrom: isoDate(now),
+        createdAt: now.toISOString(),
+        ...(ctx.actor ? { createdBy: ctx.actor } : {}),
+      };
+      return { ...core, status: 'In Use' as const, assignments: [...(core.assignments ?? []), assignment] };
+    });
+    return changed ? { ...cable, cores } : cable;
+  });
+  return {
+    cables,
+    marked,
+    note: conflicts.length ? `these fibers carry this path but are recorded for something else: ${conflicts.join('; ')}` : undefined,
+  };
 }

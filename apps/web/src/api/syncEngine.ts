@@ -1,12 +1,24 @@
-import type { CollectionName, NetworkSnapshot, ParsedBackup } from '@fibergis/shared';
+import {
+  type ChangeResult,
+  type CollectionName,
+  isCollectionName,
+  type NetworkSnapshot,
+  type ParsedBackup,
+  randomCode,
+  type RecordVersions,
+  type SyncConflict,
+  type VersionConflict,
+} from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { readJson, writeJson } from '../lib/storage';
 import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
 import { initialSyncState, type RefusedRecord, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
+import { useUiStore } from '../stores/uiStore';
 import {
   buildChangeSet,
+  changedFields,
   changedIds,
   countPending,
   differingCollections,
@@ -15,9 +27,10 @@ import {
   omitCollections,
   type PendingIds,
   reconcile,
+  recordKey,
   sameValue,
 } from './changeTracking';
-import { type ApiClient, apiClient, describeApiError, isTransientError } from './client';
+import { type ApiClient, apiClient, ApiError, describeApiError, isTransientError } from './client';
 
 type RecordKey = { collection: CollectionName; id: string };
 
@@ -46,18 +59,41 @@ interface SyncMeta {
   revision: number | null;
   /** Records edited locally that the server has not acknowledged yet. */
   pending: PendingIds;
+  /**
+   * The server version each unsent record was edited from (Phase 8), keyed `collection/id`. The
+   * server refuses the record if someone else changed it since. Records with no base (new ones,
+   * edits saved before Phase 8, or a server that sends no versions) are sent as before.
+   */
+  bases?: Record<string, number>;
+  /** Records someone else changed at the same time. Kept here and not sent until a person chooses. */
+  held?: PendingIds;
 }
+
+const isPendingIds = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  Object.values(value).every((ids) => Array.isArray(ids) && ids.every((id) => typeof id === 'string'));
 
 const isSyncMeta = (value: unknown): boolean => {
   if (typeof value !== 'object' || value === null) return false;
-  const { revision, pending } = value as Partial<SyncMeta>;
+  const { revision, pending, bases, held } = value as Partial<SyncMeta>;
   return (
     (revision === null || typeof revision === 'number') &&
-    typeof pending === 'object' &&
-    pending !== null &&
-    Object.values(pending).every((ids) => Array.isArray(ids) && ids.every((id) => typeof id === 'string'))
+    isPendingIds(pending) &&
+    (bases === undefined || (typeof bases === 'object' && bases !== null && Object.values(bases).every((v) => typeof v === 'number'))) &&
+    (held === undefined || isPendingIds(held))
   );
 };
+
+const withoutKeys = (set: PendingIds, keys: readonly RecordKey[]): PendingIds => {
+  const drop = new Set(keys.map((k) => recordKey(k.collection, k.id)));
+  return toPending(flatten(set).filter((k) => !drop.has(recordKey(k.collection, k.id))));
+};
+
+const findRecord = (snapshot: NetworkSnapshot, { collection, id }: RecordKey) =>
+  (snapshot[collection] as readonly { id: string }[]).find((r) => r.id === id) as Record<string, unknown> | undefined;
+
+export type ConflictChoice = 'theirs' | 'mine' | 'office';
 
 /** One line for the sync status: which record, why, and what to do next. */
 const describeRefusal = (records: readonly RefusedRecord[]): string => {
@@ -86,8 +122,14 @@ export interface SyncEngine {
   /** Replaces the collections in a backup on the server, or locally while offline. */
   restore(backup: ParsedBackup): Promise<SyncOutcome>;
   isConnected(): boolean;
-  /** Records the server has not acknowledged yet: waiting, being sent, or refused. */
+  /** Records the server has not acknowledged yet: waiting, being sent, refused, or held in a conflict. */
   unsentIds(): PendingIds;
+  /**
+   * Settles a conflict this device found. `theirs` and `office` show the other version here (the
+   * office decides the second later); `mine` sends this device's version over it. Both versions
+   * stay in the conflict record either way.
+   */
+  resolveConflict(conflictId: string, choice: ConflictChoice): Promise<boolean>;
 }
 
 export interface SyncEngineOptions {
@@ -144,13 +186,28 @@ export function createSyncEngine({
     return run;
   };
 
+  /** The version of each record on the server, from the last load and every acknowledged write. */
+  let serverVersions = new Map<string, number>();
+
   const refusedIds = (): PendingIds =>
     toPending(refused.map(({ collection, id }) => ({ collection: collection as CollectionName, id })));
 
-  const unsent = (): PendingIds => mergePending(meta.pending, refusedIds(), sending ?? {});
+  const held = (): PendingIds => meta.held ?? {};
 
-  // Until the server acknowledges a batch, its ids stay in the persisted pending set.
-  const persistMeta = () => writeJson(SYNC_META_STORAGE_KEY, { revision: meta.revision, pending: unsent() });
+  /** Not yet at the server; held conflicts count, so the local version is never overwritten. */
+  const unsent = (): PendingIds => mergePending(meta.pending, refusedIds(), sending ?? {}, held());
+
+  // Until the server acknowledges a batch, its ids stay in the persisted pending set. Held records
+  // are saved apart, so a reload never sends them before a person chooses.
+  const persistMeta = () => {
+    const bases = meta.bases ?? {};
+    writeJson(SYNC_META_STORAGE_KEY, {
+      revision: meta.revision,
+      pending: mergePending(meta.pending, refusedIds(), sending ?? {}),
+      ...(Object.keys(bases).length > 0 ? { bases } : {}),
+      ...(!isEmptyPending(held()) ? { held: held() } : {}),
+    });
+  };
 
   const updateStatus = () => {
     const pendingCount = countPending(unsent());
@@ -167,8 +224,82 @@ export function createSyncEngine({
       lastSyncedAt,
       error: refused[0] ? describeRefusal(refused) : link === 'offline' ? linkError : null,
       refused,
+      held: flatten(held()).map((k) => recordKey(k.collection, k.id)),
     });
   };
+
+  const loadVersions = (versions: RecordVersions | undefined) => {
+    serverVersions = new Map();
+    for (const [collection, byId] of Object.entries(versions ?? {})) {
+      for (const [id, version] of Object.entries(byId ?? {})) serverVersions.set(`${collection}/${id}`, version);
+    }
+  };
+
+  /** After a write the server acknowledged: new versions known, bases kept only for records edited again meanwhile. */
+  const recordWritten = (keys: readonly RecordKey[], result: ChangeResult) => {
+    const bases = { ...(meta.bases ?? {}) };
+    const editedAgain = new Set(flatten(meta.pending).map((k) => recordKey(k.collection, k.id)));
+    for (const key of keys) {
+      const k = recordKey(key.collection, key.id);
+      const version = result.versions?.[key.collection]?.[key.id];
+      if (version !== undefined) serverVersions.set(k, version);
+      else serverVersions.delete(k);
+      if (editedAgain.has(k) && version !== undefined) bases[k] = version;
+      else delete bases[k];
+    }
+    meta.bases = bases;
+  };
+
+  /**
+   * Someone else changed records this device edited. Each one is kept here as it is (held, not
+   * sent) and both versions go into a conflict record the office can see, until a person chooses.
+   * When both sides already hold the same thing (often this device's own earlier send), there is
+   * nothing to choose. Returns the records of the batch that can still be sent.
+   */
+  function handleConflicts(keys: readonly RecordKey[], conflicts: readonly VersionConflict[]): RecordKey[] {
+    const byKey = new Map(conflicts.map((c) => [recordKey(c.collection, c.id), c]));
+    const snapshot = getNetworkSnapshot();
+    const resend: RecordKey[] = [];
+    const bases = { ...(meta.bases ?? {}) };
+    let found = 0;
+    for (const key of keys) {
+      const k = recordKey(key.collection, key.id);
+      const conflict = byKey.get(k);
+      if (!conflict) {
+        resend.push(key);
+        continue;
+      }
+      if (conflict.current !== null) serverVersions.set(k, conflict.current);
+      else serverVersions.delete(k);
+      const mine = findRecord(snapshot, key) ?? null;
+      if (sameValue(mine, conflict.record)) {
+        delete bases[k];
+        continue;
+      }
+      found += 1;
+      meta.held = mergePending(held(), toPending([key]));
+      const record: SyncConflict = {
+        id: `CNF-${randomCode(10)}`,
+        collection: key.collection,
+        recordId: key.id,
+        label: recordLabel(key, snapshot).slice(0, 200),
+        baseVersion: bases[k] ?? conflict.expected,
+        theirVersion: conflict.current,
+        mine,
+        theirs: conflict.record,
+        changedFields: changedFields(mine, conflict.record).slice(0, 300),
+        detectedAt: new Date().toISOString(),
+        detectedBy: `${useUiStore.getState().userRole} (this device)`,
+        status: 'open',
+      };
+      useNetworkStore.getState().saveSyncConflict(record);
+    }
+    meta.bases = bases;
+    if (found > 0) {
+      showToast('warning', 'Someone else changed this', `${found} item(s) were changed by someone else while you worked. Both versions are kept. Choose which one to keep.`);
+    }
+    return resend;
+  }
 
   const applyRemote = (collections: Partial<NetworkSnapshot>) => {
     applyingRemote = true;
@@ -240,14 +371,18 @@ export function createSyncEngine({
       return 0;
     }
     try {
-      const result = await client.applyChanges(buildChangeSet(toPending(keys), getNetworkSnapshot()));
+      const result = await client.applyChanges(buildChangeSet(toPending(keys), getNetworkSnapshot(), meta.bases));
       meta.revision = result.revision;
+      recordWritten(keys, result);
       return result.upserted + result.deleted;
     } catch (error) {
       if (isTransientError(error)) {
         notSent.push(...keys);
         goOffline(error);
         return 0;
+      }
+      if (error instanceof ApiError && error.isVersionConflict && error.conflicts.some((c) => keys.some((k) => k.collection === c.collection && k.id === c.id))) {
+        return sendSplitting(handleConflicts(keys, error.conflicts), notSent);
       }
       return refuseOrSplit(keys, error, notSent);
     }
@@ -295,6 +430,10 @@ export function createSyncEngine({
     const changed = differingCollections(local, merged);
     if (Object.keys(changed).length > 0) applyRemote(changed);
 
+    loadVersions(response.versions);
+    // Bases are kept only for records still waiting; the rest now match the server.
+    const waiting = new Set(flatten(unsent()).map((k) => recordKey(k.collection, k.id)));
+    meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => waiting.has(k)));
     meta.revision = response.revision;
     link = 'online';
     linkError = null;
@@ -317,13 +456,25 @@ export function createSyncEngine({
     const expected = meta.revision;
     let result;
     try {
-      result = await client.applyChanges(buildChangeSet(batch, getNetworkSnapshot()));
+      result = await client.applyChanges(buildChangeSet(batch, getNetworkSnapshot(), meta.bases));
     } catch (error) {
       if (isTransientError(error)) {
         meta.pending = mergePending(batch, meta.pending);
         sending = null;
         persistMeta();
         handleFailure(error);
+        return;
+      }
+      const keys = flatten(batch);
+      const matches = error instanceof ApiError && error.isVersionConflict && error.conflicts.some((c) => keys.some((k) => k.collection === c.collection && k.id === c.id));
+      if (error instanceof ApiError && matches) {
+        // Hold what someone else changed; send the rest straight away.
+        const rest = handleConflicts(keys, error.conflicts);
+        meta.pending = mergePending(toPending(rest), meta.pending);
+        sending = null;
+        persistMeta();
+        updateStatus();
+        if (link === 'online') await send();
         return;
       }
       // The server refused this batch: send what it will take and report the rest by name.
@@ -350,6 +501,7 @@ export function createSyncEngine({
     }
 
     sending = null;
+    recordWritten(flatten(batch), result);
     const wrote = result.upserted + result.deleted > 0;
     const someoneElseWrote = expected !== null && result.revision !== (wrote ? expected + 1 : expected);
     meta.revision = result.revision;
@@ -376,8 +528,18 @@ export function createSyncEngine({
 
   const onLocalChange = (state: NetworkSnapshot, prev: NetworkSnapshot) => {
     if (applyingRemote) return;
-    const changed = changedIds(prev, state);
-    if (isEmptyPending(changed)) return;
+    const all = changedIds(prev, state);
+    if (isEmptyPending(all)) return;
+    // A record in an open conflict stays held: further edits wait for the person's choice.
+    const heldKeys = new Set(flatten(held()).map((k) => recordKey(k.collection, k.id)));
+    const changed = withoutKeys(all, flatten(all).filter((k) => heldKeys.has(recordKey(k.collection, k.id))));
+    // The version this edit starts from: the first edit since the server last had the record.
+    const bases = { ...(meta.bases ?? {}) };
+    for (const key of flatten(changed)) {
+      const k = recordKey(key.collection, key.id);
+      if (bases[k] === undefined && serverVersions.has(k)) bases[k] = serverVersions.get(k)!;
+    }
+    meta.bases = bases;
     meta.pending = mergePending(meta.pending, changed);
     // An edit may fix what the server refused, so that record gets another try.
     const edited = new Set(flatten(changed).map((key) => `${key.collection}/${key.id}`));
@@ -404,7 +566,7 @@ export function createSyncEngine({
   const onPageHide = () => {
     const ids = unsent();
     if (link !== 'online' || isEmptyPending(ids)) return;
-    const changes = buildChangeSet(ids, getNetworkSnapshot());
+    const changes = buildChangeSet(withoutKeys(ids, flatten(held())), getNetworkSnapshot(), meta.bases);
     if (JSON.stringify(changes).length > KEEPALIVE_BODY_LIMIT) return;
     client.applyChanges(changes, { keepalive: true }).catch(() => undefined);
   };
@@ -419,6 +581,7 @@ export function createSyncEngine({
       if (started) return;
       started = true;
       meta = readJson<SyncMeta>(SYNC_META_STORAGE_KEY, { revision: null, pending: {} }, isSyncMeta);
+      meta.pending = withoutKeys(meta.pending, flatten(held()));
       link = 'connecting';
       updateStatus();
       unsubscribe = useNetworkStore.subscribe(onLocalChange);
@@ -461,6 +624,8 @@ export function createSyncEngine({
     discardLocalChanges: () =>
       exclusive(async () => {
         meta.pending = {};
+        meta.held = {};
+        meta.bases = {};
         refused = [];
         persistMeta();
         updateStatus();
@@ -475,6 +640,8 @@ export function createSyncEngine({
           try {
             await client.reset();
             meta.pending = meta.pending.catalog ? { catalog: meta.pending.catalog } : {};
+            meta.held = {};
+            meta.bases = {};
             refused = [];
             persistMeta();
             await connect();
@@ -499,6 +666,8 @@ export function createSyncEngine({
           try {
             const result = await client.restore(backup);
             meta.pending = omitCollections(meta.pending, result.restored);
+            meta.held = omitCollections(held(), result.restored);
+            meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => !result.restored.includes(k.split('/')[0] as CollectionName)));
             refused = refused.filter((item) => !result.restored.includes(item.collection as CollectionName));
             persistMeta();
             await connect();
@@ -519,6 +688,47 @@ export function createSyncEngine({
     isConnected: () => started && link === 'online',
 
     unsentIds: () => unsent(),
+
+    resolveConflict: (conflictId, choice) =>
+      exclusive(async () => {
+        const store = useNetworkStore.getState();
+        const conflict = store.syncConflicts.find((c) => c.id === conflictId);
+        if (!conflict || conflict.status !== 'open' || !isCollectionName(conflict.collection)) return false;
+        const key: RecordKey = { collection: conflict.collection, id: conflict.recordId };
+        const k = recordKey(key.collection, key.id);
+        meta.held = withoutKeys(held(), [key]);
+        const bases = { ...(meta.bases ?? {}) };
+        if (choice === 'mine') {
+          // Sent over theirs, checked against the version this device was shown.
+          if (conflict.theirVersion !== null) bases[k] = conflict.theirVersion;
+          else delete bases[k];
+          meta.pending = mergePending(meta.pending, toPending([key]));
+        } else {
+          // Show the other version here. With "office decides", the office chooses later; this
+          // device's version stays in the conflict record.
+          const list = store[key.collection] as readonly { id: string }[];
+          const theirs = conflict.theirs as { id: string } | null;
+          const next = theirs ? (list.some((r) => r.id === key.id) ? list.map((r) => (r.id === key.id ? theirs : r)) : [...list, theirs]) : list.filter((r) => r.id !== key.id);
+          applyRemote({ [key.collection]: next } as Partial<NetworkSnapshot>);
+          if (conflict.theirVersion !== null) serverVersions.set(k, conflict.theirVersion);
+          delete bases[k];
+          meta.pending = withoutKeys(meta.pending, [key]);
+        }
+        meta.bases = bases;
+        const status = choice === 'mine' ? 'kept_mine' : choice === 'theirs' ? 'kept_theirs' : 'office_decides';
+        const who = `${useUiStore.getState().userRole} (this device)`;
+        useNetworkStore.getState().saveSyncConflict({ ...conflict, status, decidedAt: new Date().toISOString(), decidedBy: who });
+        useNetworkStore.getState().logAudit({
+          action: 'SYNC_CONFLICT_CHOICE',
+          details: `${conflict.label}: ${status.replace('_', ' ')} (conflict ${conflict.id}; both versions kept)`,
+          assetId: conflict.id,
+          assetType: 'SyncConflict',
+        });
+        persistMeta();
+        updateStatus();
+        if (link === 'online') await send();
+        return true;
+      }),
   };
 }
 

@@ -7,6 +7,8 @@ import type L from 'leaflet';
 export const PANES = {
   /** Selection / trace halos, always beneath the cable they outline. */
   halo: 'gis-halo',
+  /** Spans and ducts: structures, drawn beneath the cables they carry. */
+  structures: 'gis-structures',
   /** Field-route overlay. */
   route: 'gis-route',
   /** Sketch previews for drawing and measuring; never intercepts clicks. */
@@ -17,6 +19,7 @@ export const PANES = {
 
 const PANE_Z_INDEX: Record<(typeof PANES)[keyof typeof PANES], number> = {
   'gis-halo': 390,
+  'gis-structures': 395,
   'gis-route': 420,
   'gis-sketch': 450,
   'gis-labels': 550,

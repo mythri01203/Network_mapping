@@ -41,6 +41,7 @@ export const captureService = createCaptureService({
     return { value: result.value };
   },
   getNetwork: getNetworkData,
+  getConflicts: () => useNetworkStore.getState().syncConflicts,
   sync: {
     unsentIds: () => syncEngine.unsentIds(),
     isConnected: () => syncEngine.isConnected(),

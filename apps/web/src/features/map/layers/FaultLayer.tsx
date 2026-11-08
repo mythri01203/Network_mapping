@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import type L from 'leaflet';
 
+import { FAULT_STATUS_LABELS, isFaultOpen } from '@fibergis/shared';
+
 import { useMapStore } from '../../../stores/mapStore';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { useUiStore } from '../../../stores/uiStore';
@@ -20,18 +22,19 @@ export function FaultLayer({ map }: { map: L.Map }) {
   const markers = useMemo<MarkerSpec[]>(() => {
     if (!visible) return [];
     return faults
-      .filter((f) => f.status !== 'Resolved')
+      .filter(isFaultOpen)
       .map((f) => {
         const affected = f.affectedCustomerIds.length;
+        const test = f.isTest ? 'TEST (not real) · ' : '';
         return {
           id: f.id,
           latlng: [f.affectedLocation.lat, f.affectedLocation.lng],
           icon: faultMarkerIcon(f.severity, f.id === selectedId),
-          tooltip: tooltipHtml(f.title, [
-            `${f.severity} · ${f.status} · ${f.id}`,
-            `${affected} customer${affected === 1 ? '' : 's'} affected`,
+          tooltip: tooltipHtml(`${f.isTest && !f.title.startsWith('TEST') ? 'TEST: ' : ''}${f.title}`, [
+            `${test}${f.severity} · ${FAULT_STATUS_LABELS[f.status]} · ${f.id}`,
+            `${affected} customer${affected === 1 ? '' : 's'} on recorded paths${f.mayBeAffectedCustomerIds?.length ? `, ${f.mayBeAffectedCustomerIds.length} may be affected` : ''}`,
           ]),
-          label: `Fault ${f.title}`,
+          label: `${f.isTest ? 'TEST fault' : 'Fault'} ${f.title}`,
           opacity,
           zIndexOffset: f.id === selectedId ? 1100 : 800,
         };

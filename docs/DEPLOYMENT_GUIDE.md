@@ -57,6 +57,11 @@ Field photos are compressed on the phone (longest side 1280 px, JPEG quality abo
 - **API:** `PUT /api/v1/photos/<id>` (JPEG, PNG or WebP, at most 5 MB, bytes checked against the type; repeating an upload stores nothing new) and `GET /api/v1/photos/<id>`.
 - **Backup:** the JSON backup in Administration does **not** include photos. Back up the `photos` folder with the database file.
 - Records point at photos by id; a stored photo is never replaced.
+- Job photos from **My jobs** (`/jobs`, Phase 8) use the same queue and folder.
+
+## Database upgrade (Phase 8)
+
+The first start of a Phase 8 server adds a `version` column to the records table. It changes no record and no revision, and it leaves the schema number (`user_version`) at 1, so an older server can still open the database; writes made by an older server do not change a record's version, so a version check cannot see them. Copy the database file (and its `-wal` file, if present) before the first start anyway. Clients that do not send versions keep working as before.
 
 ## Settings for the field
 

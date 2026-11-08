@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CoreStatus } from '@fibergis/shared';
+import { coreIdentity, type CoreStatus, effectiveCoreStatus } from '@fibergis/shared';
 
 import {
   Badge,
@@ -28,7 +28,7 @@ import {
 } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
 import { allocateFiberCore } from '../../stores/networkActions';
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectColorSchemes, useNetworkStore } from '../../stores/networkStore';
 import { useTraceStore } from '../../stores/traceStore';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -96,7 +96,8 @@ export const BottomInfoPanel: React.FC = () => {
     };
   }, [cable]);
 
-  const filteredCores = (cable?.cores ?? []).filter((core) => coreFilter === 'All' || core.status === coreFilter);
+  const schemes = useNetworkStore(selectColorSchemes);
+  const filteredCores = (cable?.cores ?? []).filter((core) => coreFilter === 'All' || effectiveCoreStatus(core) === coreFilter);
 
   if (!isBottomPanelOpen) {
     return (
@@ -244,6 +245,7 @@ export const BottomInfoPanel: React.FC = () => {
                         equipmentName(core.connectedToEquipmentId) ||
                         core.customerName ||
                         customerName(core.customerId);
+                      const identity = cable ? coreIdentity(cable, core.coreNumber, schemes) : undefined;
                       return (
                         <tr key={core.coreNumber}>
                           <td className="tabular font-mono font-medium text-slate-900">
@@ -251,16 +253,24 @@ export const BottomInfoPanel: React.FC = () => {
                           </td>
                           <td>
                             <span className="inline-flex items-center gap-2">
-                              <span
-                                className="h-3 w-3 rounded-full ring-1 ring-inset ring-black/15"
-                                style={{ backgroundColor: core.colorHex }}
-                              />
-                              {core.colorName}
+                              {identity?.fiberColor ? (
+                                <>
+                                  <span
+                                    className="h-3 w-3 rounded-full ring-1 ring-inset ring-black/15"
+                                    style={{ backgroundColor: identity.fiberColor.hex }}
+                                  />
+                                  {identity.fiberColor.name}
+                                </>
+                              ) : (
+                                <span className="text-slate-400">Not known</span>
+                              )}
                             </span>
                           </td>
-                          <td className="tabular text-slate-500">T{core.tubeNumber}</td>
+                          <td className="tabular text-slate-500">
+                            {identity?.tubeNumber !== undefined ? `T${identity.tubeNumber}/${identity.fiberInTube}` : 'â€”'}
+                          </td>
                           <td>
-                            <StatusBadge status={core.status} />
+                            <StatusBadge status={effectiveCoreStatus(core)} />
                           </td>
                           <td className="max-w-[220px] truncate">
                             {connected ?? <span className="text-slate-400">—</span>}

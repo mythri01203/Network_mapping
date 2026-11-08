@@ -1,4 +1,3 @@
-import { getFiberColor, getTubeNumber } from '../fiber/colors';
 import type { CableType, EquipmentType } from '../model/enums';
 import type { FiberCore } from '../model/types';
 
@@ -42,19 +41,12 @@ export function defaultFiberCount(type: CableType): number {
   return 12;
 }
 
-/** A fresh, fully available core inventory colour-coded to TIA-598. */
+/**
+ * A fresh, fully available core inventory. No tube or colour is stored: they come from the cable's
+ * recorded layout and scheme (`coreIdentity`), never from an assumed TIA-598 with 12 per tube.
+ */
 export function buildCores(count: number): FiberCore[] {
-  return Array.from({ length: count }, (_, i) => {
-    const color = getFiberColor(i + 1);
-    return {
-      coreNumber: i + 1,
-      tubeNumber: getTubeNumber(i + 1),
-      colorName: color.name,
-      colorHex: color.hex,
-      status: 'Available' as const,
-      remarks: 'Freshly installed unallocated core',
-    };
-  });
+  return Array.from({ length: count }, (_, i) => ({ coreNumber: i + 1, status: 'Available' as const }));
 }
 
 export const isLatLngPair = (value: unknown): value is [number, number] =>

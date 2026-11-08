@@ -6,14 +6,14 @@ import { type FiberColorDef, STANDARD_12_COLORS, type UserRole } from '@fibergis
 import { backupSystem, exportKML, restoreSystem } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
-import { FieldSettingsPanel } from '../admin/FieldSettingsPanel';
+import { FaultSettingsPanel, FieldSettingsPanel, OspSettingsPanel } from '../admin/FieldSettingsPanel';
 import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
 
 export const AdminConfigView: React.FC = () => {
   const userRole = useUiStore((s) => s.userRole);
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
-  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'audit_logs' | 'backup'>('roles');
+  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
 
   const permissionsList = [
@@ -156,6 +156,24 @@ export const AdminConfigView: React.FC = () => {
             Field capture settings
           </button>
           <button
+            onClick={() => setActiveTab('routes')}
+            data-testid="admin-routes-tab"
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'routes' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Poles and routes settings
+          </button>
+          <button
+            onClick={() => setActiveTab('faults')}
+            data-testid="admin-faults-tab"
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'faults' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Fault checks settings
+          </button>
+          <button
             onClick={() => setActiveTab('audit_logs')}
             className={`px-3 py-1.5 rounded-lg transition-all ${
               activeTab === 'audit_logs' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
@@ -248,7 +266,7 @@ export const AdminConfigView: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-slate-800">TIA-598-C Standard 12-Fiber Color Code Sequence</h3>
               <p className="text-xs text-slate-500">
-                Universal standard for optical fiber and buffer tube identification in FTTH and trunk cables
+                Common but not universal: IEC schemes reorder it and makers differ on tube size and tube colours. A cable shows colours only when its scheme is recorded on it (Optical settings, Fiber colour schemes).
               </p>
             </div>
 
@@ -301,6 +319,8 @@ export const AdminConfigView: React.FC = () => {
 
         {activeTab === 'optical' && <OpticalSettingsPanel />}
         {activeTab === 'field' && <FieldSettingsPanel />}
+        {activeTab === 'routes' && <OspSettingsPanel />}
+        {activeTab === 'faults' && <FaultSettingsPanel />}
 
         {/* Tab 3: Audit Logs */}
         {activeTab === 'audit_logs' && (
@@ -423,6 +443,14 @@ export const AdminConfigView: React.FC = () => {
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download Google Earth KML</span>
+                </button>
+                <button
+                  onClick={() => useUiStore.getState().setModalOpen('kmlImport', true)}
+                  data-testid="admin-kml-import"
+                  className="mt-2 w-full py-2.5 bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import KML or KMZ (preview first)</span>
                 </button>
               </div>
             </div>

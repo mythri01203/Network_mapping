@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { Cable, Customer, Equipment, Fault, JointClosure, UserRole } from '@fibergis/shared';
+import type { Cable, Customer, Duct, Equipment, Fault, JointClosure, SlackLoop, Span, UserRole } from '@fibergis/shared';
 
 import { preferenceKey, preferenceStorage } from './persistStorage';
 
@@ -10,7 +10,10 @@ export type SelectedObject =
   | { type: 'cable'; data: Cable }
   | { type: 'customer'; data: Customer }
   | { type: 'closure'; data: JointClosure }
-  | { type: 'fault'; data: Fault };
+  | { type: 'fault'; data: Fault }
+  | { type: 'span'; data: Span }
+  | { type: 'duct'; data: Duct }
+  | { type: 'slackLoop'; data: SlackLoop };
 export type SelectedObjectType = SelectedObject['type'];
 
 /** Human-readable label for a selection (faults are titled, everything else is named). */
@@ -40,6 +43,8 @@ export const MODAL_IDS = [
   'fiberTrace',
   'onuFleet',
   'oltConfig',
+  'kmlImport',
+  'ductForm',
 ] as const;
 export type ModalId = (typeof MODAL_IDS)[number];
 
@@ -88,6 +93,8 @@ export interface UiState {
   /** The navigation menu shown over the screen on phones. */
   isMobileMenuOpen: boolean;
   selectedOltForConfig: Equipment | null;
+  /** The closure the splice screen opens on. */
+  splicingClosureId: string | null;
   // Preferences (persisted)
   uiMode: UiMode;
   userRole: UserRole;
@@ -104,6 +111,7 @@ export interface UiState {
   openFiberTrace: (targetId: string) => void;
   openOltConfigModal: (olt: Equipment) => void;
   closeOltConfigModal: () => void;
+  openSplicing: (closureId: string | null) => void;
   setPickingOnuCustomer: (customer: Customer | null) => void;
   setCustomerWizardPicking: (picking: boolean) => void;
   setCustomerWizardPick: (pick: { lat: number; lng: number } | null) => void;
@@ -130,6 +138,7 @@ export const useUiStore = create<UiState>()(
       customerWizardPick: null,
       isMobileMenuOpen: false,
       selectedOltForConfig: null,
+      splicingClosureId: null,
       uiMode: 'simple',
       userRole: 'Network Engineer',
       networkMode: 'All',
@@ -162,6 +171,7 @@ export const useUiStore = create<UiState>()(
           selectedOltForConfig: null,
           modals: { ...s.modals, oltConfig: false },
         })),
+      openSplicing: (splicingClosureId) => set((s) => ({ splicingClosureId, modals: { ...s.modals, splicing: true } })),
       setPickingOnuCustomer: (pickingOnuCustomer) => set({ pickingOnuCustomer }),
       setCustomerWizardPicking: (customerWizardPicking) => set({ customerWizardPicking }),
       setCustomerWizardPick: (customerWizardPick) => set({ customerWizardPick, customerWizardPicking: false }),

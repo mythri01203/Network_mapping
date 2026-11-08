@@ -10,10 +10,13 @@ import {
   sameId,
   succeed,
 } from './command';
+import { connectionUsesOf } from './connectionRules';
 import { buildCores, defaultFiberCount, isLatLngPair } from './defaults';
+import { fiberCascadeForCable } from './fiberCommands';
 import { polylineLengthMeters } from './geo';
 import { cableIdPrefix, nextSequentialId } from './ids';
 import { buildOltPonPorts } from './oltConfig';
+import { cascadeAudit, ospCascadeForCable } from './outsidePlant';
 import { isoDate } from './time';
 
 export type CableDraft = Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] };
@@ -151,6 +154,10 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
       `${id} carries service for ${dependentCustomers.length} customer(s) (${previewIds(dependentCustomers.map((c) => c.id))}). Re-route them first.`,
     );
   }
+  const connectionUses = connectionUsesOf(data, id);
+  if (connectionUses.length > 0) {
+    return fail('Cannot Delete Cable', `${id}: ${connectionUses.join('; ')}. Change those records first.`);
+  }
   const feedingSplitters = data.splitters.filter((s) => s.inputPort.connectedCableId === id);
   if (feedingSplitters.length > 0) {
     return fail(
@@ -162,7 +169,10 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
   const coresInUse = target.cores.filter((c) => c.status === 'In Use').length;
   const affectedClosures = data.closures.filter(
     (c) =>
-      c.cableAId === id || c.cableBId === id || c.splices.some((s) => s.inputCableId === id || s.outputCableId === id),
+      c.cableAId === id ||
+      c.cableBId === id ||
+      c.splices.some((s) => s.inputCableId === id || s.outputCableId === id) ||
+      (c.cableEntries ?? []).some((e) => e.cableId === id),
   );
   const warnings = [
     coresInUse > 0 ? `${coresInUse} core(s) are marked In Use.` : '',
@@ -171,15 +181,21 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
     .filter(Boolean)
     .join(' ');
   const affected = new Set(affectedClosures.map((c) => c.id));
+  const osp = ospCascadeForCable(data, id);
+  const fiber = fiberCascadeForCable(data, id);
   const feedsPon = (e: Equipment) => e.ponPorts?.some((p) => p.connectedFeederCableId === id);
+  const equipmentBase = fiber.equipment ?? data.equipment;
 
   return succeed(
     target,
     {
+      ...osp.patch,
       cables: data.cables.filter((c) => c.id !== id),
-      ...(data.equipment.some(feedsPon)
+      ...(fiber.splitters ? { splitters: fiber.splitters } : {}),
+      ...(fiber.equipment ? { equipment: fiber.equipment } : {}),
+      ...(equipmentBase.some(feedsPon)
         ? {
-            equipment: data.equipment.map((e) =>
+            equipment: equipmentBase.map((e) =>
               feedsPon(e)
                 ? {
                     ...e,
@@ -203,6 +219,7 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
                     cableAId: c.cableAId === id ? undefined : c.cableAId,
                     cableBId: c.cableBId === id ? undefined : c.cableBId,
                     splices: c.splices.filter((s) => s.inputCableId !== id && s.outputCableId !== id),
+                    ...(c.cableEntries ? { cableEntries: c.cableEntries.filter((e) => e.cableId !== id) } : {}),
                   }
                 : c,
             ),
@@ -210,18 +227,21 @@ export function deleteCable(data: NetworkData, id: string): CommandResult<Cable>
         : {}),
     },
     {
-      confirm: `Delete cable ${id} and its core inventory? ${warnings} You can undo this with Ctrl+Z.`.replace(
+      confirm: `Delete cable ${id} and its core inventory? ${warnings} ${osp.summary} ${fiber.summary} You can undo this with Ctrl+Z.`.replace(
         /\s+/g,
         ' ',
       ),
       notice: notice('info', 'Cable Deleted', `Removed cable ${id}. Press Ctrl+Z to undo.`),
       audit: [
-        {
-          action: 'CABLE_DELETED',
-          details: `Deleted ${target.type} ${id}${coresInUse ? ` (${coresInUse} cores were In Use)` : ''}`,
-          assetId: id,
-          assetType: 'Cable',
-        },
+        cascadeAudit(
+          {
+            action: 'CABLE_DELETED',
+            details: `Deleted ${target.type} ${id}${coresInUse ? ` (${coresInUse} cores were In Use)` : ''}`,
+            assetId: id,
+            assetType: 'Cable',
+          },
+          osp,
+        ),
       ],
     },
   );

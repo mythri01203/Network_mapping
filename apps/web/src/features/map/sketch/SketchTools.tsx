@@ -7,6 +7,7 @@ import { isTypingTarget } from '../../../lib/browser';
 import { useMapStore } from '../../../stores/mapStore';
 import { addEquipment, setCustomerLocation } from '../../../stores/networkActions';
 import { useNetworkStore } from '../../../stores/networkStore';
+import { placeEquipmentChecked } from '../../../stores/ospActions';
 import { showToast } from '../../../stores/toastStore';
 import { useUiStore } from '../../../stores/uiStore';
 import { findSnapTarget, type SnapTarget } from '../layerFilters';
@@ -186,7 +187,8 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
           : tpl?.name || (type === 'Fiber Slack Loop' ? 'Fiber Slack Loop' : `New ${type}`);
         const totalPorts = tpl?.totalPorts;
 
-        const created = addEquipment({
+        // "Same one?" first when an item of the same kind is already this close. It never blocks.
+        void placeEquipmentChecked({
           type,
           category: tpl?.category || categoryForType(type),
           totalPorts,
@@ -197,21 +199,22 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
           lat: placeLat,
           lng: placeLng,
           locationMethod: 'map_pick',
-        });
-        if (created && isPole) {
-          // Stay in the pole tool: a street of poles is one tap each until Done.
-          ui.select({ type: 'equipment', data: created });
-        } else if (created) {
-          ui.select({ type: 'equipment', data: created });
-          // On a phone the inspector would cover the map; a tap on the pin opens it.
-          if (window.innerWidth >= 768) ui.setPanelOpen('right', true);
-          store.setActiveTool('select');
-          store.setEquipmentTypeToAdd(null);
-          store.setEquipmentDraftTemplate(null);
-          if (created.type === 'OLT') {
-            ui.openOltConfigModal(created);
+        }).then((created) => {
+          if (created && isPole) {
+            // Stay in the pole tool: a street of poles is one tap each until Done.
+            ui.select({ type: 'equipment', data: created });
+          } else if (created) {
+            ui.select({ type: 'equipment', data: created });
+            // On a phone the inspector would cover the map; a tap on the pin opens it.
+            if (window.innerWidth >= 768) ui.setPanelOpen('right', true);
+            store.setActiveTool('select');
+            store.setEquipmentTypeToAdd(null);
+            store.setEquipmentDraftTemplate(null);
+            if (created.type === 'OLT') {
+              ui.openOltConfigModal(created);
+            }
           }
-        }
+        });
       }
     };
 
@@ -252,7 +255,14 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       return;
     }
     if (store.drawingPoints.length === 0) store.setDrawingPoints([anchor]);
-    placePole(anchor[0], anchor[1]);
+    // The last point may sit on an existing pole, so ask "same one?" before adding another there.
+    void placeEquipmentChecked({
+      name: nextPoleName(useNetworkStore.getState().equipment),
+      type: 'Telecom Pole',
+      lat: anchor[0],
+      lng: anchor[1],
+      category: 'Supporting Infrastructure',
+    });
   }, [pointer]);
 
   useEffect(() => {
@@ -269,11 +279,13 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   }, [activeTool, addPole]);
 
   const finish = useCallback(() => {
-    if (useMapStore.getState().drawingPoints.length < 2) {
-      showToast('warning', 'Route incomplete', 'Click at least two points on the map to define the cable route.');
+    const map = useMapStore.getState();
+    if (map.drawingPoints.length < 2) {
+      showToast('warning', 'Route incomplete', 'Click at least two points on the map to define the route.');
       return;
     }
-    useUiStore.getState().setModalOpen('cableWizard', true);
+    // A duct is a structure with its own form; it never becomes a cable.
+    useUiStore.getState().setModalOpen(map.drawTarget === 'duct' ? 'ductForm' : 'cableWizard', true);
   }, []);
 
   const cancel = useCallback(() => {

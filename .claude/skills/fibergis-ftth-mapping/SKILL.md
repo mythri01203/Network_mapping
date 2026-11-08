@@ -15,7 +15,7 @@ A path is a gapless chain with a named port or core at every step:
 
 **OLT PON port → patch → ODF port → splice → cable core → closures and splices → splitter input → splitter output → cores → terminal box port → drop core → ONT**
 
-A trace that loses the chain must name the exact missing link. Today `traceNetworkPath` (`packages/shared/src/domain/trace.ts`) reads core status and averages closure splice loss, but it does not follow one core through to the next. `traceOpticalPath` uses only linked records and names each missing link, but it is also cable level. So neither can yet prove light reaches a customer.
+A trace that loses the chain must name the exact missing link. Since Phase 4, `traceCustomerCores` (`packages/shared/src/domain/fiberPath.ts`) follows one fiber at a time from the drop back to the PON port and names the first missing link; the customer traces use it whenever the fibers are recorded end to end. When they are not, the cable-level route is still shown, but the trace is incomplete and says which fiber link is missing.
 
 ## Answering "will this link work?"
 
@@ -52,7 +52,7 @@ All are proposed validators built on the sources in the reference file. Only the
 
 **Store the optics class per PON port.** Labels are unreliable: one "PX20" part has PX20+ sensitivity, and vendors sell "B+" optics claiming 29.5 dB. Show the ITU class and vendor budget separately.
 
-**Color is a lookup that needs a known scheme.** TIA-598 is common but not universal, and IEC schemes reorder it. No TEC or BSNL table could be found. Store a scheme per cable, use the fiber number as identity, and never generate colors for an unknown scheme. Numbering: `(tube − 1) × fibers_per_tube + fiber`. Do not assume 12 per tube; `packages/shared/src/fiber/colors.ts` currently does. Field message: "Blue may not be fiber 1. Check the drum."
+**Color is a lookup that needs a known scheme.** TIA-598 is common but not universal, and IEC schemes reorder it. No TEC or BSNL table could be found. Store a scheme per cable, use the fiber number as identity, and never generate colors for an unknown scheme. Numbering: `(tube − 1) × fibers_per_tube + fiber`. Do not assume 12 per tube; use `coreIdentity` from `packages/shared/src/fiber/colors.ts` (the old `getFiberColor` and `getTubeNumber` assume TIA-598 with 12 per tube and are kept only for map line colours). Field message: "Blue may not be fiber 1. Check the drum."
 
 **Keep vendor addressing as written.** Huawei `gpon 0/5/0 ont 1`, ZTE `gpon-onu_1/x/y:n`, Nokia `1/1/1/2/33`, BDCOM `ePON 0/1:5`. Store vendor, ordered parts and the raw string. Do not convert between formats. These come from third-party guides, so check a real device export before building import.
 
@@ -64,13 +64,25 @@ All are proposed validators built on the sources in the reference file. Only the
 
 ## Known gaps in this codebase
 
-- Tube colors are not stored; only the tube number is
-- Trays, ODF panels and patch records do not exist, and closures cannot be created in the app
-- Placing a splitter on the map creates no port records (`trace.ts:69,206`)
-- Feeder and distribution cores are not marked as used during customer setup
-- Since Phase 1 all optical numbers come from `packages/shared/src/domain/opticalSettings.ts` (the values in the reference file, each with a source note) and can be overridden in Administration, Optical settings. The worked examples are tests in `packages/shared/test/opticalSettings.test.ts`. Do not add a number elsewhere
-- No optics class is stored per PON port, so traces check GPON against B+ and say so in their notes. C+ has no separate receive bands yet
-- Traces work at cable level: connector pairs are counted one per equipment on the path and labelled estimated; only recorded splices are counted
+Phase 4 (November 2026) added the fiber path. What exists now, and what is still missing:
+
+- **Built:** colour schemes are data (`packages/shared/src/fiber/colors.ts`: TIA-598, IEC 60304 with a source caveat, "not known", and operator schemes as `fiber.scheme.<key>` settings). Each cable stores `colorScheme`, `tubeColorScheme` and `fibersPerTube`; identity is `coreIdentity`, colour only when the scheme is known. Older cables are "not known", never TIA-598
+- **Built:** core assignments with history (`fiberCommands.ts`: `assignCore`, `releaseCore`, `coreUtilization`); customer setup marks the drop core and, when the core path is recorded, the feeder and distribution cores (`markServingCores`)
+- **Built:** closures with trays and cable entries; splices with tray, type, loss with origin, OTDR ref and history (`recordSplice`, `retireSplice`, `resplice`); ODF panels, ports, feeder core behind each port and patches in front (`addOdfPanel`, `setOdfPortFeeder`, `patchOdfPort`); PON port vendor address as written, optics class, vendor budget, ONU limit (`updatePonPort`); one splitter model with port records, exact input core or cascade parent, per-output loss for couplers
+- **Built:** core trace (`fiberPath.ts`: `traceCustomerCores`, `traceCoreUpstream`, `tracePonTree`) with per-direction budgets from `calculateOpticalLossBudget` and the four verdicts; the customer traces in `opticalPathTrace.ts` and `trace.ts` use it when the fibers are recorded end to end, and otherwise name the fiber gap
+- **Built:** validators (`fiberRules.ts`, `findFiberProblems`, `newFiberProblems`) run in the browser commands and on the server (`apps/server/src/lib/linkGuard.ts`)
+- Connector pairs are counted from the ports on the path (PON port, each ODF port, the access-box output adapter, the ONT), each at the estimated setting. ODF pigtail splices are counted only when recorded as splices
+- No loss values for 1577 and 1270 nm: XGS-PON and 10G-EPON use the 1550 and 1310 nm settings and the trace says so. C+ still has no separate receive bands
+- Dual-input (2:N) splitters are only a flag (`dualInput`); a core cut mid-span inside an express closure is not modelled
+- A restore from backup is not checked against the fiber rules, so an older backup still loads; the map check reports its fiber problems
+- Mapped path against an OLT export, and spread checks against real readings, need Phase 7
+- **Built (Phase 5):** ONT records apart from customers (`onts`, `connectionCommands.ts`): serial as entered, the OLT's ONU address as written (never converted), PON port, splitter output and drop fiber, `single` or `shared` (MDU) arrangement, swap and move with history. Customers on one shared ONT may share one drop fiber without a `core_two_continuations` error
+- **Built (Phase 5):** disconnect and move release and re-give fibers and outputs through the same rules (a used output or fiber is refused in the browser and on the server); the OLT link is worked out again from the recorded fibers
+- **Built (Phase 5):** logical tree OLT → PON → splitter stages → ONT → customer → services (`serviceTopology.ts`), walked downstream from each PON port, gaps named
+- **Built (Phase 5):** predicted against measured Rx (`reconciliation.ts`): a value only with the port's recorded `txPowerDbm`, otherwise the class launch range; flagged beyond `optical.measuredGap` below or `optical.measuredStrongGap` above (3 dB each, proposed). The next action is plain ("Clean and check the connector at the box"). Upstream (OLT per-ONT) readings are not stored yet; that needs Phase 7
+- The PON ports' real Tx is rarely recorded, so most reconciliations will say "record the real launch power"; get it from the OLT
+- **Built (Phase 8):** who is affected by a fiber, cable, closure, splitter, PON port or OLT (`affectedByElement`, `faultImpact.ts`) and suspected shared causes for alarms (`correlateAlarms`), both from `traceCustomerCores` paths only. A customer whose fibers are not recorded end to end is "may be affected" when their own record names the element, never assumed. Elements on exactly the same path (a splitter and the fiber feeding it) cannot be told apart by alarms; the splitter, nearest the customers, is named first and the others listed on it. No OLT alarms exist (Phase 7), so LOS and low-light alarms are typed by people or TEST events; a field check reading is `field_measured` with the meter photo
+- **Gap (Phase 8):** correlation does not weigh splitter ratios or optical budgets, and treats "no alarm" as unknown, not up
 
 ## Explaining to field staff
 

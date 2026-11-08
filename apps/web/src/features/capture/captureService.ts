@@ -3,13 +3,16 @@ import { create } from 'zustand';
 import {
   addCapturedEquipment,
   addCapturedFault,
+  applyJobEvent,
   type CaptureKind,
   type CommandResult,
   type NetworkData,
   newCaptureId,
   recordFieldRxReading,
   removeCapturedRecord,
+  type SyncConflict,
   undoFieldRxReading,
+  undoJobEvent,
 } from '@fibergis/shared';
 
 import type { PendingIds } from '../../api/changeTracking';
@@ -46,6 +49,8 @@ export interface CaptureServiceDeps {
   /** Applies a domain command to the network the rest of the app sees; null when it failed. */
   runCommand: <T>(command: (data: NetworkData) => CommandResult<T>) => { value: T } | null;
   getNetwork: () => NetworkData;
+  /** Records someone else changed at the same time (Phase 8); a job event they hold is not re-applied. */
+  getConflicts?: () => readonly Pick<SyncConflict, 'collection' | 'recordId' | 'detectedAt'>[];
   sync: {
     unsentIds: () => PendingIds;
     isConnected: () => boolean;
@@ -87,6 +92,10 @@ export interface CaptureService {
   discardDraft(draft: CaptureDraft): Promise<void>;
   /** Stores a photo for the draft, replacing an earlier one. Returns the photo ID. */
   addPhoto(draft: CaptureDraft, blob: Blob): Promise<string>;
+  /** Stores a photo for a job event (Phase 8). It uploads once the event is saved with this id. */
+  addEventPhoto(eventId: string, blob: Blob): Promise<string>;
+  /** Drops a photo that was never saved with an event (the technician went back). */
+  dropPhoto(photoId: string): Promise<void>;
   getPhoto(id: string): Promise<PhotoEntry | undefined>;
   /**
    * Saves a finished capture: first to phone storage (the only thing "Saved on phone" may claim),
@@ -128,10 +137,22 @@ export function createCaptureService(deps: CaptureServiceDeps): CaptureService {
     if (entry.collection === 'customers') {
       return data.customers.some((c) => c.id === entry.recordId && c.rxCaptureId === entry.id);
     }
+    if (entry.collection === 'workOrders') {
+      const order = data.workOrders.find((w) => w.id === entry.recordId);
+      // A job the office removed, or one someone else changed at the same time, is not put back:
+      // the conflict record keeps this phone's version for the person or the office to choose.
+      if (!order || order.status === 'Closed' || order.status === 'Cancelled') return true;
+      if ((deps.getConflicts?.() ?? []).some((c) => c.collection === 'workOrders' && c.recordId === entry.recordId && Date.parse(c.detectedAt) >= entry.savedAt)) return true;
+      return (order.fieldEvents ?? []).some((e) => e.id === entry.id);
+    }
     return (data[entry.collection] as { id: string }[]).some((r) => r.id === entry.recordId);
   };
 
   const apply = (entry: OutboxEntry): boolean => {
+    if (entry.collection === 'workOrders' && entry.jobEvent) {
+      const event = entry.jobEvent;
+      return deps.runCommand((data) => applyJobEvent(data, entry.recordId, event)) !== null;
+    }
     if (entry.collection === 'equipment' && entry.record) {
       return deps.runCommand((data) => addCapturedEquipment(data, entry.record as never)) !== null;
     }
@@ -283,12 +304,22 @@ export function createCaptureService(deps: CaptureServiceDeps): CaptureService {
         return id;
       }),
 
+    addEventPhoto: (eventId, blob) =>
+      guard(async () => {
+        const id = newCaptureId('photo');
+        await deps.storage.putPhoto({ id, captureId: eventId, blob, type: blob.type || 'image/jpeg', bytes: blob.size, createdAt: now(), attempts: 0, nextAttemptAt: 0 });
+        return id;
+      }),
+
+    dropPhoto: (photoId) => deps.storage.deletePhoto(photoId).catch(() => undefined),
+
     getPhoto: (id) => deps.storage.getPhoto(id),
 
     async save(entry) {
       const existing = (await deps.storage.listOutbox().catch(() => [] as OutboxEntry[])).find((e) => e.id === entry.id);
-      if (!existing) await guard(() => deps.storage.commitCapture(entry));
-      else await deps.storage.deleteDraft().catch(() => undefined);
+      // A job event has no capture draft: saving it must not drop an unfinished pole or box capture.
+      if (!existing) await guard(() => (entry.kind === 'job' ? deps.storage.putOutbox(entry) : deps.storage.commitCapture(entry)));
+      else if (entry.kind !== 'job') await deps.storage.deleteDraft().catch(() => undefined);
       // A second tap on Save finds the stored entry and adds nothing new.
       const stored = existing ?? entry;
       if (stored.status === 'saved' && !isInNetwork(stored, deps.getNetwork())) apply(stored);
@@ -306,6 +337,8 @@ export function createCaptureService(deps: CaptureServiceDeps): CaptureService {
         if (entry.reading) {
           deps.runCommand((data) => undoFieldRxReading(data, entry.recordId, entry.id, entry.previousRx ?? {}));
         }
+      } else if (entry.collection === 'workOrders') {
+        deps.runCommand((data) => undoJobEvent(data, entry.recordId, entry.id));
       } else {
         const collection = entry.collection;
         deps.runCommand((data) => removeCapturedRecord(data, collection, entry.recordId));

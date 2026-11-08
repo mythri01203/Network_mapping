@@ -23,6 +23,7 @@ import { useMapStore } from '../../stores/mapStore';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { CorePathView } from '../fiber/CorePathView';
 
 const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 
@@ -247,6 +248,18 @@ export const FiberTraceModal: React.FC = () => {
                 ))}
               </ul>
             </div>
+          )}
+
+          {traceResult?.corePath && (
+            <section className="rounded-xl border border-slate-200 p-4" data-testid="trace-core-section">
+              <h3 className="mb-2 text-sm font-bold text-slate-900">
+                Fiber by fiber{' '}
+                <span className="ml-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600" data-testid="trace-level">
+                  {traceResult.level === 'core' ? 'Every fiber recorded' : 'Cables only: fibers not recorded end to end'}
+                </span>
+              </h3>
+              <CorePathView path={traceResult.corePath} />
+            </section>
           )}
 
           {/* Stats Grid */}

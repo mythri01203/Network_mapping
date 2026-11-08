@@ -72,10 +72,15 @@ describe('reportFault', () => {
 });
 
 describe('resolveFault', () => {
-  it('resolves the fault and completes its open work orders', () => {
+  it('refuses to close a fault without a check (Phase 8)', () => {
+    const data = { ...emptyNetwork(), faults: [fault({ id: 'F1', status: 'Dispatched' })] };
+    expect(resolveFault(data, 'F1', ctx)).toMatchObject({ ok: false, error: { title: 'Check needed' } });
+  });
+
+  it('closes a checked fault and completes its open work orders', () => {
     const data = {
       ...emptyNetwork(),
-      faults: [fault({ id: 'F1', status: 'Dispatched', workOrderId: 'WO-1' })],
+      faults: [fault({ id: 'F1', status: 'Dispatched', workOrderId: 'WO-1', verification: { method: 'office_check', at: '2026-11-04T09:00:00Z', by: 'Office', note: 'Customer confirmed' } })],
       workOrders: [
         workOrder({ id: 'WO-1', status: 'In Progress' }),
         workOrder({ id: 'WO-2', faultId: 'F1', status: 'Assigned' }),
@@ -85,7 +90,7 @@ describe('resolveFault', () => {
     };
     const result = resolveFault(data, 'F1', ctx);
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value).toMatchObject({ status: 'Resolved', resolvedAt: '2026-11-04 09:30' });
+    expect(result.value).toMatchObject({ status: 'Closed', resolvedAt: '2026-11-04 09:30' });
     const statuses = Object.fromEntries(applyPatch(data, result.patch).workOrders.map((w) => [w.id, w.status]));
     expect(statuses).toEqual({ 'WO-1': 'Completed', 'WO-2': 'Completed', 'WO-3': 'Cancelled', 'WO-4': 'Pending' });
   });

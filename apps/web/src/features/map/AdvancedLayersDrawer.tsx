@@ -63,6 +63,9 @@ export const AdvancedLayersDrawer: React.FC = () => {
       layers: [
         { key: 'poles', label: 'Telecom & Electric Poles', color: '#475569', defaultOpacity: 0.85 },
         { key: 'manholes', label: 'Manholes & Underground Chambers', color: '#334155', defaultOpacity: 0.85 },
+        { key: 'spans', label: 'Spans between poles (dashed = proposed)', color: '#7c2d12', defaultOpacity: 0.9 },
+        { key: 'ducts', label: 'Ducts (underground)', color: '#78716c', defaultOpacity: 0.55 },
+        { key: 'slackLoops', label: 'Slack loops', color: '#7c3aed', defaultOpacity: 1.0 },
       ],
     },
     {

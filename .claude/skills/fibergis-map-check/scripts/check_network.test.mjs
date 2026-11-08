@@ -196,3 +196,312 @@ test('the report limits examples and says what it cannot prove', () => {
   assert.match(report, /1 must fix/);
   assert.match(report, /does not prove the map matches the street/);
 });
+
+// --- Outside plant (Phase 3) ---
+const pole = (id, extra = {}) => box(id, { type: 'Telecom Pole', category: 'Supporting Infrastructure', ...extra });
+const withPoles = () => {
+  const data = healthy();
+  data.equipment.push(pole('P-1', { lat: 12.9002 }), pole('P-2', { lat: 12.9006 }));
+  data.spans = [{ id: 'S-1', name: 'P-1 – P-2', fromStructureId: 'P-1', toStructureId: 'P-2', status: 'built', basis: 'office_drawn' }];
+  data.attachments = [
+    { id: 'A-1', cableId: 'CBL-1', structureId: 'P-1', status: 'built', basis: 'office_confirmed' },
+    { id: 'A-2', cableId: 'CBL-1', spanId: 'S-1', status: 'built', basis: 'office_confirmed' },
+  ];
+  return data;
+};
+
+test('correct spans and attachments add no findings', () => {
+  assert.deepEqual(checkNetwork(withPoles()), []);
+});
+
+test('a span or attachment pointing to nothing is an error', () => {
+  const data = withPoles();
+  data.spans[0].toStructureId = 'GONE';
+  data.attachments.push({ id: 'A-3', cableId: 'CBL-GONE', spanId: 'S-GONE', status: 'built', basis: 'office_confirmed' });
+  const found = rules(data);
+  assert.ok(found.includes('span-end-missing'));
+  assert.ok(found.includes('attachment-cable-missing'));
+  assert.ok(found.includes('attachment-host-missing'));
+});
+
+test('proposed field spans and a span recorded twice are to check, not errors', () => {
+  const data = withPoles();
+  data.spans.push({ id: 'S-2', name: 'again', fromStructureId: 'P-2', toStructureId: 'P-1', status: 'proposed', basis: 'field_sequence' });
+  const findings = checkNetwork(data);
+  assert.deepEqual(
+    findings.filter((f) => f.severity === 'warning').map((f) => f.rule).sort(),
+    ['span-proposed', 'span-repeated'],
+  );
+  assert.ok(!findings.some((f) => f.severity === 'error'));
+});
+
+test('a pole recorded on a cable far from its drawn line is flagged', () => {
+  const data = withPoles();
+  data.equipment.push(pole('P-FAR', { lng: 77.601 }));
+  data.attachments.push({ id: 'A-4', cableId: 'CBL-1', structureId: 'P-FAR', status: 'built', basis: 'office_confirmed' });
+  assert.ok(rules(data).includes('attachment-far-from-route'));
+});
+
+test('duct occupancy must name real cables, once each', () => {
+  const data = healthy();
+  data.ducts = [
+    {
+      id: 'D-1',
+      name: 'D-1',
+      coordinates: [
+        [12.9, 77.6],
+        [12.901, 77.6],
+      ],
+      cableIds: ['CBL-1'],
+      subducts: [{ id: 'SD-1', label: 'Blue', cableIds: ['CBL-1', 'CBL-GONE'] }],
+    },
+  ];
+  const found = rules(data);
+  assert.ok(found.includes('duct-cable-missing'));
+  assert.ok(found.includes('duct-cable-repeated'));
+});
+
+test('slack loops and permissions must point to real records; an ended permission is flagged', () => {
+  const data = withPoles();
+  data.slackLoops = [{ id: 'L-1', name: 'L-1', cableId: 'CBL-GONE', structureId: 'P-GONE', lengthMeters: 0 }];
+  data.permissions = [
+    { id: 'PR-1', authority: 'BESCOM', permitNumber: 'B-1', structureIds: ['P-1', 'P-GONE'], validUntil: '2025-12-31' },
+  ];
+  const found = checkNetwork(data, undefined, '2026-11-07').map((f) => f.rule);
+  for (const rule of ['slack-cable-missing', 'slack-place-missing', 'slack-length-invalid', 'permission-item-missing', 'permission-expired']) {
+    assert.ok(found.includes(rule), rule);
+  }
+});
+
+test('an electricity pole and a telecom pole on one spot are a possible duplicate', () => {
+  const data = healthy();
+  data.equipment.push(pole('P-1', { lat: 12.9003 }), pole('P-2', { lat: 12.9003, type: 'Electric Pole' }));
+  assert.ok(rules(data).includes('possible-duplicate'));
+});
+
+test('an aerial cable with no poles recorded is a note', () => {
+  const data = healthy();
+  data.cables[0].installationType = 'Aerial';
+  const findings = checkNetwork(data);
+  assert.deepEqual(findings.map((f) => [f.severity, f.rule]), [['note', 'aerial-no-poles']]);
+});
+
+// --- Phase 4: fiber by fiber ------------------------------------------------------------------
+
+/** OLT PON-01 → ODF port 1 → CBL-1 fiber 1 → splice → CBL-2 fiber 1 → splitter → drop CBL-3 fiber 1 → customer. */
+const fiberNetwork = () => {
+  const data = healthy();
+  data.equipment.push(box('ODF-1', { type: 'ODF', odfPanels: [{ id: 'P', label: 'Panel A', ports: [{ id: 'X1', number: 1, status: 'in_use', feederCableId: 'CBL-1', feederCore: 1, patch: { oltId: 'OLT-1', ponPortId: 'PON-01', patchedAt: '' } }] }] }));
+  data.equipment[0].ponPorts[0].opticsClass = 'GPON B+';
+  data.cables = [
+    cable('CBL-1', { colorScheme: 'tia-598', fibersPerTube: 2 }),
+    cable('CBL-2', { colorScheme: 'tia-598', fibersPerTube: 2 }),
+    cable('CBL-3', { colorScheme: 'tia-598', fibersPerTube: 2 }),
+  ];
+  data.closures = [{ id: 'CL-1', name: 'CL-1', splices: [{ id: 'S1', inputCableId: 'CBL-1', inputCore: 1, outputCableId: 'CBL-2', outputCore: 1, status: 'Spliced' }] }];
+  data.splitters[0].inputPort = { id: 'IN', connectedCableId: 'CBL-2', connectedCore: 1 };
+  data.splitters[0].outputPorts[0] = { portNumber: 1, connectedDropCableId: 'CBL-3', connectedCore: 1, connectedCustomerId: 'C-1' };
+  data.customers = [customer('C-1', { dropCableId: 'CBL-3', feederCableId: 'CBL-1', distributionCableId: 'CBL-2' })];
+  return data;
+};
+const fiberRules = (data) => checkNetwork(data).filter((f) => f.severity !== 'note').map((f) => f.rule);
+
+test('a fiber path recorded end to end adds no errors or warnings', () => {
+  assert.deepEqual(fiberRules(fiberNetwork()), []);
+});
+
+test('a fiber fed from two places, or going two ways, is an error', () => {
+  const twoFeeds = fiberNetwork();
+  twoFeeds.closures[0].splices.push({ id: 'S2', inputCableId: 'CBL-1', inputCore: 2, outputCableId: 'CBL-2', outputCore: 1, status: 'Spliced' });
+  assert.ok(fiberRules(twoFeeds).includes('core-two-feeds'));
+  const twoWays = fiberNetwork();
+  twoWays.closures[0].splices.push({ id: 'S2', inputCableId: 'CBL-1', inputCore: 1, outputCableId: 'CBL-2', outputCore: 2, status: 'Spliced' });
+  assert.ok(fiberRules(twoWays).includes('core-two-continuations'));
+});
+
+test('a splice taken out of service is history, not a live join', () => {
+  const data = fiberNetwork();
+  data.closures[0].splices.push({ id: 'S0', inputCableId: 'CBL-1', inputCore: 2, outputCableId: 'CBL-2', outputCore: 1, status: 'Spliced', retiredAt: '2026-11-01' });
+  assert.deepEqual(fiberRules(data), []);
+});
+
+test('two active assignments on one fiber and a tube layout that does not add up are errors', () => {
+  const data = fiberNetwork();
+  data.cables[0].cores[1].assignments = [{ id: 'A', use: 'X' }, { id: 'B', use: 'Y' }];
+  data.cables[1].fibersPerTube = 3;
+  const found = fiberRules(data);
+  assert.ok(found.includes('core-two-assignments'));
+  assert.ok(found.includes('tube-layout-wrong'));
+});
+
+test('splitter outputs beyond the ratio, ODF ports naming missing fibers and two patches on one PON port are errors', () => {
+  const data = fiberNetwork();
+  data.splitters[0].outputPorts.push({ portNumber: 3 });
+  data.equipment[2].odfPanels[0].ports.push({ id: 'X2', number: 2, status: 'in_use', feederCableId: 'CBL-1', feederCore: 9, patch: { oltId: 'OLT-1', ponPortId: 'PON-01', patchedAt: '' } });
+  const found = fiberRules(data);
+  assert.ok(found.includes('splitter-output-overflow'));
+  assert.ok(found.includes('odf-port-core-missing'));
+  assert.ok(found.includes('pon-two-patches'));
+});
+
+test('an unknown colour scheme on a spliced cable and a missing optics class are notes', () => {
+  const data = fiberNetwork();
+  delete data.cables[1].colorScheme;
+  delete data.equipment[0].ponPorts[0].opticsClass;
+  const notes = checkNetwork(data).filter((f) => f.severity === 'note').map((f) => f.rule);
+  assert.ok(notes.includes('cable-scheme-unknown'));
+  assert.ok(notes.includes('pon-class-not-recorded'));
+});
+
+// --- Customers and connections (Phase 5) ---
+const ont = (id, extra = {}) => ({ id, serialNumber: `SN-${id}`, arrangement: 'single', status: 'installed', statusSource: 'person', createdAt: '', ...extra });
+const withConnections = () => {
+  const data = healthy();
+  data.onts = [ont('ONT-1', { oltId: 'OLT-1', ponPortId: 'PON-01', splitterId: 'SPL-1', splitterOutputPort: 1, dropCableId: 'CBL-1', dropCore: 1 })];
+  data.customers[0].ontId = 'ONT-1';
+  data.services = [{ id: 'SVC-1', customerId: 'C-1', kind: 'internet', status: 'active', ontId: 'ONT-1', createdAt: '' }];
+  data.equipment.push(box('BEP-1', { type: 'Building Entry Point', category: 'Supporting Infrastructure', lat: 12.9015 }));
+  data.buildings = [{ id: 'B-1', name: 'Lake View', kind: 'apartment', lat: 12.9015, lng: 77.6, entryEquipmentId: 'BEP-1', riserCableId: 'CBL-1', floorBoxes: [{ id: 'F-1', label: 'Floor 3' }], units: [{ id: 'U-1', label: '302', floorBoxId: 'F-1' }], createdAt: '' }];
+  data.customers[0].buildingId = 'B-1';
+  data.customers[0].unitId = 'U-1';
+  return data;
+};
+
+test('ONT, service and building records that agree add no findings', () => {
+  assert.deepEqual(checkNetwork(withConnections()), []);
+});
+
+test('ONTs naming missing records, one serial on two ONTs and two customers on a one-customer ONT are errors', () => {
+  const data = withConnections();
+  data.onts[0].splitterId = 'GONE';
+  data.onts.push(ont('ONT-2', { serialNumber: 'sn-ont-1' }));
+  data.customers.push(customer('C-2', { ontId: 'ONT-1', splitterOutputPort: 2, fiberCore: 2 }));
+  const found = rules(data);
+  assert.ok(found.includes('ont-link-missing'));
+  assert.ok(found.includes('ont-serial-twice'));
+  assert.ok(found.includes('ont-one-customer-shared'));
+  data.onts[0].arrangement = 'shared';
+  assert.ok(!rules(data).includes('ont-one-customer-shared'));
+});
+
+test('a removed ONT is history: not checked, but a customer still on it is an error', () => {
+  const data = withConnections();
+  data.onts[0] = { ...data.onts[0], status: 'removed', splitterId: 'GONE' };
+  const found = rules(data);
+  assert.ok(!found.includes('ont-link-missing'));
+  assert.ok(found.includes('customer-on-removed-ont'));
+});
+
+test('a disconnected customer still holding an output or fiber is flagged, and has no path warnings', () => {
+  const data = withConnections();
+  const c = data.customers[0];
+  Object.assign(c, { status: 'Disconnected', oltId: '', ponPort: '', terminalBoxId: '', splitterId: '', splitterOutputPort: 0, dropCableId: '', fiberCore: 0, ontId: undefined });
+  data.services[0].status = 'active';
+  data.splitters[0].outputPorts[0].connectedCustomerId = 'C-1';
+  data.cables[0].cores[0].assignments = [{ id: 'A', use: 'Customer C-1', customerId: 'C-1' }];
+  const found = checkNetwork(data);
+  const ids = found.map((f) => f.rule);
+  assert.ok(ids.includes('disconnected-holds-port'));
+  assert.ok(ids.includes('disconnected-holds-fiber'));
+  assert.ok(ids.includes('service-on-disconnected'));
+  assert.ok(ids.includes('disconnect-no-history'));
+  assert.ok(!ids.includes('customer-path-incomplete'));
+  // No customer name or phone number in these messages: ids only.
+  data.customers[0].name = 'Asha Rao';
+  assert.ok(checkNetwork(data).filter((f) => /disconnected|service-on/.test(f.rule)).every((f) => !f.message.includes('Asha')));
+});
+
+test('services and buildings naming missing records are errors; missing riser and floor boxes are notes', () => {
+  const data = withConnections();
+  data.services.push({ id: 'SVC-2', customerId: 'NOBODY', kind: 'internet', status: 'active', createdAt: '' });
+  data.buildings[0].riserCableId = 'GONE';
+  data.buildings[0].units.push({ id: 'U-2', label: '302' }, { id: 'U-3', label: '303', floorBoxId: 'NOPE' });
+  const found = rules(data);
+  assert.ok(found.includes('service-customer-missing'));
+  assert.ok(found.includes('building-link-missing'));
+  assert.ok(found.includes('unit-label-repeated'));
+  assert.ok(found.includes('unit-box-missing'));
+  const plain = withConnections();
+  delete plain.buildings[0].riserCableId;
+  delete plain.buildings[0].units[0].floorBoxId;
+  const notes = checkNetwork(plain).filter((f) => f.severity === 'note').map((f) => f.rule);
+  assert.ok(notes.includes('building-riser-not-recorded'));
+  assert.ok(notes.includes('unit-box-not-recorded'));
+});
+
+test('customers on one shared ONT may use one drop fiber', () => {
+  const data = withConnections();
+  data.onts[0].arrangement = 'shared';
+  data.customers.push(customer('C-2', { ontId: 'ONT-1', splitterOutputPort: 2 }));
+  assert.ok(!rules(data).includes('core-shared'));
+  delete data.customers[1].ontId;
+  assert.ok(rules(data).includes('core-shared'));
+});
+
+// --- Phase 8: alarms, faults, work orders, conflicts ---
+const alarm = (id, extra = {}) => ({ id, kind: 'ont_los', source: 'test', isTest: true, severity: 'High', state: 'active', element: { type: 'customer', id: 'C-1' }, firstSeenAt: '', lastSeenAt: '', occurrences: 1, ...extra });
+const fault = (id, extra = {}) => ({ id, title: id, type: 'Customer Disconnection', severity: 'High', status: 'Reported', affectedLocation: { lat: 12.9, lng: 77.6 }, affectedCustomerIds: ['C-1'], affectedCores: [], affectedSplitterPorts: [], description: '', reportedAt: '', images: [], isTest: true, source: 'test', alarmIds: ['A-1'], ...extra });
+const job = (id, extra = {}) => ({ id, title: id, type: 'Repair', priority: 'High', status: 'Assigned', technicianName: 'T', technicianPhone: '', faultId: 'F-1', scheduledDate: '', notes: '', photos: [], isTest: true, ...extra });
+const withFaults = () => ({ ...healthy(), alarms: [alarm('A-1', { faultId: 'F-1' })], faults: [fault('F-1')], workOrders: [job('W-1')] });
+const reading = { method: 'field_reading', at: '', by: 'T', readingDbm: -19, readingOrigin: 'field_measured', photoId: 'PH-1' };
+
+test('a labelled TEST alarm, its fault and job add no findings', () => {
+  assert.deepEqual(checkNetwork(withFaults()), []);
+});
+
+test('a device alarm with no OLT connected, and a TEST label that does not match, are errors', () => {
+  const data = withFaults();
+  data.alarms.push(alarm('A-2', { source: 'device_adapter', isTest: false }), alarm('A-3', { source: 'manual', isTest: true }));
+  const found = rules(data);
+  assert.ok(found.includes('alarm-device-not-connected'));
+  assert.equal(found.filter((r) => r === 'alarm-test-label').length, 1);
+});
+
+test('a fault or job closed without a check is an error; a field reading not measured does not count', () => {
+  const data = withFaults();
+  data.faults[0].status = 'Closed';
+  data.workOrders[0] = job('W-1', { status: 'Verified', verification: { ...reading, readingOrigin: 'calculated' } });
+  const found = rules(data);
+  assert.ok(found.includes('fault-closed-unverified'));
+  assert.ok(found.includes('work-order-closed-unverified'));
+  data.workOrders[0].verification = reading;
+  const after = rules(data);
+  assert.ok(!after.includes('fault-closed-unverified'));
+  assert.ok(!after.includes('work-order-closed-unverified'));
+});
+
+test('an open fault listing customers whose path is now broken or gone is flagged, by id only', () => {
+  const data = withFaults();
+  data.customers[0].name = 'Asha Rao';
+  data.customers[0].dropCableId = '';
+  data.faults[0].affectedCustomerIds = ['C-1', 'C-GONE'];
+  const found = checkNetwork(data);
+  const ids = found.map((f) => f.rule);
+  assert.ok(ids.includes('fault-affected-broken-path'));
+  assert.ok(ids.includes('fault-affected-missing'));
+  // The Phase 8 rules name customers by id only (older customer rules still print names).
+  assert.ok(found.filter((f) => /^fault-|^alarm-|^work-order-/.test(f.rule)).every((f) => !f.message.includes('Asha')));
+});
+
+test('TEST and real mixed in one fault, a real job on a TEST fault, and an open job on a closed fault are flagged', () => {
+  const data = withFaults();
+  data.alarms[0].isTest = false;
+  data.alarms[0].source = 'manual';
+  data.workOrders[0].isTest = false;
+  data.faults.push(fault('F-2', { status: 'Closed', verification: { method: 'office_check', at: '', by: 'O', note: 'ok' }, alarmIds: [], isTest: false, source: 'manual' }));
+  data.workOrders.push(job('W-2', { faultId: 'F-2', isTest: false, status: 'In Progress' }));
+  const found = rules(data);
+  assert.ok(found.filter((r) => r === 'fault-test-mixed').length >= 2);
+  assert.ok(found.includes('work-order-open-on-closed-fault'));
+});
+
+test('older resolved faults, jobs waiting for a check and conflicts waiting are notes', () => {
+  const data = withFaults();
+  data.faults.push(fault('F-OLD', { status: 'Resolved', isTest: false, source: undefined, alarmIds: [] }));
+  data.workOrders[0].status = 'Completed';
+  data.syncConflicts = [{ id: 'CNF-1', status: 'office_decides' }, { id: 'CNF-2', status: 'kept_mine' }];
+  const notes = checkNetwork(data).filter((f) => f.severity === 'note').map((f) => f.rule);
+  assert.ok(notes.includes('fault-resolved-before-checks'));
+  assert.ok(notes.includes('work-order-awaiting-check'));
+  assert.ok(notes.includes('sync-conflicts-waiting'));
+});

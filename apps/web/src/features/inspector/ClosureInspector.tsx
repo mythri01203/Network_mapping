@@ -5,17 +5,19 @@ import type { JointClosure } from '@fibergis/shared';
 import { Button, KeyValueList } from '../../components/ui';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { ClosureDetailsSection } from '../fiber/PlantSections';
 import { navigateToSite } from './actions';
 import { formatDate, presentItems } from './format';
 import { InspectorLayout, InspectorSection, Metric } from './sections';
 
 export function ClosureInspector({ closure }: { closure: JointClosure }) {
-  const setModalOpen = useUiStore((s) => s.setModalOpen);
+  const openSplicing = useUiStore((s) => s.openSplicing);
   const cables = useNetworkStore((s) => s.cables);
   const cableName = (id?: string) => (id ? (cables.find((c) => c.id === id)?.name ?? id) : undefined);
   const failedSplices = closure.splices.filter(
-    (splice) => splice.status === 'Failed' || splice.status === 'Damaged',
+    (splice) => !splice.retiredAt && (splice.status === 'Failed' || splice.status === 'Damaged'),
   ).length;
+  const inService = closure.splices.filter((s) => !s.retiredAt).length;
 
   const details = presentItems([
     { label: 'Closure type', value: closure.closureType },
@@ -30,8 +32,8 @@ export function ClosureInspector({ closure }: { closure: JointClosure }) {
     <InspectorLayout
       actions={
         <>
-          <Button variant="primary" size="sm" icon={GitMerge} onClick={() => setModalOpen('splicing', true)}>
-            Splice records
+          <Button variant="primary" size="sm" icon={GitMerge} data-testid="closure-splices" onClick={() => openSplicing(closure.id)}>
+            Splices and trays
           </Button>
           <Button
             size="sm"
@@ -53,7 +55,7 @@ export function ClosureInspector({ closure }: { closure: JointClosure }) {
     >
       <InspectorSection title="Splices" icon={GitMerge}>
         <div className="grid grid-cols-2 gap-2">
-          <Metric label="Recorded splices" value={closure.splices.length} />
+          <Metric label="Splices in service" value={inService} />
           <Metric
             label="Failed or damaged"
             value={failedSplices}
@@ -61,6 +63,8 @@ export function ClosureInspector({ closure }: { closure: JointClosure }) {
           />
         </div>
       </InspectorSection>
+
+      <ClosureDetailsSection closure={closure} />
 
       <InspectorSection title="Details" icon={Info}>
         <KeyValueList items={details} />

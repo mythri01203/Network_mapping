@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { getFiberColor } from '@fibergis/shared';
+import { coreIdentity } from '@fibergis/shared';
 
 import { useOpenView, useShowOnMap } from '../../app/views';
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectColorSchemes, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 
 export const CableInventoryView: React.FC = () => {
   const cables = useNetworkStore((s) => s.cables);
+  const schemes = useNetworkStore(selectColorSchemes);
   const { setModalOpen, setPanelOpen } = useUiStore(
     useShallow((s) => ({ setModalOpen: s.setModalOpen, setPanelOpen: s.setPanelOpen })),
   );
@@ -82,13 +83,13 @@ export const CableInventoryView: React.FC = () => {
                     <td className="px-3 py-2">
                       <div className="flex gap-0.5">
                         {Array.from({ length: Math.min(12, c.fiberCount) }, (_, i) => {
-                          const col = getFiberColor(i + 1);
+                          const id = coreIdentity(c, i + 1, schemes);
                           return (
                             <span
                               key={i}
-                              title={`Core ${i + 1} ${col.name}`}
-                              className="w-3 h-3 rounded-sm border"
-                              style={{ background: col.hex }}
+                              title={id.label}
+                              className={id.fiberColor ? 'w-3 h-3 rounded-sm border' : 'w-3 h-3 rounded-sm border border-dashed border-slate-400 bg-white'}
+                              style={id.fiberColor ? { background: id.fiberColor.hex } : undefined}
                             />
                           );
                         })}

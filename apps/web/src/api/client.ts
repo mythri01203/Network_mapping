@@ -11,6 +11,7 @@ import {
   type ParsedBackup,
   type RouteRequest,
   type RouteResponse,
+  type VersionConflict,
 } from '@fibergis/shared';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -20,13 +21,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly issues: NonNullable<ApiErrorBody['issues']>;
+  /** With `version_conflict`: each record someone else changed, as the server now has it. */
+  readonly conflicts: VersionConflict[];
 
-  constructor(status: number, code: string, message: string, issues: ApiErrorBody['issues'] = []) {
+  constructor(status: number, code: string, message: string, issues: ApiErrorBody['issues'] = [], conflicts: VersionConflict[] = []) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.issues = issues;
+    this.conflicts = conflicts;
+  }
+
+  get isVersionConflict(): boolean {
+    return this.status === 409 && this.code === 'version_conflict';
   }
 
   /** The request itself was refused, so sending it again unchanged will fail again. */
@@ -139,7 +147,9 @@ export function createApiClient({
     }
 
     if (!response.ok) {
-      if (isErrorBody(payload)) throw new ApiError(response.status, payload.error, payload.message, payload.issues);
+      if (isErrorBody(payload)) {
+        throw new ApiError(response.status, payload.error, payload.message, payload.issues, Array.isArray(payload.conflicts) ? payload.conflicts : []);
+      }
       throw new ApiError(response.status, 'http_error', `The server responded with HTTP ${response.status}.`);
     }
     return payload as T;

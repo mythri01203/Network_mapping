@@ -26,6 +26,8 @@ import {
 import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
+import { isFaultOpen, isWorkOrderOpen } from '@fibergis/shared';
+
 import { cn, MenuItem, MenuLabel, MenuSeparator, Popover } from '../../components/ui';
 import { useBikerStore } from '../../stores/bikerStore';
 import { useNetworkStore } from '../../stores/networkStore';
@@ -93,8 +95,9 @@ export const LeftSidebar: React.FC = () => {
   };
   const simple = uiMode === 'simple';
 
-  const openFaults = faults.filter((f) => f.status !== 'Resolved').length;
-  const openWorkOrders = workOrders.filter((w: any) => w.status !== 'Completed' && w.status !== 'Cancelled').length;
+  // TEST faults are not counted: they are drills, not real outages.
+  const openFaults = faults.filter((f) => isFaultOpen(f) && !f.isTest).length;
+  const openWorkOrders = workOrders.filter((w) => isWorkOrderOpen(w) && !w.isTest).length;
   const fatCount = equipments.filter((e) => /FAT|Terminal Box/i.test(String(e.type))).length;
   const catvCount = equipments.filter((e) => e.category === 'Cable TV Infrastructure').length;
 

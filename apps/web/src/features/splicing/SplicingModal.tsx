@@ -1,407 +1,291 @@
 import React, { useState } from 'react';
-import { GitBranch, Trash2, X, Zap } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { getFiberColor, type SpliceRecord } from '@fibergis/shared';
+import {
+  type Cable,
+  coreIdentity,
+  type JointClosure,
+  type LossSource,
+  type SpliceRecord,
+  type SpliceType,
+} from '@fibergis/shared';
 
+import { Button, Field, Input, Modal, Select } from '../../components/ui';
 import { requestConfirm } from '../../stores/confirmStore';
-import { addSplice, removeSplice } from '../../stores/networkActions';
-import { useNetworkStore } from '../../stores/networkStore';
-import { useToastStore } from '../../stores/toastStore';
+import { redoSplice,saveSplice, takeSpliceOut } from '../../stores/fiberActions';
+import { removeSplice } from '../../stores/networkActions';
+import { selectColorSchemes, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { FiberSwatch } from '../fiber/FiberChip';
+import { FiberPicker } from '../fiber/FiberPicker';
+import { emptyFiber, type FiberChoice, fiberOf } from '../fiber/fiberUi';
 
-export const SplicingModal: React.FC = () => {
-  const { isSplicingModalOpen, setModalOpen } = useUiStore(
-    useShallow((s) => ({ isSplicingModalOpen: s.modals.splicing, setModalOpen: s.setModalOpen })),
+const LOSS_SOURCE_LABELS: Record<LossSource, string> = {
+  field_measured: 'Measured with a meter',
+  device_reported: 'OTDR or splicer reading',
+  designed: 'Design value',
+  calculated: 'Worked out',
+};
+
+/** Cables recorded at a closure: its entries, its legacy A/B cables and cables drawn to its pin. */
+function cablesAtClosure(closure: JointClosure, cables: readonly Cable[]): Cable[] {
+  const ids = new Set<string>([
+    ...(closure.cableEntries ?? []).map((e) => e.cableId),
+    ...[closure.cableAId, closure.cableBId].filter((x): x is string => !!x),
+  ]);
+  return cables.filter(
+    (c) =>
+      c.cableCategory !== 'Coaxial' &&
+      (ids.has(c.id) || (!!closure.equipmentId && (c.startEquipmentId === closure.equipmentId || c.endEquipmentId === closure.equipmentId))),
   );
-  const { closures, cables } = useNetworkStore(useShallow((s) => ({ closures: s.closures, cables: s.cables })));
-  const showToast = useToastStore((s) => s.show);
+}
 
-  const [selectedClosureId, setSelectedClosureId] = useState<string>(closures[0]?.id || 'JC-01');
+function FiberEnd({ cableId, core }: { cableId: string; core: number }) {
+  const cable = useNetworkStore((s) => s.cables.find((c) => c.id === cableId));
+  const schemes = useNetworkStore(selectColorSchemes);
+  const identity = cable ? coreIdentity(cable, core, schemes) : undefined;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <FiberSwatch identity={identity} />
+      <span className="min-w-0 truncate">
+        <strong>{cable?.name ?? cableId}</strong> {identity?.shortLabel ?? `F${core}`}
+        {identity?.fiberColor ? ` ${identity.fiberColor.name}` : ''}
+      </span>
+    </span>
+  );
+}
 
-  // New splice input state
-  const [newInCableId, setNewInCableId] = useState<string>(cables[0]?.id || '');
-  const [newInCore, setNewInCore] = useState<number>(1);
-  const [newOutCableId, setNewOutCableId] = useState<string>(cables[1]?.id || '');
-  const [newOutCore, setNewOutCore] = useState<number>(1);
-  const [newLossDb, setNewLossDb] = useState<number>(0.02);
-  const [newStatus, setNewStatus] = useState<SpliceRecord['status']>('Spliced');
-  const [newTray, setNewTray] = useState<string>('Tray 1 (Primary Feeder)');
-  const [newTechnician, setNewTechnician] = useState<string>('');
+/** One row of the tray diagram: input fiber on the left, output on the right, a line between. */
+function SpliceRow({ closure, splice, onRedo }: { closure: JointClosure; splice: SpliceRecord; onRedo: (s: SpliceRecord) => void }) {
+  const [reason, setReason] = useState('');
+  const [asking, setAsking] = useState(false);
+  const broken = splice.status === 'Failed' || splice.status === 'Damaged';
+  return (
+    <li className="rounded-md border border-slate-200 bg-white p-2 text-xs" data-testid={`splice-row-${splice.id}`}>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <FiberEnd cableId={splice.inputCableId} core={splice.inputCore} />
+        <span className={`h-0.5 w-8 ${broken ? 'bg-red-500' : splice.status === 'Pending' ? 'border-t-2 border-dashed border-slate-400' : 'bg-slate-700'}`} aria-hidden />
+        <FiberEnd cableId={splice.outputCableId} core={splice.outputCore} />
+      </div>
+      <p className="mt-1 text-[11px] text-slate-600">
+        {splice.spliceType ?? 'fusion'} · {splice.status} ·{' '}
+        {splice.spliceLossDb !== undefined ? `${splice.spliceLossDb} dB (${splice.lossSource ? LOSS_SOURCE_LABELS[splice.lossSource] : 'origin not recorded'})` : 'loss not recorded'}
+        {splice.otdrRef ? ` · OTDR ${splice.otdrRef}` : ''}
+        {splice.technician ? ` · ${splice.technician}` : ''} · {splice.date}
+      </p>
+      {asking ? (
+        <div className="mt-1 flex gap-2">
+          <Input data-testid={`splice-retire-reason-${splice.id}`} value={reason} placeholder="Why (cut, re-made, wrong record…)" onChange={(e) => setReason(e.target.value)} />
+          <Button size="sm" variant="danger" data-testid={`splice-retire-confirm-${splice.id}`} onClick={() => void takeSpliceOut(closure.id, splice.id, reason)}>
+            Take out
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-1 flex flex-wrap gap-2">
+          <Button size="xs" data-testid={`splice-retire-${splice.id}`} onClick={() => setAsking(true)}>
+            Out of service
+          </Button>
+          <Button size="xs" data-testid={`splice-redo-${splice.id}`} onClick={() => onRedo(splice)}>
+            Re-splice
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={async () => {
+              const ok = await requestConfirm({
+                title: 'Delete splice record',
+                message: 'Only for a record entered by mistake. A splice that existed should be taken out of service instead, so its history stays.',
+                confirmLabel: 'Delete record',
+                tone: 'danger',
+              });
+              if (ok) removeSplice(closure.id, splice.id);
+            }}
+          >
+            Entered by mistake
+          </Button>
+        </div>
+      )}
+    </li>
+  );
+}
 
-  if (!isSplicingModalOpen) return null;
+function SpliceForm({ closure, redo, onDone }: { closure: JointClosure; redo: SpliceRecord | null; onDone: () => void }) {
+  const cables = useNetworkStore((s) => s.cables);
+  const local = cablesAtClosure(closure, cables);
+  const [trayId, setTrayId] = useState(redo?.trayId ?? '');
+  const [from, setFrom] = useState<FiberChoice>(redo ? { cableId: redo.inputCableId, core: String(redo.inputCore) } : emptyFiber);
+  const [to, setTo] = useState<FiberChoice>(redo ? { cableId: redo.outputCableId, core: String(redo.outputCore) } : emptyFiber);
+  const [type, setType] = useState<SpliceType>('fusion');
+  const [loss, setLoss] = useState('');
+  const [lossSource, setLossSource] = useState<LossSource | ''>('');
+  const [otdr, setOtdr] = useState('');
+  const [technician, setTechnician] = useState('');
+  const [date, setDate] = useState('');
+  const [status, setStatus] = useState<'Spliced' | 'Tested' | 'Pending'>('Spliced');
+  const a = fiberOf(from);
+  const b = fiberOf(to);
 
-  const currentClosure = closures.find((c) => c.id === selectedClosureId) || closures[0];
-
-  const inCoreColor = getFiberColor(newInCore);
-  const outCoreColor = getFiberColor(newOutCore);
-
-  const handleAddSplice = () => {
-    // Check self-splice conflict
-    if (newInCableId === newOutCableId && newInCore === newOutCore) {
-      showToast('error', 'Invalid Splice', 'Cannot splice a fiber core to itself.');
-      return;
-    }
-
-    // Validation: prevent duplicate core endpoint within this closure
-    const isDuplicate = currentClosure.splices.some(
-      (s) =>
-        (s.inputCableId === newInCableId && s.inputCore === newInCore) ||
-        (s.outputCableId === newInCableId && s.outputCore === newInCore) ||
-        (s.inputCableId === newOutCableId && s.inputCore === newOutCore) ||
-        (s.outputCableId === newOutCableId && s.outputCore === newOutCore),
-    );
-
-    if (isDuplicate) {
-      showToast(
-        'error',
-        'Duplicate Core Endpoint',
-        `A core endpoint is already assigned in closure ${currentClosure.id}. Within the same closure, each core endpoint can only be spliced once.`,
-      );
-      return;
-    }
-
-    const inCable = cables.find((c) => c.id === newInCableId);
-    const outCable = cables.find((c) => c.id === newOutCableId);
-
-    const newSplice: SpliceRecord = {
-      id: `SPL-${Date.now().toString().slice(-4)}`,
-      inputCableId: newInCableId,
-      inputCableName: inCable?.name || newInCableId,
-      inputCore: newInCore,
-      outputCableId: newOutCableId,
-      outputCableName: outCable?.name || newOutCableId,
-      outputCore: newOutCore,
-      spliceLossDb: newLossDb,
-      status: newStatus,
-      technician: newTechnician.trim() || 'Not recorded',
-      date: new Date().toISOString().split('T')[0],
+  const submit = async () => {
+    if (!a || !b) return;
+    const draft = {
+      trayId: trayId || undefined,
+      inputCableId: a.cableId,
+      inputCore: a.core,
+      outputCableId: b.cableId,
+      outputCore: b.core,
+      spliceType: type,
+      ...(loss ? { spliceLossDb: Number(loss), lossSource: (lossSource || undefined) as LossSource | undefined } : {}),
+      otdrRef: otdr,
+      technician,
+      date: date || undefined,
+      status,
     };
-
-    const success = addSplice(currentClosure.id, newSplice);
-    if (success) {
-      setNewInCore((prev) => prev + 1);
-      setNewOutCore((prev) => prev + 1);
-    }
-  };
-
-  const handleDeleteSplice = async (spliceId: string) => {
-    const confirmed = await requestConfirm({
-      title: 'Delete splice',
-      message: 'Remove this fusion splice mapping from the closure?',
-      confirmLabel: 'Delete',
-      tone: 'danger',
-    });
-    if (confirmed) removeSplice(currentClosure.id, spliceId);
+    const saved = redo ? await redoSplice(closure.id, redo.id, draft, 'Re-spliced') : await saveSplice(closure.id, draft);
+    if (saved) onDone();
   };
 
   return (
-    <div className="modal-sheet fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shadow-xs">
-              <GitBranch className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-slate-900">Fiber Splicing & Joint Closure Manager</h2>
-              <p className="text-[11px] text-slate-500">
-                Optical Core-to-Core Fusion Splicing Matrix · TIA-598 Color Standards
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setModalOpen('splicing', false)}
-            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Closure Picker Strip */}
-        <div className="px-6 py-2.5 border-b border-slate-100 bg-slate-100/50 flex items-center gap-2 overflow-x-auto">
-          {closures.map((jc) => (
-            <button
-              key={jc.id}
-              onClick={() => setSelectedClosureId(jc.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                selectedClosureId === jc.id
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {jc.name} ({jc.id})
-            </button>
+    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="splice-form">
+      <p className="text-xs font-semibold text-slate-700">{redo ? 'Re-splice: the old splice is kept as history' : 'Record a splice'}</p>
+      <Field label="Tray">
+        <Select data-testid="splice-tray" value={trayId} onChange={(e) => setTrayId(e.target.value)}>
+          <option value="">Tray not recorded</option>
+          {(closure.trays ?? []).map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
           ))}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-          {/* Closure Specs */}
-          <div className="p-4 bg-amber-50/70 rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-xs bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded">
-                  {currentClosure.id}
-                </span>
-                <span className="font-bold text-sm text-amber-950">{currentClosure.name}</span>
-              </div>
-              <div className="text-[11px] text-amber-900 mt-1 flex flex-wrap gap-x-3">
-                <span>
-                  Type: <strong>{currentClosure.closureType}</strong>
-                </span>
-                <span>
-                  Area: <strong>{currentClosure.area}</strong>
-                </span>
-                <span>
-                  Certified Lead: <strong>{currentClosure.technician}</strong>
-                </span>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-lg border border-amber-300">
-                {currentClosure.splices.length} Active Splices
-              </span>
-            </div>
-          </div>
-
-          {/* New Splice Form */}
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800">Add Core-to-Core Fusion Splice</span>
-              <span className="text-[10px] text-slate-500">TIA-598 Color Identification Active</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-6 gap-2.5 items-end">
-              {/* Input Cable */}
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Incoming Cable</label>
-                <select
-                  value={newInCableId}
-                  onChange={(e) => setNewInCableId(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                >
-                  {cables.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id} ({c.fiberCount}F)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Input Core # with Color Swatch */}
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
-                  In Core ({inCoreColor.name})
-                </label>
-                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0"
-                    style={{ backgroundColor: inCoreColor.hex }}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    max="96"
-                    value={newInCore}
-                    onChange={(e) => setNewInCore(Number(e.target.value))}
-                    className="w-full text-xs outline-none font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Output Cable */}
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Outgoing Cable</label>
-                <select
-                  value={newOutCableId}
-                  onChange={(e) => setNewOutCableId(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                >
-                  {cables.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id} ({c.fiberCount}F)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Output Core # with Color Swatch */}
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
-                  Out Core ({outCoreColor.name})
-                </label>
-                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-slate-400 shrink-0"
-                    style={{ backgroundColor: outCoreColor.hex }}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    max="96"
-                    value={newOutCore}
-                    onChange={(e) => setNewOutCore(Number(e.target.value))}
-                    className="w-full text-xs outline-none font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Loss dB & Status */}
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
-                  Splice Loss (dB)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.00"
-                  max="1.50"
-                  value={newLossDb}
-                  onChange={(e) => setNewLossDb(Number(e.target.value))}
-                  className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <button
-                  type="button"
-                  onClick={handleAddSplice}
-                  className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs"
-                >
-                  <Zap className="w-3.5 h-3.5" /> Fuse Splice
-                </button>
-              </div>
-            </div>
-
-            {/* Additional Metadata Fields: Tray, Status, Technician */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-[11px]">
-              <div>
-                <label className="text-slate-500">Splice Tray Selection:</label>
-                <select
-                  value={newTray}
-                  onChange={(e) => setNewTray(e.target.value)}
-                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
-                >
-                  <option value="Tray 1 (Primary Feeder)">Tray 1 (Primary Feeder)</option>
-                  <option value="Tray 2 (Distribution Ring)">Tray 2 (Distribution Ring)</option>
-                  <option value="Tray 3 (Local Drop Branches)">Tray 3 (Local Drop Branches)</option>
-                  <option value="Tray 4 (Spare / Expansion)">Tray 4 (Spare / Expansion)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-500">Splice Status:</label>
-                <select
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value as any)}
-                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
-                >
-                  <option value="Spliced">Spliced (Active)</option>
-                  <option value="Tested">Tested (OTDR Verified)</option>
-                  <option value="Pending">Pending Fusion</option>
-                  <option value="Failed">Failed (Requires Re-splice)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-slate-500">Certified Splicer:</label>
-                <input
-                  type="text"
-                  value={newTechnician}
-                  onChange={(e) => setNewTechnician(e.target.value)}
-                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs mt-0.5"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Splicing Table */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-2.5 px-3">Input Cable & Core</th>
-                  <th className="py-2.5 px-3">Color</th>
-                  <th className="py-2.5 px-3">Output Cable & Core</th>
-                  <th className="py-2.5 px-3">Color</th>
-                  <th className="py-2.5 px-3">Splice Loss</th>
-                  <th className="py-2.5 px-3">Technician</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {currentClosure.splices.map((spl, i) => {
-                  const inCol = getFiberColor(spl.inputCore);
-                  const outCol = getFiberColor(spl.outputCore);
-                  return (
-                    <tr key={spl.id || i} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">
-                        {spl.inputCableId} &bull; Core {spl.inputCore}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="flex items-center gap-1.5 text-[11px]">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full border border-slate-300"
-                            style={{ backgroundColor: inCol.hex }}
-                          />
-                          <span>{inCol.name}</span>
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-blue-700">
-                        &rarr; {spl.outputCableId} &bull; Core {spl.outputCore}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="flex items-center gap-1.5 text-[11px]">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full border border-slate-300"
-                            style={{ backgroundColor: outCol.hex }}
-                          />
-                          <span>{outCol.name}</span>
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-600 font-bold">{spl.spliceLossDb} dB</td>
-                      <td className="py-2.5 px-3 text-slate-600">{spl.technician}</td>
-                      <td className="py-2.5 px-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            spl.status === 'Tested' || spl.status === 'Spliced'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : spl.status === 'Failed'
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {spl.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteSplice(spl.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                          title="Delete Splice"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {currentClosure.splices.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400">
-                      No splices recorded in this closure yet. Use the form above to add core fusion splices.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </Select>
+      </Field>
+      <FiberPicker label="From (towards the OLT)" value={from} onChange={setFrom} cables={local} testId="splice-from" />
+      <FiberPicker label="To (towards customers)" value={to} onChange={setTo} cables={local} testId="splice-to" />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Field label="Type">
+          <Select data-testid="splice-type" value={type} onChange={(e) => setType(e.target.value as SpliceType)}>
+            <option value="fusion">Fusion</option>
+            <option value="mechanical">Mechanical</option>
+          </Select>
+        </Field>
+        <Field label="State">
+          <Select data-testid="splice-status" value={status} onChange={(e) => setStatus(e.target.value as 'Spliced' | 'Tested' | 'Pending')}>
+            <option value="Spliced">Done</option>
+            <option value="Tested">Done and tested</option>
+            <option value="Pending">Planned, not done</option>
+          </Select>
+        </Field>
+        <Field label="Loss dB (if known)">
+          <Input data-testid="splice-loss" inputMode="decimal" value={loss} onChange={(e) => setLoss(e.target.value.replace(/[^\d.]/g, ''))} />
+        </Field>
+        <Field label="Loss from">
+          <Select data-testid="splice-loss-source" value={lossSource} disabled={!loss} onChange={(e) => setLossSource(e.target.value as LossSource)}>
+            <option value="">Choose…</option>
+            {(Object.keys(LOSS_SOURCE_LABELS) as LossSource[]).map((k) => (
+              <option key={k} value={k}>
+                {LOSS_SOURCE_LABELS[k]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="OTDR or test ref">
+          <Input data-testid="splice-otdr" value={otdr} onChange={(e) => setOtdr(e.target.value)} />
+        </Field>
+        <Field label="Technician">
+          <Input value={technician} onChange={(e) => setTechnician(e.target.value)} />
+        </Field>
+        <Field label="Date">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="primary" data-testid="splice-save" disabled={!a || !b || (!!loss && !lossSource)} onClick={() => void submit()}>
+          {redo ? 'Save re-splice' : 'Save splice'}
+        </Button>
+        {redo && (
+          <Button variant="ghost" onClick={onDone}>
+            Cancel
+          </Button>
+        )}
       </div>
     </div>
+  );
+}
+
+/** Closure splice screen: tray diagram, core-to-core mapping, history, and the splice form. */
+export const SplicingModal: React.FC = () => {
+  const { open, setModalOpen, closureId } = useUiStore(
+    useShallow((s) => ({ open: s.modals.splicing, setModalOpen: s.setModalOpen, closureId: s.splicingClosureId })),
+  );
+  const closures = useNetworkStore((s) => s.closures);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [tray, setTray] = useState<string>('all');
+  const [redo, setRedo] = useState<SpliceRecord | null>(null);
+  if (!open) return null;
+  const selectedId = picked ?? closureId;
+  const closure = closures.find((c) => c.id === selectedId);
+  const close = () => {
+    setModalOpen('splicing', false);
+    setPicked(null);
+    setRedo(null);
+  };
+  const active = closure?.splices.filter((s) => !s.retiredAt && (tray === 'all' || (tray === 'none' ? !s.trayId : s.trayId === tray))) ?? [];
+  const history = closure?.splices.filter((s) => s.retiredAt) ?? [];
+
+  return (
+    <Modal open onClose={close} title={closure ? `Splices in ${closure.name}` : 'Splices'} description="Fiber to fiber, tray by tray. Nothing is joined unless you record it." icon={GitBranch} size="xl">
+      <div className="space-y-3 text-[13px]" data-testid="splicing-modal">
+        <Field label="Closure">
+          <Select data-testid="splice-closure" value={selectedId ?? ''} onChange={(e) => setPicked(e.target.value || null)}>
+            <option value="">Choose a closure…</option>
+            {closures.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {closures.length === 0 && <p className="text-xs text-slate-600">No closure records yet. Select a closure pin on the map and tap Set up closure.</p>}
+        {closure && (
+          <>
+            <div className="flex flex-wrap gap-1" role="tablist">
+              {[{ id: 'all', label: 'All trays' }, ...(closure.trays ?? []).map((t) => ({ id: t.id, label: t.label })), { id: 'none', label: 'No tray' }].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tray === t.id}
+                  data-testid={`splice-tab-${t.label}`}
+                  onClick={() => setTray(t.id)}
+                  className={`min-h-8 rounded-md border px-2.5 text-xs ${tray === t.id ? 'border-blue-500 bg-blue-50 font-semibold' : 'border-slate-200 bg-white'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <ul className="space-y-1.5" data-testid="splice-diagram">
+              {active.length === 0 && <li className="text-xs text-slate-500">No splices in service here.</li>}
+              {active.map((s) => (
+                <SpliceRow key={s.id} closure={closure} splice={s} onRedo={setRedo} />
+              ))}
+            </ul>
+            <SpliceForm key={redo?.id ?? 'new'} closure={closure} redo={redo} onDone={() => setRedo(null)} />
+            {history.length > 0 && (
+              <details className="text-xs text-slate-600" data-testid="splice-history">
+                <summary className="cursor-pointer font-semibold">History ({history.length} out of service)</summary>
+                <ul className="mt-1 space-y-1">
+                  {history.map((s) => (
+                    <li key={s.id}>
+                      {s.inputCableName} fiber {s.inputCore} → {s.outputCableName} fiber {s.outputCore}: out of service {s.retiredAt?.slice(0, 10)}
+                      {s.retiredReason ? ` (${s.retiredReason})` : ''}
+                      {s.retiredBy ? `, ${s.retiredBy}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
   );
 };

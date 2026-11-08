@@ -148,6 +148,10 @@ const CORE_COLORS: Record<CoreStatus, string> = {
   Damaged: 'bg-red-500',
   'Under Maintenance': 'bg-orange-400',
   Unverified: 'bg-slate-400',
+  Spliced: 'bg-indigo-500',
+  Dark: 'bg-emerald-300',
+  Disconnected: 'bg-slate-500',
+  Unknown: 'bg-slate-300',
 };
 
 export function CoreBreakdown({ cores, fiberCount }: { cores: readonly FiberCore[]; fiberCount: number }) {

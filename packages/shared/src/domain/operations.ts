@@ -8,6 +8,7 @@ import {
   notice,
   succeed,
 } from './command';
+import { faultVerificationOf } from './faultRules';
 import { nextSequentialId } from './ids';
 import { formatTimestamp, isoDate } from './time';
 import { collectDownstream } from './trace';
@@ -15,7 +16,7 @@ import { collectDownstream } from './trace';
 export type FaultDraft = Partial<Fault>;
 export type WorkOrderDraft = Partial<WorkOrder> & { title: string };
 
-const isOpenOrder = (w: WorkOrder) => w.status !== 'Completed' && w.status !== 'Cancelled';
+const isOpenOrder = (w: WorkOrder) => !['Completed', 'Cancelled', 'Verified', 'Closed'].includes(w.status);
 
 /** Customers that lose service when the given equipment or cable fails. */
 export function customersAffectedBy(data: NetworkData, target: { equipmentId?: string; cableId?: string }): string[] {
@@ -108,13 +109,27 @@ export function reportFault(data: NetworkData, draft: FaultDraft, ctx: CommandCo
   );
 }
 
-/** Resolves a fault and completes every open work order dispatched for it. */
+/**
+ * Closes a fault and completes every open work order dispatched for it. Since Phase 8 a fault
+ * closes only with a check (its own verification or one of its jobs'); without one it is refused.
+ * Prefer `setFaultStatus(..., 'Closed')` in `faultCommands.ts`, which also clears its alarms.
+ */
 export function resolveFault(data: NetworkData, faultId: string, ctx: CommandContext = {}): CommandResult<Fault> {
   const fault = data.faults.find((f) => f.id === faultId);
   if (!fault) return fail('Fault Missing', `Fault ${faultId} was not found.`);
-  if (fault.status === 'Resolved') return fail('Already Resolved', `${faultId} is already resolved.`, 'info');
+  if (fault.status === 'Resolved' || fault.status === 'Closed') return fail('Already Resolved', `${faultId} is already closed.`, 'info');
+  const verification = faultVerificationOf(data, fault);
+  if (!verification) {
+    return fail('Check needed', `${faultId} cannot be closed without a check: a light reading measured in the field, a photo, or an office check.`);
+  }
 
-  const resolved: Fault = { ...fault, status: 'Resolved', resolvedAt: formatTimestamp(ctx.now) };
+  const resolved: Fault = {
+    ...fault,
+    status: 'Closed',
+    resolvedAt: formatTimestamp(ctx.now),
+    closedAt: (ctx.now ?? new Date()).toISOString(),
+    verification: fault.verification ?? verification,
+  };
   const linked = data.workOrders.filter((w) => (w.faultId === faultId || w.id === fault.workOrderId) && isOpenOrder(w));
   const linkedIds = new Set(linked.map((w) => w.id));
   const completed = linked.map((w) => w.id).join(', ');

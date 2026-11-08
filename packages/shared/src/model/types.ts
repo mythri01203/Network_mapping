@@ -3,11 +3,20 @@ import type { z } from 'zod';
 import type {
   agentTrackPointSchema,
   agentTripSchema,
+  alarmSchema,
+  attachmentSchema,
   auditLogSchema,
+  buildingFloorBoxSchema,
+  buildingSchema,
+  buildingUnitSchema,
   cableCoreLinkSchema,
+  cableEntrySchema,
   cableSchema,
   catalogComponentSchema,
+  coreAssignmentSchema,
+  customerConnectionSchema,
   customerSchema,
+  ductSchema,
   equipmentImageSchema,
   equipmentPortSchema,
   equipmentSchema,
@@ -15,21 +24,41 @@ import type {
   fiberCoreSchema,
   fiberTraceHopSchema,
   gpsRouteSchema,
+  historyEntrySchema,
   imageAnnotationSchema,
+  importInfoSchema,
+  jobEventSchema,
+  jobMaterialSchema,
+  jobNoteSchema,
+  jobPhotoSchema,
+  jobStepSchema,
   jointClosureSchema,
   latLngSchema,
   networkDocumentSchema,
+  networkElementRefSchema,
   networkZoneSchema,
+  odfPanelSchema,
+  odfPortSchema,
   oltConfigSchema,
+  ontSchema,
   opticalPortSchema,
   opticalPowerInfoSchema,
   opticalPowerSampleSchema,
+  permissionSchema,
   ponPortSchema,
+  serviceSchema,
   settingSchema,
+  slackLoopSchema,
+  spanSchema,
   spliceMatrixEntrySchema,
   spliceRecordSchema,
+  spliceTraySchema,
   splitterPortSchema,
   splitterSchema,
+  subductSchema,
+  suspectedCauseSchema,
+  syncConflictSchema,
+  verificationSchema,
   workOrderSchema,
 } from './schemas';
 
@@ -63,6 +92,35 @@ export type AgentTrackPoint = z.infer<typeof agentTrackPointSchema>;
 export type AgentTrip = z.infer<typeof agentTripSchema>;
 export type Setting = z.infer<typeof settingSchema>;
 export type OltConfig = z.infer<typeof oltConfigSchema>;
+export type ImportInfo = z.infer<typeof importInfoSchema>;
+export type Span = z.infer<typeof spanSchema>;
+export type Attachment = z.infer<typeof attachmentSchema>;
+export type Subduct = z.infer<typeof subductSchema>;
+export type Duct = z.infer<typeof ductSchema>;
+export type SlackLoop = z.infer<typeof slackLoopSchema>;
+export type Permission = z.infer<typeof permissionSchema>;
+export type HistoryEntry = z.infer<typeof historyEntrySchema>;
+export type CoreAssignment = z.infer<typeof coreAssignmentSchema>;
+export type OdfPort = z.infer<typeof odfPortSchema>;
+export type OdfPanel = z.infer<typeof odfPanelSchema>;
+export type SpliceTray = z.infer<typeof spliceTraySchema>;
+export type CableEntry = z.infer<typeof cableEntrySchema>;
+export type CustomerConnection = z.infer<typeof customerConnectionSchema>;
+export type Ont = z.infer<typeof ontSchema>;
+export type Service = z.infer<typeof serviceSchema>;
+export type Building = z.infer<typeof buildingSchema>;
+export type BuildingFloorBox = z.infer<typeof buildingFloorBoxSchema>;
+export type BuildingUnit = z.infer<typeof buildingUnitSchema>;
+export type NetworkElementRef = z.infer<typeof networkElementRefSchema>;
+export type Verification = z.infer<typeof verificationSchema>;
+export type Alarm = z.infer<typeof alarmSchema>;
+export type SuspectedCause = z.infer<typeof suspectedCauseSchema>;
+export type JobStep = z.infer<typeof jobStepSchema>;
+export type JobPhoto = z.infer<typeof jobPhotoSchema>;
+export type JobMaterial = z.infer<typeof jobMaterialSchema>;
+export type JobNote = z.infer<typeof jobNoteSchema>;
+export type JobEvent = z.infer<typeof jobEventSchema>;
+export type SyncConflict = z.infer<typeof syncConflictSchema>;
 
 /** One hop of a computed OLT-to-customer path. Derived at runtime, never stored. */
 export interface TracePathNode {

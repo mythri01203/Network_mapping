@@ -446,6 +446,7 @@ export function CaptureApp() {
               <Tile picture={TILE_PICTURES.drop} label="home.addDrop" onClick={() => void start('drop')} testId="tile-drop" />
               <Tile picture={TILE_PICTURES.light} label="home.lightLevel" onClick={() => void start('light')} testId="tile-light" />
               <Tile picture={TILE_PICTURES.danger} label="home.danger" onClick={() => void start('danger')} tone="danger" testId="tile-danger" wide />
+              <Tile picture={TILE_PICTURES.box} label="jobs.tile" onClick={() => navigate('/jobs')} testId="tile-jobs" wide />
             </div>
             {field.supervisorPhone && (
               <a

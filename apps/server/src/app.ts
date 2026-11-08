@@ -50,7 +50,7 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
           .map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
       });
     }
-    if (error instanceof HttpError) return send(error.statusCode, { error: error.code, message: error.message });
+    if (error instanceof HttpError) return send(error.statusCode, { ...error.details, error: error.code, message: error.message });
     const status = 'statusCode' in error ? error.statusCode : undefined;
     if (status !== undefined && status >= 400 && status < 500) {
       return send(status, { error: ('code' in error && error.code) || 'bad_request', message: error.message });

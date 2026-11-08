@@ -45,6 +45,19 @@ export interface OpticalSettings {
   marginDb: number;
   /** A measured reading this far below expected suggests a dirty connector, bend or wrong path. */
   measuredGapDb: number;
+  /** A measured reading this far above expected suggests a missing or wrong-ratio splitter, or a wrong path. */
+  measuredStrongGapDb: number;
+  /** Path checks: warnings only, each an editable setting. */
+  limits: {
+    /** A fusion splice above this loss should be redone. */
+    spliceRejectDb: number;
+    /** Product of split ratios on one path above this is warned. */
+    splitProduct: number;
+    /** Spread of path loss between customers on one PON above this is warned. */
+    ponSpreadDb: number;
+    /** Spread of fiber distance between customers on one PON above this is warned. */
+    ponSpreadKm: number;
+  };
 }
 
 export type OpticalSettingGroup =
@@ -54,14 +67,15 @@ export type OpticalSettingGroup =
   | 'Couplers'
   | 'Class budgets'
   | 'ONT receive levels'
-  | 'Margins';
+  | 'Margins'
+  | 'Path checks';
 
 export interface OpticalSettingDef {
   /** Key of the override record in the `settings` collection. */
   id: string;
   group: OpticalSettingGroup;
   label: string;
-  unit: 'dB/km' | 'dB' | 'dBm';
+  unit: 'dB/km' | 'dB' | 'dBm' | 'km' | 'outputs';
   defaultValue: number;
   source: string;
   apply: (settings: OpticalSettings, value: number) => void;
@@ -164,6 +178,21 @@ export const OPTICAL_SETTING_DEFS: readonly OpticalSettingDef[] = [
   def('measuredGap', 'Margins', 'Measured below expected', 'dB', 3, 'Proposed. Needs the OLT real launch power.', (s, v) => {
     s.measuredGapDb = v;
   }),
+  def('measuredStrongGap', 'Margins', 'Measured above expected', 'dB', 3, 'Proposed, the same size as the gap below. A much stronger reading suggests a missing splitter, a wrong ratio or a wrong path. Needs the OLT real launch power.', (s, v) => {
+    s.measuredStrongGapDb = v;
+  }),
+  def('limit.spliceReject', 'Path checks', 'Redo a fusion splice above', 'dB', 0.2, 'Handbook and FOA reject level. Warning only.', (s, v) => {
+    s.limits.spliceRejectDb = v;
+  }),
+  def('limit.splitProduct', 'Path checks', 'Warn when the splits on one path multiply above', 'outputs', 64, 'Proposed. G.984.2 describes 16, 32 or 64-way; the Handbook lists 128 for B+; FOA caps at 32. Lower it to your design rule.', (s, v) => {
+    s.limits.splitProduct = v;
+  }),
+  def('limit.ponSpreadDb', 'Path checks', 'Warn when path loss on one PON differs by more than', 'dB', 15, 'Standard, G.984.2 differential path loss.', (s, v) => {
+    s.limits.ponSpreadDb = v;
+  }),
+  def('limit.ponSpreadKm', 'Path checks', 'Warn when fiber distance on one PON differs by more than', 'km', 20, 'Standard, G.984.2 differential reach.', (s, v) => {
+    s.limits.ponSpreadKm = v;
+  }),
 ];
 
 const emptySettings = (): OpticalSettings => ({
@@ -177,6 +206,8 @@ const emptySettings = (): OpticalSettings => ({
   rx: { overloadDbm: 0, goodFloorDbm: 0, sensitivityDbm: 0 },
   marginDb: 0,
   measuredGapDb: 0,
+  measuredStrongGapDb: 0,
+  limits: { spliceRejectDb: 0, splitProduct: 0, ponSpreadDb: 0, ponSpreadKm: 0 },
 });
 
 /** The operator's overrides as they are stored: one record per changed value. */
@@ -210,6 +241,7 @@ export function validateOpticalOverride(id: string, value: number, current: Opti
   if (!setting) return 'This setting does not exist.';
   if (!Number.isFinite(value)) return 'Enter a number.';
   if (setting.unit !== 'dBm' && value < 0) return 'Loss cannot be negative.';
+  if ((setting.unit === 'outputs' || setting.unit === 'km') && value <= 0) return 'Enter a number above 0.';
   const splitter = /^optical\.splitter\.(1:\d+)$/.exec(id);
   if (splitter) {
     const ideal = idealSplitterLossDb(splitter[1] as SplitterRatio);

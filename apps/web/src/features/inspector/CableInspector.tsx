@@ -5,7 +5,6 @@ import {
   Gauge,
   GitMerge,
   Info,
-  Layers,
   Palette,
   Route,
   Table2,
@@ -19,8 +18,11 @@ import { Button, KeyValueList } from '../../components/ui';
 import { deleteCable, traceNetworkPath, updateCable } from '../../stores/networkActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { CoreSection } from '../fiber/CoreSection';
 import { formatDate, formatLength, joinPresent, orNotRecorded, presentItems } from './format';
-import { ActionList, ActionRow, CoreBreakdown, InspectorLayout, InspectorSection, RecordLink } from './sections';
+import { CableDuctsSection, LengthsSection, PolesSupportingSection, SlackLoopsSection } from './osp/CableSections';
+import { ImportInfoSection } from './osp/StructureSections';
+import { ActionList, ActionRow, InspectorLayout, InspectorSection, RecordLink } from './sections';
 
 function Endpoint({ label, equipmentId }: { label: string; equipmentId?: string }) {
   const equipment = useNetworkStore((s) => (equipmentId ? s.equipment.find((e) => e.id === equipmentId) : undefined));
@@ -85,11 +87,11 @@ function CableAppearanceSection({ cable }: { cable: Cable }) {
   };
 
   return (
-    <InspectorSection title="Appearance & Color Coding" icon={Palette} defaultOpen>
+    <InspectorSection title="Line on the map" icon={Palette} defaultOpen={false}>
       <div className="space-y-3 text-xs">
         <div>
           <span className="block text-[11px] font-semibold text-slate-700 mb-1.5">
-            Cable Color (TIA-598 Standard Palette)
+            Line colour on the map (not a fiber colour)
           </span>
           <div className="grid grid-cols-6 gap-1.5">
             {STANDARD_12_COLORS.map((col) => {
@@ -148,8 +150,8 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
 
   const details = presentItems([
     { label: 'Category', value: cable.cableCategory },
-    { label: 'Fiber count', value: `${cable.fiberCount} F` },
-    { label: 'Length', value: formatLength(cable.lengthMeters) },
+    { label: 'Fiber count', value: cable.fiberCount > 0 ? `${cable.fiberCount} F` : 'Not recorded' },
+    { label: 'Length saved with the line', value: formatLength(cable.lengthMeters) },
     { label: 'Installation', value: orNotRecorded(cable.installationType) },
     { label: 'Route status', value: cable.routeStatus },
     { label: 'Owner', value: orNotRecorded(cable.owner) },
@@ -189,11 +191,14 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
         </div>
       </InspectorSection>
 
+      <PolesSupportingSection cable={cable} />
+      <LengthsSection cable={cable} />
+      <SlackLoopsSection cable={cable} />
+      <CableDuctsSection cable={cable} />
+
       <CableAppearanceSection cable={cable} />
 
-      <InspectorSection title="Fiber cores" icon={Layers} aside={`${cable.fiberCount} F`}>
-        <CoreBreakdown cores={cable.cores} fiberCount={cable.fiberCount} />
-      </InspectorSection>
+      <CoreSection cable={cable} />
 
       {cable.cableCategory !== 'Coaxial' && <FiberLossSection lengthMeters={cable.lengthMeters} />}
 
@@ -227,6 +232,8 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
           />
         </ActionList>
       </InspectorSection>
+
+      {cable.importInfo && <ImportInfoSection info={cable.importInfo} />}
 
       {cable.remarks && (
         <InspectorSection title="Remarks" icon={FileText}>

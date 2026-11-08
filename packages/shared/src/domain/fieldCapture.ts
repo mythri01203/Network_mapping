@@ -4,6 +4,7 @@ import type { Customer, Equipment, Fault, LatLng, Setting } from '../model/types
 import { type CommandResult, fail, type NetworkData, notice, succeed } from './command';
 import { isValidCoordinate } from './defaults';
 import { DEFAULT_OPTICAL_SETTINGS, type OpticalSettings, rxBandFor } from './opticalSettings';
+import { fieldSequenceSpan, ospCascadeForEquipment } from './outsidePlant';
 import { formatTimestamp } from './time';
 
 /**
@@ -567,17 +568,22 @@ export function buildHazardFault(input: HazardInput): Fault {
 const isSameCapture = (existing: { captureSource?: string; photoIds?: string[] }, record: { photoIds?: string[] }) =>
   existing.captureSource === 'field_capture' && existing.photoIds?.[0] !== undefined && existing.photoIds[0] === record.photoIds?.[0];
 
-/** Adds a captured asset. Saving the same capture again does nothing; a different record with the ID is refused. */
-export function addCapturedEquipment(data: NetworkData, record: Equipment): CommandResult<{ created: boolean }> {
+/**
+ * Adds a captured asset. Saving the same capture again does nothing; a different record with the ID
+ * is refused. A pole captured with "Next pole" also gets a proposed span from the previous pole:
+ * order only, dashed on the map, until the office confirms it. It never claims a cable.
+ */
+export function addCapturedEquipment(data: NetworkData, record: Equipment, now: Date = new Date()): CommandResult<{ created: boolean; spanId?: string }> {
   const existing = data.equipment.find((e) => e.id === record.id);
   if (existing) {
     if (isSameCapture(existing, record)) return succeed({ created: false }, {});
     return fail('ID clash', `Another record already uses ${record.id}. Nothing was changed.`);
   }
   if (!isValidCoordinate(record.lat, record.lng)) return fail('No position', 'This capture has no position to store.');
+  const span = fieldSequenceSpan(data, record, now, record.images[0]?.uploadedBy);
   return succeed(
-    { created: true },
-    { equipment: [...data.equipment, record] },
+    { created: true, ...(span ? { spanId: span.id } : {}) },
+    { equipment: [...data.equipment, record], ...(span ? { spans: [...(data.spans ?? []), span] } : {}) },
     {
       notice: notice('success', 'Saved', `${record.name} was added from the field.`),
       audit: [
@@ -585,7 +591,7 @@ export function addCapturedEquipment(data: NetworkData, record: Equipment): Comm
           action: 'FIELD_CAPTURE_ADDED',
           details: `${record.type} ${record.name} (${record.id}) by phone capture, ${
             record.officeMustPlace ? 'office must place it' : `${record.locationMethod ?? 'gps'}${record.locationAccuracyMeters !== undefined ? ` within about ${Math.round(record.locationAccuracyMeters)} m` : ''}`
-          }${record.previousAssetId ? `, captured after ${record.previousAssetId} (order only)` : ''}`,
+          }${record.previousAssetId ? `, captured after ${record.previousAssetId} (order only${span ? `; proposed span ${span.id} for the office to confirm` : ''})` : ''}`,
           assetId: record.id,
           assetType: 'Equipment',
         },
@@ -628,9 +634,11 @@ export function removeCapturedRecord(
   if (!record) return succeed({ removed: false }, {});
   if (record.captureSource !== 'field_capture') return fail('Not a field capture', `${id} was not added from the phone.`);
   const kept = list.filter((r) => r.id !== id);
+  // Spans and records that name the pole go with it, so nothing is left pointing to nothing.
+  const cascade = collection === 'equipment' ? ospCascadeForEquipment(data, id).patch : {};
   return succeed(
     { removed: true },
-    collection === 'equipment' ? { equipment: kept as Equipment[] } : { faults: kept as Fault[] },
+    collection === 'equipment' ? { ...cascade, equipment: kept as Equipment[] } : { faults: kept as Fault[] },
     {
       notice: notice('info', 'Removed', `${id} was removed.`),
       audit: [

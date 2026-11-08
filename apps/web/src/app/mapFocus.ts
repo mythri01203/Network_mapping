@@ -11,7 +11,11 @@ export function focusFor(selection: SelectedObject): FlyToTarget | null {
   switch (selection.type) {
     case 'fault':
       return { ...selection.data.affectedLocation, zoom: POINT_FOCUS_ZOOM };
-    case 'cable': {
+    // A span has no position of its own; its inspector shows its two poles.
+    case 'span':
+      return null;
+    case 'cable':
+    case 'duct': {
       const coords = selection.data.coordinates;
       if (coords.length === 0) return null;
       const [lat, lng] = coords[Math.floor(coords.length / 2)];

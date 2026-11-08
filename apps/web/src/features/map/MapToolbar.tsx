@@ -637,8 +637,10 @@ export function MapModeBar({
     setActiveDrawingPoints,
     measuringPoints,
     setMeasuringPoints,
+    drawTarget,
   } = useMapStore(
     useShallow((s) => ({
+      drawTarget: s.drawTarget,
       activeTool: s.activeTool,
       selectedCableTypeToDraw: s.cableTypeToDraw,
       selectedEquipmentTypeToAdd: s.equipmentTypeToAdd,
@@ -694,7 +696,7 @@ export function MapModeBar({
           )}
           <div className="leading-tight">
             <div className="text-[13px] font-semibold">
-              {activeTool === 'draw_cable' && selectedCableTypeToDraw}
+              {activeTool === 'draw_cable' && (drawTarget === 'duct' ? 'Duct (underground)' : selectedCableTypeToDraw)}
               {activeTool === 'measure' && 'Measure distance'}
               {activeTool === 'add_equipment' && `Place ${selectedEquipmentTypeToAdd}`}
             </div>
@@ -717,7 +719,7 @@ export function MapModeBar({
         )}
 
         <div className="no-scrollbar flex items-center gap-1 overflow-x-auto md:overflow-visible md:border-l md:border-white/10 md:pl-2">
-          {activeTool === 'draw_cable' && (
+          {activeTool === 'draw_cable' && drawTarget !== 'duct' && (
             <>
               <button
                 type="button"
@@ -750,9 +752,9 @@ export function MapModeBar({
               onClick={() => setActiveDrawingPoints([])}
               disabled={activeDrawingPoints.length === 0}
               className={cn(darkBtn, 'text-rose-300 hover:bg-rose-500/20 hover:text-rose-200')}
-              title="Clear all points of the current drawn wire"
+              title="Clear all points of the current drawn line"
             >
-              <Trash2 className="h-4 w-4" /> Clear wire
+              <Trash2 className="h-4 w-4" /> {drawTarget === 'duct' ? 'Clear line' : 'Clear wire'}
             </button>
           )}
           {activeTool === 'draw_cable' && (

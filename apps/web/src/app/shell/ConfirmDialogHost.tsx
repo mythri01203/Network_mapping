@@ -25,6 +25,14 @@ export function ConfirmDialogHost() {
         </>
       }
     >
+      {pending?.imageUrl && (
+        <img
+          src={pending.imageUrl}
+          alt=""
+          className="mb-3 max-h-48 w-full rounded-lg border border-slate-200 object-cover"
+          data-testid="confirm-image"
+        />
+      )}
       <p className="whitespace-pre-line text-[13px] leading-relaxed text-slate-700">{pending?.message}</p>
     </Modal>
   );

@@ -6,6 +6,7 @@ import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
 import { ModalHost } from './ModalHost';
 import { ConfirmDialogHost } from './shell/ConfirmDialogHost';
+import { ConflictChoiceHost } from './shell/ConflictChoiceHost';
 import { LeftSidebar } from './shell/LeftSidebar';
 import { ToastNotifications } from './shell/ToastNotifications';
 import { TopNavBar } from './shell/TopNavBar';
@@ -32,6 +33,9 @@ const VIEW_COMPONENTS: Record<Exclude<MainView, 'map'>, React.ComponentType> = {
 /** The simple phone capture flow. Full screen, without the engineer shell around it. */
 const CaptureApp = lazyView(() => import('../features/capture/CaptureApp'), 'CaptureApp');
 export const CAPTURE_PATH = '/capture';
+/** The technician's jobs (Phase 8), with the same easy phone screens. */
+const JobsApp = lazyView(() => import('../features/jobs/JobsApp'), 'JobsApp');
+export const JOBS_PATH = '/jobs';
 
 const ViewFallback: React.FC = () => (
   <div className="flex flex-1 items-center justify-center bg-slate-50" role="status" aria-label="Loading view">
@@ -41,19 +45,20 @@ const ViewFallback: React.FC = () => (
 
 const AppContent: React.FC = () => {
   const activeView = useActiveView();
-  const capture = useLocation().pathname.toLowerCase().startsWith(CAPTURE_PATH);
+  const path = useLocation().pathname.toLowerCase();
+  const capture = path.startsWith(CAPTURE_PATH);
+  const jobs = path.startsWith(JOBS_PATH);
 
   useEffect(() => {
-    if (capture) return;
+    if (capture || jobs) return;
     document.title = activeView === 'map' ? 'FiberGIS · Network Mapping' : `${VIEW_META[activeView].label} · FiberGIS`;
-  }, [activeView, capture]);
+  }, [activeView, capture, jobs]);
 
-  if (capture) {
+  if (capture || jobs) {
     return (
       <>
-        <Suspense fallback={<ViewFallback />}>
-          <CaptureApp />
-        </Suspense>
+        <Suspense fallback={<ViewFallback />}>{jobs ? <JobsApp /> : <CaptureApp />}</Suspense>
+        <ConflictChoiceHost />
         <ConfirmDialogHost />
         <ToastNotifications />
       </>
@@ -77,6 +82,7 @@ const AppContent: React.FC = () => {
       </div>
       <AgentTrackingRuntime />
       <ModalHost />
+      <ConflictChoiceHost />
       <ConfirmDialogHost />
       <ToastNotifications />
     </div>

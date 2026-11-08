@@ -54,14 +54,25 @@ describe('Loss Engine', () => {
   });
 });
 
-/** A network where every link is recorded, including a real launch power. */
+/** A network where every link is recorded fiber by fiber, including a real launch power. */
 const linked = (): TraceData => {
   const base = smallNetwork();
   return {
     ...base,
     equipment: base.equipment.map((e) =>
-      e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, txPowerDbm: 3 })) } : e,
+      e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, txPowerDbm: 3, feederCore: 1 })) } : e,
     ),
+    closures: [
+      {
+        id: 'JC-FDT', name: 'FDT joint', closureType: 'Dome Splice Closure', lat: 17.41, lng: 78.41, area: '', equipmentId: 'FDT-01',
+        entryPortsCount: 1, exitPortsCount: 1, installationDate: '', technician: '', images: [],
+        splices: [{ id: 'S1', inputCableId: 'FEED-01', inputCableName: 'FEED-01', inputCore: 1, outputCableId: 'DIST-01', outputCableName: 'DIST-01', outputCore: 1, status: 'Spliced', technician: '', date: '' }],
+      },
+    ],
+    splitters: base.splitters.map((s) => ({
+      ...s,
+      outputPorts: s.outputPorts.map((p) => (p.portNumber === 1 ? { ...p, connectedDropCableId: 'DROP-1', connectedCore: 1 } : p)),
+    })),
     cables: [
       ...base.cables,
       cable({
@@ -81,6 +92,16 @@ const linked = (): TraceData => {
       }),
     ],
     customers: base.customers.map((c) => ({ ...c, dropCableId: 'DROP-1', rxSource: 'calculated' as const })),
+  };
+};
+
+/** Every cable link recorded, but no fiber-level links: only the cable route can be followed. */
+const cableLinked = (): TraceData => {
+  const full = linked();
+  return {
+    ...full,
+    closures: [],
+    equipment: full.equipment.map((e) => (e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, feederCore: undefined })) } : e)),
   };
 };
 
@@ -125,7 +146,7 @@ describe('traceOpticalPath', () => {
   });
 
   it('names the exact missing cable start and shows no pass', () => {
-    const base = linked();
+    const base = cableLinked();
     const data = { ...base, cables: base.cables.map((c) => (c.id === 'FEED-01' ? { ...c, startEquipmentId: undefined } : c)) };
     const trace = traceOpticalPath('CUST-001', data)!;
     expect(trace.warnings.join(' ')).toMatch(/FEED-01\) has no start equipment/);
@@ -158,7 +179,7 @@ describe('traceOpticalPath', () => {
   });
 
   it('shows no core where none is recorded', () => {
-    const trace = traceOpticalPath('CUST-001', linked())!;
+    const trace = traceOpticalPath('CUST-001', cableLinked())!;
     const feeder = trace.hops.find((h) => h.id === 'FEED-01')!;
     expect(feeder.coreNumber).toBeUndefined();
     expect(feeder.details).toContain('Core not recorded');
@@ -166,7 +187,7 @@ describe('traceOpticalPath', () => {
   });
 
   it('calls out a splitter with no ratio instead of assuming 1:4', () => {
-    const base = linked();
+    const base = cableLinked();
     const data = {
       ...base,
       equipment: base.equipment.map((e) => (e.id === 'FDT-01' ? { ...e, type: 'Fiber Splitter' as const } : e)),
@@ -216,7 +237,7 @@ describe('traceNetworkPath honesty', () => {
   });
 
   it('includes an ODF that a cable explicitly links', () => {
-    const base = linked();
+    const base = cableLinked();
     const data = {
       ...base,
       equipment: [...base.equipment, equipment({ id: 'ODF-1', type: 'ODF' })],

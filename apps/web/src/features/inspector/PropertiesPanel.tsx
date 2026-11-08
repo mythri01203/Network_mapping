@@ -6,12 +6,16 @@ import {
   MousePointerClick,
   PanelRightClose,
   PanelRightOpen,
+  Repeat,
   TriangleAlert,
   UserRound,
+  Waypoints,
   X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+
+import { STRUCTURE_STATUS_LABELS } from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { Badge, CableIcon, cn, EmptyState, equipmentIcon, IconButton, StatusBadge } from '../../components/ui';
@@ -22,6 +26,7 @@ import { CustomerInspector } from './CustomerInspector';
 import { EquipmentInspector } from './EquipmentInspector';
 import { FaultInspector } from './FaultInspector';
 import { joinPresent } from './format';
+import { DuctInspector, SlackLoopInspector, SpanInspector } from './osp/OspInspectors';
 
 interface HeaderModel {
   icon: LucideIcon;
@@ -55,7 +60,7 @@ function headerFor(selection: SelectedObject): HeaderModel {
         tint: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
         kind: cable.type,
         status: cable.status,
-        tags: [<Badge key="fibers">{cable.fiberCount} F</Badge>],
+        tags: [<Badge key="fibers">{cable.fiberCount > 0 ? `${cable.fiberCount} F` : 'Cores not recorded'}</Badge>],
       };
     }
     case 'customer': {
@@ -88,6 +93,27 @@ function headerFor(selection: SelectedObject): HeaderModel {
         location: `${fault.affectedLocation.lat.toFixed(5)}, ${fault.affectedLocation.lng.toFixed(5)}`,
       };
     }
+    case 'span':
+      return {
+        icon: Waypoints,
+        tint: 'bg-orange-50 text-orange-800 ring-orange-100',
+        kind: 'Span between poles',
+        tags: [<Badge key="status" tone={selection.data.status === 'proposed' ? 'amber' : 'neutral'}>{STRUCTURE_STATUS_LABELS[selection.data.status]}</Badge>],
+      };
+    case 'duct':
+      return {
+        icon: Waypoints,
+        tint: 'bg-stone-100 text-stone-700 ring-stone-200',
+        kind: 'Duct',
+        tags: [<Badge key="status">{STRUCTURE_STATUS_LABELS[selection.data.status]}</Badge>],
+      };
+    case 'slackLoop':
+      return {
+        icon: Repeat,
+        tint: 'bg-violet-50 text-violet-700 ring-violet-100',
+        kind: 'Slack loop',
+        tags: [<Badge key="length">{selection.data.lengthMeters} m</Badge>],
+      };
   }
 }
 
@@ -103,6 +129,12 @@ function InspectorBody({ selection, detailed }: { selection: SelectedObject; det
       return <ClosureInspector closure={selection.data} />;
     case 'fault':
       return <FaultInspector fault={selection.data} />;
+    case 'span':
+      return <SpanInspector span={selection.data} />;
+    case 'duct':
+      return <DuctInspector duct={selection.data} />;
+    case 'slackLoop':
+      return <SlackLoopInspector loop={selection.data} />;
   }
 }
 

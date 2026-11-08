@@ -21,7 +21,7 @@ This is the easy way to add poles, boxes, house wires, light levels and danger. 
 7. Tap the picture: **Cement**, **Iron**, **Wood** or **Don't know**.
 8. Check the card. Tap **Save**.
 
-You will see a big tick and **Saved on phone**. Tap **Next pole** to go straight to the camera for the next pole. Tap **Finished** when the street is done.
+You will see a big tick and **Saved on phone**. Tap **Next pole** to go straight to the camera for the next pole. The office then sees the two poles joined by a dashed line until someone checks it; it does not say a cable is there. Tap **Finished** when the street is done.
 
 ### Add a box
 
@@ -42,6 +42,34 @@ Tap **Add customer drop**, take a photo of the wire where it reaches the house, 
 ### Report danger
 
 Tap **Report danger**. Stay where you are. Take the photo. Tap **Save**. Stay away, and keep others away.
+
+### My jobs (repair work from the office)
+
+The office gives you a job. You do it on the phone, step by step. Open **Field capture** and tap **My jobs** (or open the address that ends in **/jobs**).
+
+1. The first time it asks **Who are you?** Tap your name. Not there? Ask the office to put your name on your job.
+2. Tap the job. A purple line **TEST job. Not real.** means it is practice: do it the same way, nobody is waiting.
+3. **Go to:** says where. Tap **Show the way** for the bike map. It uses your real GPS. Do not touch the phone while riding.
+4. At the place, tap **Start job**. The camera opens: take the **Photo before**, before you touch anything.
+5. Tap each step on the list when it is done. It turns green.
+6. Used something? Tap **Material used**, tap the picture (**House wire**, **Connector**, **Splice sleeve**, **Patch cord**, **Splitter**), type how many with the number buttons, tap **Save**.
+7. Want to tell the office something? Tap **Add a note**, write it, tap **Save**. Writing is not needed for anything else.
+8. When the repair is finished, tap **Photo after** and take the photo.
+9. Tap **Repair done**.
+10. **Check the repair:** tap **Light level reading** (or **Photo of the working device** if you have no meter). For a reading: tap the house where you checked, take the photo of the meter screen, type only the numbers (for -19.20 type 1 9 2 0), check the big number matches, tap **Save**.
+11. You see **Check saved. The office will close the job.** That is all. The office closes the job and the fault.
+
+After every save you see **Saved** with an **Undo** button. Tap **Undo** to take back only that last thing. Must stop and come back later? Tap **Stop for now**, say why if you can, and tap **Stop for now** again. Next time tap **Start again**.
+
+The box at the top right works the same as in field capture: **Saved on phone**, **Sending**, **Sent to office**. With no signal, keep working: everything waits on the phone.
+
+### "Someone else changed this"
+
+If you worked without signal and the office changed the same job at the same time, the phone shows **Someone else changed this**, with **Theirs (office)** and **Mine (this phone)**. Nothing is lost: both are kept. Tap one:
+
+- **Keep theirs**: use the office's version.
+- **Keep mine**: send your version.
+- **Office decides**: you are not sure. The office chooses later.
 
 ### No green tick?
 
@@ -113,14 +141,14 @@ If an end is still blank, the app asks before saving and explains that customers
 7. **ONT Serial Number:** type the number from the device label. If you cannot read it, leave it blank.
 8. Tap **Activate Subscriber**.
 
-The app draws the house wire by itself. Do not draw it again.
+The app draws the house wire by itself. Do not draw it again. It also marks the house wire's fiber as used. If the office has recorded the fibers back to the machine, the main and street fibers are marked too.
 
 ## 5. Check your work
 
 1. Type the customer's name in the search bar at the top. Choose it.
 2. Read **SERVICE PATH**.
 3. Every line should be filled. "Not linked" means something is missing.
-4. **Trace service path** names any missing link in red at the top. A path with a missing link never shows a pass.
+4. **Trace service path** names any missing link in red at the top. A path with a missing link never shows a pass. When the office has recorded every fiber, it says **Every fiber recorded** and follows the exact fiber from the machine to the house. Otherwise it says **Cables only** and names the first fiber that is not recorded. That is office work, not yours.
 
 ## Move a box or pole
 
@@ -148,4 +176,4 @@ Tap the **Undo** arrow straight away. It does not work after you close the page.
 
 ---
 
-*For supervisors: these steps were followed by a script in a real browser, at computer, tablet (1024 px) and phone (360 px) sizes, on a test copy. They have not been tried with field workers or on a real phone in the street. Please watch two or three workers use this guide, and tell us where they get stuck. A Telugu or Kannada version needs a native speaker.*
+*For supervisors: these steps were followed by a script in a real browser, at computer, tablet (1024 px) and phone (360 px) sizes, on a test copy. They have not been tried with field workers or on a real phone in the street. Please watch two or three workers use this guide, and tell us where they get stuck. A Telugu or Kannada version needs a native speaker. The **My jobs** steps were checked the same way in November 2026 (a TEST job with a fake camera); no technician has used them yet.*

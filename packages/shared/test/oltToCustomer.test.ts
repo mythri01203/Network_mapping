@@ -50,7 +50,8 @@ describe('OLT to customer workflow', () => {
     const splitter = data.splitters[0];
     expect(splitter.terminalBoxId).toBe('FAT-01');
     expect(splitter.outputPorts).toHaveLength(8);
-    expect(splitter.inputPort.connectedCableId).toBe(cable.value.id);
+    // The input is never inferred from the cable that ends at the box: a person links the fiber.
+    expect(splitter.inputPort.connectedCableId).toBeUndefined();
 
     const provisioned = unwrap(
       provisionCustomer(

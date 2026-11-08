@@ -30,14 +30,25 @@ const RETRY = 1_000;
 
 type Records = Record<CollectionName, { id: string }[]>;
 
-/** In-memory stand-in for the API server with the same revision rules. */
-function createFakeServer() {
+/**
+ * In-memory stand-in for the API server with the same revision rules. With `versioned`, it also
+ * keeps a version per record and refuses stale edits, like the Phase 8 server.
+ */
+function createFakeServer({ versioned = false } = {}) {
   let revision = 1;
   let data = createSampleNetwork() as unknown as Records;
   let outage: Error | null = null;
   let refusal: ApiError | null = null;
   /** Records the server refuses one by one, like a validation failure on a single record. */
   const refusedIds = new Set<string>();
+  const versions = new Map<string, number>();
+  const versionOf = (name: string, id: string) => versions.get(`${name}/${id}`) ?? 0;
+  const versionsMap = () => {
+    if (!versioned) return undefined;
+    const out: Record<string, Record<string, number>> = {};
+    for (const name of COLLECTION_NAMES) for (const r of data[name]) (out[name] ??= {})[r.id] = versionOf(name, r.id);
+    return out;
+  };
 
   const available = async () => {
     if (outage) throw outage;
@@ -47,6 +58,19 @@ function createFakeServer() {
   const applyChanges = vi.fn<ApiClient['applyChanges']>(async (changes: ChangeSet) => {
     await available();
     if (refusal) throw refusal;
+    if (versioned) {
+      const conflicts = [];
+      for (const [name, byId] of Object.entries(changes.expect ?? {}) as [CollectionName, Record<string, number>][]) {
+        for (const [id, expected] of Object.entries(byId)) {
+          const record = data[name].find((r) => r.id === id);
+          const deleting = (changes.deletes?.[name] ?? []).includes(id);
+          if (!record && deleting) continue;
+          const current = record ? versionOf(name, id) : null;
+          if (current !== expected) conflicts.push({ collection: name, id, expected, current, record: record ? structuredClone(record) : null });
+        }
+      }
+      if (conflicts.length > 0) throw new ApiError(409, 'version_conflict', 'Someone else changed it.', [], conflicts as never);
+    }
     const touched = [
       ...Object.values(changes.upserts ?? {}).flatMap((records) => (records as { id: string }[]).map((r) => r.id)),
       ...Object.values(changes.deletes ?? {}).flat(),
@@ -56,11 +80,14 @@ function createFakeServer() {
     expect(changeSetSchema.safeParse(changes).success).toBe(true);
     let upserted = 0;
     let deleted = 0;
+    const written: Record<string, Record<string, number>> = {};
     for (const [name, records] of Object.entries(changes.upserts ?? {}) as [CollectionName, { id: string }[]][]) {
       for (const record of records) {
         const index = data[name].findIndex((item) => item.id === record.id);
         if (index >= 0) data[name][index] = structuredClone(record);
         else data[name].push(structuredClone(record));
+        versions.set(`${name}/${record.id}`, revision + 1);
+        (written[name] ??= {})[record.id] = revision + 1;
         upserted += 1;
       }
     }
@@ -70,7 +97,7 @@ function createFakeServer() {
       deleted += before - data[name].length;
     }
     if (upserted + deleted > 0) revision += 1;
-    return { revision, upserted, deleted };
+    return versioned ? { revision, upserted, deleted, versions: written } : { revision, upserted, deleted };
   });
 
   const client: ApiClient = {
@@ -81,7 +108,8 @@ function createFakeServer() {
     }),
     getNetwork: vi.fn(async () => {
       await available();
-      return { revision, data: snapshot() };
+      const v = versionsMap();
+      return v ? { revision, data: snapshot(), versions: v } : { revision, data: snapshot() };
     }),
     applyChanges,
     reset: vi.fn(async () => {
@@ -124,6 +152,7 @@ function createFakeServer() {
       if (index >= 0) data[name][index] = record;
       else data[name].push(record);
       revision += 1;
+      versions.set(`${name}/${record.id}`, revision);
     },
   };
 }
@@ -462,5 +491,96 @@ describe('reset and restore', () => {
     vi.mocked(server.client.restore).mockRejectedValueOnce(new ApiError(400, 'invalid_backup', 'Bad backup.'));
     await expect(engine.restore({ collections: { zones: [] } })).resolves.toBe('failed');
     expect(useNetworkStore.getState().zones).toEqual(createSampleNetwork().zones);
+  });
+});
+
+describe('offline edits that clash (Phase 8, example E)', () => {
+  /** The office renames a record while this device, offline, renamed it too. */
+  async function clash() {
+    server = createFakeServer({ versioned: true });
+    await startEngine();
+    const [first] = server.records('equipment') as { id: string; name: string }[];
+    server.goDown();
+    await vi.advanceTimersByTimeAsync(POLL);
+    const id = renameFirstEquipment('Phone version');
+    server.editElsewhere('equipment', { ...first, name: 'Office version' } as { id: string });
+    // Something else edited offline that nobody else touched.
+    const [cable] = useNetworkStore.getState().cables;
+    useNetworkStore.setState({ cables: useNetworkStore.getState().cables.map((c) => (c.id === cable.id ? { ...c, name: 'Phone cable' } : c)) });
+    server.comeBack();
+    await vi.advanceTimersByTimeAsync(RETRY * 4);
+    await idle();
+    return { id, cableId: cable.id };
+  }
+
+  const conflictsFor = (id: string) => useNetworkStore.getState().syncConflicts.filter((c) => c.recordId === id);
+
+  it('sends edits with the version they started from, and other edits still go through', async () => {
+    const { id, cableId } = await clash();
+    const sent = server.applyChanges.mock.calls.map(([changes]) => changes);
+    expect(sent.some((c) => c.expect?.equipment?.[id] !== undefined)).toBe(true);
+    // Nothing of the phone's was lost, and nothing of the office's was overwritten.
+    expect(serverEquipment(id).name).toBe('Office version');
+    expect(useNetworkStore.getState().equipment.find((e) => e.id === id)?.name).toBe('Phone version');
+    expect((server.records('cables').find((c) => c.id === cableId) as unknown as { name: string }).name).toBe('Phone cable');
+    const [conflict] = conflictsFor(id);
+    expect(conflict).toMatchObject({ collection: 'equipment', status: 'open', mine: expect.objectContaining({ name: 'Phone version' }), theirs: expect.objectContaining({ name: 'Office version' }) });
+    expect(conflict.changedFields).toEqual(['name']);
+    expect(useSyncStore.getState().held).toEqual([`equipment/${id}`]);
+    // The conflict record itself reached the office.
+    expect(server.records('syncConflicts').map((c) => c.id)).toContain(conflict.id);
+    expect(useToastStore.getState().toasts.some((t) => t.title === 'Someone else changed this')).toBe(true);
+    expect(storedMeta().held).toEqual({ equipment: [id] });
+  });
+
+  it('keep mine sends the phone version over the office one, checked against the version shown', async () => {
+    const { id } = await clash();
+    const [conflict] = conflictsFor(id);
+    await expect(engine.resolveConflict(conflict.id, 'mine')).resolves.toBe(true);
+    await idle();
+    expect(serverEquipment(id).name).toBe('Phone version');
+    expect(conflictsFor(id)[0]).toMatchObject({ status: 'kept_mine', theirs: expect.objectContaining({ name: 'Office version' }) });
+    expect(useSyncStore.getState().held).toEqual([]);
+  });
+
+  it('keep theirs and office decides show the office version here, and both versions stay in the record', async () => {
+    const { id } = await clash();
+    const [conflict] = conflictsFor(id);
+    await engine.resolveConflict(conflict.id, 'office');
+    await idle();
+    expect(useNetworkStore.getState().equipment.find((e) => e.id === id)?.name).toBe('Office version');
+    expect(serverEquipment(id).name).toBe('Office version');
+    const saved = server.records('syncConflicts').find((c) => c.id === conflict.id) as unknown as { status: string; mine: { name: string } };
+    expect(saved).toMatchObject({ status: 'office_decides', mine: { name: 'Phone version' } });
+    // Later edits are checked against the office version and go through.
+    renameFirstEquipment('After the choice');
+    await idle();
+    expect(serverEquipment(id).name).toBe('After the choice');
+  });
+
+  it('is not a conflict when both sides already hold the same record', async () => {
+    server = createFakeServer({ versioned: true });
+    await startEngine();
+    const [first] = server.records('equipment') as { id: string; name: string }[];
+    server.goDown();
+    await vi.advanceTimersByTimeAsync(POLL);
+    const id = renameFirstEquipment('Same both sides');
+    server.editElsewhere('equipment', { ...useNetworkStore.getState().equipment[0] } as { id: string });
+    server.comeBack();
+    await vi.advanceTimersByTimeAsync(RETRY * 4);
+    await idle();
+    expect(first.id).toBe(id);
+    expect(conflictsFor(id)).toEqual([]);
+    expect(useSyncStore.getState()).toMatchObject({ phase: 'synced', held: [] });
+  });
+
+  it('keeps last-write-wins with a server that sends no versions', async () => {
+    await startEngine();
+    const [first] = server.records('equipment');
+    renameFirstEquipment('Mine');
+    server.editElsewhere('equipment', { ...first, name: 'Theirs' } as { id: string });
+    await idle();
+    expect(server.applyChanges.mock.calls.every(([c]) => c.expect === undefined)).toBe(true);
+    expect(serverEquipment(first.id).name).toBe('Mine');
   });
 });

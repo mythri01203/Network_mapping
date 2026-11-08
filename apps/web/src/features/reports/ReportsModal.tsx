@@ -3,9 +3,9 @@ import jsPDF from 'jspdf';
 import { Download, FileSpreadsheet, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { rxReadingOf } from '@fibergis/shared';
+import { coreIdentity, effectiveCoreStatus, rxReadingOf } from '@fibergis/shared';
 
-import { useNetworkStore } from '../../stores/networkStore';
+import { selectColorSchemes, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -13,12 +13,16 @@ export const ReportsModal: React.FC = () => {
   const { isReportsModalOpen, setModalOpen } = useUiStore(
     useShallow((s) => ({ isReportsModalOpen: s.modals.reports, setModalOpen: s.setModalOpen })),
   );
-  const { equipments, cables, customers, faults } = useNetworkStore(
+  const { equipments, cables, customers, faults: allFaults } = useNetworkStore(
     useShallow((s) => ({ equipments: s.equipment, cables: s.cables, customers: s.customers, faults: s.faults })),
   );
   const showToast = useToastStore((s) => s.show);
 
   const [selectedReport, setSelectedReport] = useState<'inventory' | 'cores' | 'customers' | 'faults'>('inventory');
+  /** TEST faults are left out of reports unless asked for (Phase 8). */
+  const [includeTests, setIncludeTests] = useState(false);
+  const testCount = allFaults.filter((f) => f.isTest).length;
+  const faults = includeTests ? allFaults : allFaults.filter((f) => !f.isTest);
 
   if (!isReportsModalOpen) return null;
 
@@ -35,8 +39,10 @@ export const ReportsModal: React.FC = () => {
     } else if (type === 'cores') {
       csvContent += 'Cable ID,Cable Name,Core Number,Tube,Color,Status,Connected Target,Attenuation dB,Remarks\n';
       cables.forEach((c) => {
+        const schemes = selectColorSchemes(useNetworkStore.getState());
         c.cores.forEach((core) => {
-          csvContent += `"${c.id}","${c.name}","${core.coreNumber}","${core.tubeNumber}","${core.colorName}","${core.status}","${core.connectedToEquipmentId || core.customerId || 'Free'}","${core.attenuationDb || ''}","${core.remarks}"\n`;
+          const id = coreIdentity(c, core.coreNumber, schemes);
+          csvContent += `"${c.id}","${c.name}","${core.coreNumber}","${id.tubeNumber ?? 'Not recorded'}","${id.fiberColor?.name ?? 'Not known'}","${effectiveCoreStatus(core)}","${core.connectedToEquipmentId || core.customerId || 'Free'}","${core.attenuationDb || ''}","${core.remarks}"\n`;
         });
       });
     } else if (type === 'customers') {
@@ -46,9 +52,9 @@ export const ReportsModal: React.FC = () => {
         csvContent += `"${cu.id}","${cu.name}","${cu.mobile}","${cu.address}","${cu.area}","${cu.plan}","${cu.terminalBoxId}","${cu.splitterId}","${cu.splitterOutputPort}","${cu.ontSerialNumber}","${cu.ipAddress}","${rxReadingOf(cu).valueDbm ?? ''}","${rxReadingOf(cu).originLabel}"\n`;
       });
     } else if (type === 'faults') {
-      csvContent += 'Fault ID,Type,Severity,Status,Reported At,Description,Affected Customers\n';
+      csvContent += 'Fault ID,TEST,Source,Type,Severity,Status,Reported At,Description,Affected Customers,May Be Affected (path not fully recorded),Check\n';
       faults.forEach((f) => {
-        csvContent += `"${f.id}","${f.type}","${f.severity}","${f.status}","${f.reportedAt}","${f.description}","${f.affectedCustomerIds.join(';')}"\n`;
+        csvContent += `"${f.id}","${f.isTest ? 'TEST' : ''}","${f.source ?? 'not recorded'}","${f.type}","${f.severity}","${f.status}","${f.reportedAt}","${f.description}","${f.affectedCustomerIds.join(';')}","${(f.mayBeAffectedCustomerIds ?? []).join(';')}","${f.verification?.method ?? ''}"\n`;
       });
     }
 
@@ -201,7 +207,7 @@ export const ReportsModal: React.FC = () => {
                 id: 'faults',
                 title: 'Network Outages & Outage History',
                 desc: 'Active critical fiber cuts, affected downstream subscribers, work orders',
-                count: `${faults.length} Recorded`,
+                count: `${faults.length} Recorded${!includeTests && testCount > 0 ? ` (${testCount} TEST left out)` : ''}`,
               },
             ].map((rep) => (
               <button
@@ -225,6 +231,12 @@ export const ReportsModal: React.FC = () => {
           {/* Export Action Card */}
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
             <div className="font-bold text-xs text-slate-800">Export {selectedReport.toUpperCase()} Data</div>
+            {selectedReport === 'faults' && (
+              <label className="flex items-center gap-2 text-xs text-slate-700">
+                <input type="checkbox" checked={includeTests} onChange={(e) => setIncludeTests(e.target.checked)} data-testid="report-include-tests" />
+                Include TEST events ({testCount}). They are not real faults and are left out unless ticked.
+              </label>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <button

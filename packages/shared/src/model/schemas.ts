@@ -1,14 +1,25 @@
 import { z } from 'zod';
 
+import { OPTICS_CLASSES } from '../domain/opticalSettings';
 import {
+  adminStatusSchema,
+  alarmKindSchema,
+  alarmSourceSchema,
+  alarmStateSchema,
   ANNOTATION_STATUSES,
   ANNOTATION_TYPES,
+  attachmentStatusSchema,
   AUDIT_ASSET_TYPES,
+  buildingKindSchema,
   CABLE_CATEGORIES,
+  cableEntryRoleSchema,
   cableInstallationTypeSchema,
   cableStatusSchema,
   cableTypeSchema,
   CLOSURE_TYPES,
+  closureConditionSchema,
+  confidenceSchema,
+  coreAssignmentKindSchema,
   coreStatusSchema,
   CUSTOMER_SERVICE_TYPES,
   CUSTOMER_STATUSES,
@@ -19,8 +30,19 @@ import {
   FAULT_STATUSES,
   FAULT_TYPES,
   IMAGE_CATEGORIES,
+  jobEventKindSchema,
+  jobPhotoKindSchema,
+  lengthMarkUnitSchema,
+  linkBasisSchema,
   locationMethodSchema,
   logicalPortStatusSchema,
+  lossSourceSchema,
+  networkElementTypeSchema,
+  odfPortStatusSchema,
+  ontArrangementSchema,
+  ontStatusSchema,
+  ontStatusSourceSchema,
+  permissionKindSchema,
   poleMaterialSchema,
   poleOwnerTypeSchema,
   PON_PORT_STATUSES,
@@ -28,13 +50,21 @@ import {
   portTechnologySchema,
   routeStatusSchema,
   rxSourceSchema,
+  sealStatusSchema,
+  serviceKindSchema,
+  serviceStatusSchema,
   severitySchema,
   signalLevelSchema,
   spliceStatusSchema,
+  spliceTypeSchema,
   SPLITTER_STATUSES,
+  splitterKindSchema,
   splitterPortStatusSchema,
   splitterRatioSchema,
+  structureStatusSchema,
+  syncConflictStatusSchema,
   userRoleSchema,
+  verificationMethodSchema,
   workOrderStatusSchema,
   workOrderTypeSchema,
   ZONE_STATUSES,
@@ -152,10 +182,47 @@ export const equipmentImageSchema = z.object({
   annotations: z.array(imageAnnotationSchema),
 });
 
+/** One line of a record's change history: what was done, when, by whom. */
+export const historyEntrySchema = z.object({
+  at: isoDate,
+  by: z.string().optional(),
+  action: z.string().min(1).max(60),
+  details: z.string().max(500),
+});
+
+export const opticsClassSchema = z.enum(OPTICS_CLASSES);
+
+/** One level of a vendor's address, in the vendor's own words, such as { label: 'Slot', value: '5' }. */
+export const addressPartSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  value: z.string().trim().min(1).max(40),
+});
+
 export const ponPortSchema = z.object({
   id,
   portNumber: z.number().int(),
   slotCardPort: z.string().optional(),
+  /**
+   * The port's address exactly as the OLT writes it, such as "gpon 0/5/0" (Huawei),
+   * "gpon-olt_1/2/3" (ZTE) or "1/1/1/2" (Nokia). Never converted between vendor formats.
+   */
+  vendorAddress: z.string().trim().max(80).optional(),
+  /** The same address split into the vendor's own levels, in order. No fixed chassis/slot shape. */
+  addressParts: z.array(addressPartSchema).max(8).optional(),
+  /** Optics class of the module in this port, as recorded by a person (labels on parts are unreliable). */
+  opticsClass: opticsClassSchema.optional(),
+  opticsClassSource: z.string().max(200).optional(),
+  /** A vendor's own budget claim (such as 29.5 dB), kept apart from the ITU class. */
+  vendorBudgetDb: z.number().positive().max(60).optional(),
+  vendorBudgetSource: z.string().max(200).optional(),
+  /** The vendor's ONU limit for this port. Not an optical limit. */
+  maxOnu: z.number().int().positive().max(1024).optional(),
+  adminStatus: adminStatusSchema.optional(),
+  /**
+   * The feeder core this port drives when it is connected straight to the cable with no ODF. With
+   * an ODF, the path is recorded on the ODF port instead.
+   */
+  feederCore: z.number().int().positive().optional(),
   technology: ponTechnologySchema.optional(),
   status: z.enum(PON_PORT_STATUSES),
   color: z.string().optional(),
@@ -218,9 +285,73 @@ const fieldCaptureFields = {
   captureSource: z.literal('field_capture').optional(),
 };
 
+/**
+ * Where an imported record came from, kept exactly as the file had it. Nothing here is a fact the
+ * importer worked out: a KML name or description is the file author's text.
+ */
+export const importInfoSchema = z.object({
+  importId: z.string().min(1),
+  fileName: z.string(),
+  importedAt: isoDate,
+  /** Folder path inside the file, such as "Route A / Poles". */
+  folderPath: z.string().optional(),
+  styleId: z.string().optional(),
+  originalName: z.string().optional(),
+  description: z.string().optional(),
+  extendedData: z.record(z.string(), z.string()).optional(),
+});
+
+/**
+ * Pole and structure details the office records. All optional: a blank one shows "Not recorded".
+ * The owner's pole number is what the owner (such as a DISCOM) painted on the pole; it may be
+ * absent, repeated or repainted, so it is never used as the key.
+ */
+const structureDetailFields = {
+  heightMeters: z.number().positive().max(100).optional(),
+  /** Owner as written by the office, such as "BESCOM", "Own", "BBMP". */
+  ownerName: z.string().trim().max(120).optional(),
+  ownerPoleNumber: z.string().trim().max(64).optional(),
+  importInfo: importInfoSchema.optional(),
+};
+
+/** One adapter on an ODF panel: the front takes a patch cord, the back holds a feeder core. */
+export const odfPortSchema = z.object({
+  id,
+  number: z.number().int().positive(),
+  label: z.string().max(40).optional(),
+  connectorType: z.string().max(20).optional(),
+  status: odfPortStatusSchema,
+  /** Rear: the cable and core terminated behind this adapter. */
+  feederCableId: z.string().min(1).optional(),
+  feederCore: z.number().int().positive().optional(),
+  /** Front: the patch cord to an OLT PON port. A patch is not a splice. */
+  patch: z
+    .object({
+      oltId: z.string().min(1),
+      ponPortId: z.string().min(1),
+      patchedAt: isoDate,
+      patchedBy: z.string().optional(),
+      cordLabel: z.string().max(60).optional(),
+    })
+    .optional(),
+  history: z.array(historyEntrySchema).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const odfPanelSchema = z.object({
+  id,
+  label: z.string().trim().min(1).max(60),
+  rack: z.string().max(40).optional(),
+  tray: z.string().max(40).optional(),
+  connectorType: z.string().max(20).optional(),
+  ports: z.array(odfPortSchema).max(288),
+  notes: z.string().max(500).optional(),
+});
+
 export const equipmentSchema = z.object({
   id,
   ...fieldCaptureFields,
+  ...structureDetailFields,
   /** Unchanging short code printed on the asset's QR tag. */
   tagCode: z.string().trim().min(1).max(64).optional(),
   /** Kind of pole owner as seen in the field. The company is recorded later by the office. */
@@ -260,6 +391,11 @@ export const equipmentSchema = z.object({
   slotNumber: z.string().optional(),
   ponCardsCount: z.number().int().nonnegative().optional(),
   ponPorts: z.array(ponPortSchema).optional(),
+  /** ODF or patch panel: panels, adapters, feeder cores behind them and patches in front. */
+  odfPanels: z.array(odfPanelSchema).optional(),
+  firmware: z.string().max(60).optional(),
+  /** Where the OLT sits, such as "CO-1 rack 3". */
+  site: z.string().max(120).optional(),
   logicalPorts: z.array(equipmentPortSchema).optional(),
   opticalPower: opticalPowerInfoSchema.optional(),
   uptimeHours: z.number().nonnegative().optional(),
@@ -278,12 +414,45 @@ export const equipmentSchema = z.object({
   isSampleData: z.boolean().optional(),
 });
 
+/**
+ * Who a core is given to. An assignment is never deleted: releasing it sets `releasedAt`, so the
+ * core's history stays. At most one assignment per core is active (no `releasedAt`).
+ */
+export const coreAssignmentSchema = z.object({
+  id,
+  kind: coreAssignmentKindSchema,
+  /** Service or use as written, such as "PON OLT-1 / PON-3" or "Customer CUST-004". */
+  use: z.string().trim().min(1).max(160),
+  /** What feeds this core and where it goes, as written or as worked out from linked records. */
+  source: z.string().max(160).optional(),
+  destination: z.string().max(160).optional(),
+  customerId: z.string().optional(),
+  equipmentId: z.string().optional(),
+  /** OLT id and PON port id for a core that carries a PON tree. */
+  oltId: z.string().optional(),
+  ponPortId: z.string().optional(),
+  effectiveFrom: isoDate,
+  /** Planned end, such as when a reservation lapses. Nothing is released automatically. */
+  effectiveTo: isoDate.optional(),
+  releasedAt: isoDate.optional(),
+  releasedBy: z.string().optional(),
+  releaseReason: z.string().max(300).optional(),
+  createdAt: isoDate,
+  createdBy: z.string().optional(),
+  notes: z.string().max(500).optional(),
+});
+
 export const fiberCoreSchema = z.object({
   coreNumber: z.number().int().positive(),
-  tubeNumber: z.number().int().positive(),
-  colorName: z.string(),
-  colorHex: z.string(),
+  /**
+   * Older records stored a tube number and colour worked out by assuming TIA-598 with 12 per tube.
+   * They are not used for identity: the tube and colour come from the cable's recorded layout.
+   */
+  tubeNumber: z.number().int().positive().optional(),
+  colorName: z.string().optional(),
+  colorHex: z.string().optional(),
   status: coreStatusSchema,
+  assignments: z.array(coreAssignmentSchema).optional(),
   connectedToEquipmentId: z.string().optional(),
   connectedToEquipmentName: z.string().optional(),
   connectedPort: z.string().optional(),
@@ -315,10 +484,36 @@ export const cableSchema = z.object({
   endEquipmentId: z.string().optional(),
   startPortName: z.string().optional(),
   endPortName: z.string().optional(),
+  /** Line colour on the map. Not a fiber colour. */
   colorHex: z.string().optional(),
   thickness: z.number().positive().optional(),
+  /*
+   * How the fibers are identified. Absent means not known: no colour is shown, never TIA-598 by
+   * default. Identity is tube and fiber number, (tube - 1) x fibersPerTube + fiber.
+   */
+  colorScheme: z.string().min(1).max(60).optional(),
+  /** Tube colours can follow another scheme than the fibers, or none. Absent means not known. */
+  tubeColorScheme: z.string().min(1).max(60).optional(),
+  fibersPerTube: z.number().int().positive().max(288).optional(),
+  tubeCount: z.number().int().positive().max(288).optional(),
+  /** Where the layout came from, such as "Drum sheet, STL 96F, checked 4 Nov". */
+  layoutSource: z.string().max(200).optional(),
   cores: z.array(fiberCoreSchema),
   cableCategory: z.enum(CABLE_CATEGORIES),
+  /*
+   * Lengths are kept apart and never overwrite each other. lengthMeters is worked out from the
+   * drawn line. Sheath length comes from the printed marks a person read at both ends. Optical
+   * length is what an OTDR reported. Each is optional: absent means nobody has recorded it.
+   */
+  sheathMarkStart: z.number().nonnegative().optional(),
+  sheathMarkEnd: z.number().nonnegative().optional(),
+  sheathMarkUnit: lengthMarkUnitSchema.optional(),
+  sheathRecordedAt: isoDate.optional(),
+  opticalLengthMeters: z.number().positive().optional(),
+  opticalMeasuredAt: isoDate.optional(),
+  /** Free text such as "OTDR, core 1, from the OLT end". */
+  opticalLengthNote: z.string().max(200).optional(),
+  importInfo: importInfoSchema.optional(),
 });
 
 export const splitterPortSchema = z.object({
@@ -327,8 +522,17 @@ export const splitterPortSchema = z.object({
   status: splitterPortStatusSchema,
   connectedCustomerId: z.string().optional(),
   connectedCustomerName: z.string().optional(),
+  /** The cable leaving this output (a drop or a lead cable). */
   connectedDropCableId: z.string().optional(),
+  /** Which core of that cable. Without it the path cannot be followed core by core. */
+  connectedCore: z.number().int().positive().optional(),
+  /** Box or equipment the output goes to, when recorded. */
+  connectedEquipmentId: z.string().optional(),
+  connectedAt: isoDate.optional(),
+  /** Configured loss of this output, for unequal couplers (such as 10/90). Overrides the splitter's. */
+  lossDb: z.number().nonnegative().max(40).optional(),
   attenuationDb: z.number().optional(),
+  history: z.array(historyEntrySchema).optional(),
 });
 
 export const splitterSchema = z.object({
@@ -342,9 +546,25 @@ export const splitterSchema = z.object({
     id,
     connectedCableId: z.string().optional(),
     connectedCore: z.number().int().optional(),
+    /** Cascade inside one box: this input is fed straight from another splitter's output. */
+    connectedSplitterId: z.string().optional(),
+    connectedSplitterPort: z.number().int().positive().optional(),
+    linkedAt: isoDate.optional(),
+    linkedBy: z.string().optional(),
     signalLevelDbm: z.number().optional(),
   }),
   outputPorts: z.array(splitterPortSchema),
+  kind: splitterKindSchema.optional(),
+  /** Unequal coupler split as written, such as "90/10". Its outputs carry their own loss. */
+  couplerRatio: z.string().max(20).optional(),
+  manufacturer: z.string().max(80).optional(),
+  model: z.string().max(80).optional(),
+  /** Where the insertion loss came from, such as a datasheet or "settings default". */
+  lossSource: z.string().max(200).optional(),
+  /** Set when the input side is fed by two OLT ports by design (a 2:N splitter). */
+  dualInput: z.boolean().optional(),
+  installedAt: isoDate.optional(),
+  history: z.array(historyEntrySchema).optional(),
 });
 
 export const spliceRecordSchema = z.object({
@@ -355,10 +575,39 @@ export const spliceRecordSchema = z.object({
   outputCableId: z.string(),
   outputCableName: z.string(),
   outputCore: z.number().int().positive(),
-  spliceLossDb: z.number().nonnegative(),
+  /** Absent when no loss was recorded. Older records have a value but no origin. */
+  spliceLossDb: z.number().nonnegative().optional(),
+  lossSource: lossSourceSchema.optional(),
   status: spliceStatusSchema,
   technician: z.string(),
   date: isoDate,
+  trayId: z.string().optional(),
+  spliceType: spliceTypeSchema.optional(),
+  /** OTDR file name or test reference, as written. */
+  otdrRef: z.string().max(120).optional(),
+  photoIds: z.array(z.string()).optional(),
+  notes: z.string().max(500).optional(),
+  /** A splice taken out of service stays on record. Re-splicing retires the old one. */
+  retiredAt: isoDate.optional(),
+  retiredBy: z.string().optional(),
+  retiredReason: z.string().max(300).optional(),
+  replacedBySpliceId: z.string().optional(),
+});
+
+export const spliceTraySchema = z.object({
+  id,
+  label: z.string().trim().min(1).max(40),
+  /** Splice positions on the tray, as printed. */
+  capacity: z.number().int().positive().max(144).optional(),
+  notes: z.string().max(300).optional(),
+});
+
+/** A cable recorded at a closure, and which port or gland it uses. */
+export const cableEntrySchema = z.object({
+  cableId: z.string().min(1),
+  role: cableEntryRoleSchema,
+  port: z.string().max(40).optional(),
+  notes: z.string().max(300).optional(),
 });
 
 export const jointClosureSchema = z.object({
@@ -377,6 +626,34 @@ export const jointClosureSchema = z.object({
   splices: z.array(spliceRecordSchema),
   images: z.array(equipmentImageSchema),
   remarks: z.string().optional(),
+  /** The map pin this closure record belongs to, when there is one. */
+  equipmentId: z.string().optional(),
+  trays: z.array(spliceTraySchema).optional(),
+  cableEntries: z.array(cableEntrySchema).optional(),
+  photoIds: z.array(z.string()).optional(),
+  condition: closureConditionSchema.optional(),
+  sealStatus: sealStatusSchema.optional(),
+  lastMaintainedAt: isoDate.optional(),
+  maintenanceNotes: z.string().max(1000).optional(),
+  createdAt: isoDate.optional(),
+  createdBy: z.string().optional(),
+});
+
+/** A connection a customer used to have, kept after a disconnect or a move to another port. */
+export const customerConnectionSchema = z.object({
+  kind: z.enum(['disconnected', 'moved']),
+  at: isoDate,
+  by: z.string().optional(),
+  reason: z.string().max(300),
+  oltId: z.string().optional(),
+  ponPort: z.string().optional(),
+  terminalBoxId: z.string().optional(),
+  splitterId: z.string().optional(),
+  splitterOutputPort: z.number().int().optional(),
+  dropCableId: z.string().optional(),
+  fiberCore: z.number().int().optional(),
+  ontId: z.string().optional(),
+  ontSerialNumber: z.string().optional(),
 });
 
 export const customerSchema = z.object({
@@ -420,6 +697,198 @@ export const customerSchema = z.object({
   isSampleData: z.boolean().optional(),
   locationMethod: locationMethodSchema.optional(),
   locationAccuracyMeters: z.number().nonnegative().optional(),
+  /*
+   * Phase 5. All optional, so older customers keep working: their ONT is read from the embedded
+   * `ontSerialNumber` and `routerModel` until a person makes an ONT record for it.
+   */
+  /** The ONT record this customer uses. */
+  ontId: z.string().min(1).optional(),
+  /** The building and unit (flat, shop) this customer is in. */
+  buildingId: z.string().min(1).optional(),
+  unitId: z.string().min(1).optional(),
+  /** Connections this customer had before a disconnect or a move. Never deleted. */
+  connectionHistory: z.array(customerConnectionSchema).optional(),
+  disconnectedAt: isoDate.optional(),
+  disconnectReason: z.string().max(300).optional(),
+  history: z.array(historyEntrySchema).optional(),
+});
+
+/* ------------------------------------------------------------------ */
+/* Customers and connections: ONTs, services, buildings (Phase 5)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One ONT or ONU. Separate from the customer, so a customer can move to another ONT and an ONT can
+ * be swapped with its history kept. The serial is exactly as entered, never generated; the OLT's
+ * address for the ONU is kept as the vendor writes it, never converted.
+ */
+export const ontSchema = z.object({
+  id,
+  serialNumber: z.string().trim().max(64).optional(),
+  vendor: z.string().trim().max(80).optional(),
+  model: z.string().trim().max(80).optional(),
+  technology: ponTechnologySchema.optional(),
+  firmware: z.string().trim().max(60).optional(),
+  arrangement: ontArrangementSchema,
+  status: ontStatusSchema,
+  statusSource: ontStatusSourceSchema,
+  statusAt: isoDate.optional(),
+  /** Only from a real integration with its time. Never set by a person. */
+  lastSeenAt: isoDate.optional(),
+  oltId: z.string().min(1).optional(),
+  ponPortId: z.string().min(1).optional(),
+  /** The OLT's address for this ONU as written, such as "gpon-onu_1/2/3:5" or "0/5/0 ont 1". */
+  onuAddress: z.string().trim().max(80).optional(),
+  /** The splitter output and drop fiber this ONT is plugged into. */
+  splitterId: z.string().min(1).optional(),
+  splitterOutputPort: z.number().int().positive().optional(),
+  dropCableId: z.string().min(1).optional(),
+  dropCore: z.number().int().positive().optional(),
+  removedAt: isoDate.optional(),
+  removedReason: z.string().max(300).optional(),
+  replacedByOntId: z.string().optional(),
+  history: z.array(historyEntrySchema).optional(),
+  createdAt: isoDate,
+  createdBy: z.string().optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+/**
+ * One service a customer takes, such as internet or TV on the same fiber. Plans and prices are not
+ * modelled: `planName` is only what the office wrote. An ended service stays as history.
+ */
+export const serviceSchema = z.object({
+  id,
+  customerId: id,
+  kind: serviceKindSchema,
+  status: serviceStatusSchema,
+  planName: z.string().trim().max(120).optional(),
+  ontId: z.string().min(1).optional(),
+  /** The ONT port it uses, as written, such as "LAN 1" or "CATV". */
+  ontPort: z.string().trim().max(40).optional(),
+  startedAt: isoDate.optional(),
+  endedAt: isoDate.optional(),
+  endReason: z.string().max(300).optional(),
+  history: z.array(historyEntrySchema).optional(),
+  createdAt: isoDate,
+  createdBy: z.string().optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+/** A box on one floor of a building, where the flats' drops start. */
+export const buildingFloorBoxSchema = z.object({
+  id,
+  label: z.string().trim().min(1).max(60),
+  /** As written, such as "3", "G" or "B1". */
+  floor: z.string().trim().max(20).optional(),
+  /** Its map pin, when it has one. */
+  equipmentId: z.string().min(1).optional(),
+  /** The splitter inside it, when there is one. */
+  splitterId: z.string().min(1).optional(),
+  notes: z.string().max(300).optional(),
+});
+
+/** A flat, shop or office in a building. Customers point to it; it holds no service itself. */
+export const buildingUnitSchema = z.object({
+  id,
+  label: z.string().trim().min(1).max(40),
+  floor: z.string().trim().max(20).optional(),
+  floorBoxId: z.string().min(1).optional(),
+  notes: z.string().max(300).optional(),
+});
+
+/**
+ * A building and how fiber reaches each unit: entry point, riser, floor boxes and units. The
+ * footprint is a point. Each part is optional and shown as "Not recorded" until a person adds it.
+ */
+export const buildingSchema = z.object({
+  id,
+  name: z.string().trim().min(1).max(120),
+  address: z.string().trim().max(300).optional(),
+  kind: buildingKindSchema,
+  lat: latitude,
+  lng: longitude,
+  locationMethod: locationMethodSchema.optional(),
+  locationAccuracyMeters: z.number().nonnegative().optional(),
+  floorsAbove: z.number().int().nonnegative().max(200).optional(),
+  floorsBelow: z.number().int().nonnegative().max(20).optional(),
+  /** The Building Entry Point pin (or other pin) where the street cable comes in. */
+  entryEquipmentId: z.string().min(1).optional(),
+  entryNote: z.string().max(300).optional(),
+  /** The cable that climbs the building from the entry to the floors. */
+  riserCableId: z.string().min(1).optional(),
+  riserNote: z.string().max(300).optional(),
+  floorBoxes: z.array(buildingFloorBoxSchema).max(500),
+  units: z.array(buildingUnitSchema).max(2000),
+  history: z.array(historyEntrySchema).optional(),
+  createdAt: isoDate,
+  createdBy: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+/** A network element named by an alarm, a suspected cause or an impact question. */
+export const networkElementRefSchema = z.object({
+  type: networkElementTypeSchema,
+  /** The record id; for a PON port the OLT, for a core the cable. */
+  id: z.string().min(1),
+  ponPortId: z.string().min(1).optional(),
+  fiberNumber: z.number().int().positive().optional(),
+});
+
+/**
+ * How a repair was checked. A light reading counts only as `field_measured` with the meter photo;
+ * a photo needs the photo; an office check needs a note of what was checked. Who and when always.
+ */
+export const verificationSchema = z.object({
+  method: verificationMethodSchema,
+  at: isoDate,
+  by: z.string().min(1),
+  readingDbm: z.number().min(-60).max(10).optional(),
+  readingOrigin: z.literal('field_measured').optional(),
+  /** The house where the reading was taken. */
+  customerId: z.string().min(1).optional(),
+  photoId: z.string().min(1).optional(),
+  note: z.string().max(1000).optional(),
+  /** The job the verification came from, when it came from one. */
+  workOrderId: z.string().min(1).optional(),
+});
+
+/**
+ * One alarm: something a person, a field report or a TEST said about one element. There is no
+ * live OLT connection, so a `device_adapter` alarm is refused everywhere until Phase 7.
+ */
+export const alarmSchema = z.object({
+  id,
+  kind: alarmKindSchema,
+  source: alarmSourceSchema,
+  /** A TEST event. Always shown as TEST and left out of reports unless asked for. */
+  isTest: z.boolean(),
+  severity: severitySchema,
+  state: alarmStateSchema,
+  element: networkElementRefSchema,
+  firstSeenAt: isoDate,
+  lastSeenAt: isoDate,
+  /** The same alarm reported again while open counts here instead of making a new one. */
+  occurrences: z.number().int().positive(),
+  note: z.string().max(1000).optional(),
+  reportedBy: z.string().optional(),
+  acknowledgedAt: isoDate.optional(),
+  acknowledgedBy: z.string().optional(),
+  clearedAt: isoDate.optional(),
+  clearedBy: z.string().optional(),
+  faultId: z.string().min(1).optional(),
+  history: z.array(historyEntrySchema).optional(),
+});
+
+/** What the office was told when it opened a fault from a suspected cause, kept as it was then. */
+export const suspectedCauseSchema = z.object({
+  element: networkElementRefSchema,
+  label: z.string().max(200),
+  confidence: confidenceSchema,
+  evidence: z.array(z.string().max(500)).max(40),
+  missing: z.array(z.string().max(500)).max(40),
+  checks: z.array(z.string().max(500)).max(20),
+  computedAt: isoDate,
 });
 
 export const faultSchema = z.object({
@@ -445,6 +914,75 @@ export const faultSchema = z.object({
   locationMethod: locationMethodSchema.optional(),
   locationAccuracyMeters: z.number().nonnegative().optional(),
   ...fieldCaptureFields,
+  /*
+   * Phase 8. All optional, so older faults keep loading. A fault opened from alarms keeps them,
+   * the suspected cause as it was shown, and who is affected from recorded paths at that time.
+   */
+  source: alarmSourceSchema.optional(),
+  isTest: z.boolean().optional(),
+  element: networkElementRefSchema.optional(),
+  alarmIds: z.array(z.string().min(1)).max(2000).optional(),
+  suspected: suspectedCauseSchema.optional(),
+  /** Customers whose path is not fully recorded, so they may or may not be affected. */
+  mayBeAffectedCustomerIds: z.array(z.string()).optional(),
+  acknowledgedAt: isoDate.optional(),
+  acknowledgedBy: z.string().optional(),
+  repairedAt: isoDate.optional(),
+  verifiedAt: isoDate.optional(),
+  verifiedBy: z.string().optional(),
+  verification: verificationSchema.optional(),
+  closedAt: isoDate.optional(),
+  closedBy: z.string().optional(),
+  resolution: z.string().max(2000).optional(),
+  /** The step before "On hold", so resuming returns to it. */
+  heldFrom: z.enum(FAULT_STATUSES).optional(),
+  history: z.array(historyEntrySchema).optional(),
+});
+
+export const jobStepSchema = z.object({
+  id,
+  label: z.string().trim().min(1).max(200),
+  doneAt: isoDate.optional(),
+  doneBy: z.string().optional(),
+});
+
+export const jobPhotoSchema = z.object({
+  photoId: id,
+  kind: jobPhotoKindSchema,
+  at: isoDate,
+  by: z.string().optional(),
+  /** The phone event that added it, so Undo removes only that one. */
+  eventId: z.string().optional(),
+});
+
+/** Material used, exactly as the technician entered it. Nothing is priced or counted from stock. */
+export const jobMaterialSchema = z.object({
+  id,
+  item: z.string().trim().min(1).max(120),
+  quantity: z.number().positive().max(100000),
+  unit: z.string().max(20),
+  at: isoDate,
+  by: z.string().optional(),
+});
+
+export const jobNoteSchema = z.object({
+  id,
+  at: isoDate,
+  by: z.string().optional(),
+  text: z.string().trim().min(1).max(1000),
+});
+
+/** One thing done on the phone. Kept so a repeated save adds nothing and Undo removes only that. */
+export const jobEventSchema = z.object({
+  id,
+  kind: jobEventKindSchema,
+  at: isoDate,
+  by: z.string().optional(),
+  /** The photo, step, material or note it added. */
+  ref: z.string().optional(),
+  /** The status before it, when it changed the status. */
+  previousStatus: workOrderStatusSchema.optional(),
+  undoneAt: isoDate.optional(),
 });
 
 export const workOrderSchema = z.object({
@@ -463,6 +1001,46 @@ export const workOrderSchema = z.object({
   completedDate: isoDate.optional(),
   notes: z.string(),
   photos: z.array(z.string()),
+  /* Phase 8. All optional, so older work orders keep loading. */
+  isTest: z.boolean().optional(),
+  steps: z.array(jobStepSchema).max(50).optional(),
+  photoRefs: z.array(jobPhotoSchema).max(200).optional(),
+  materials: z.array(jobMaterialSchema).max(200).optional(),
+  fieldNotes: z.array(jobNoteSchema).max(200).optional(),
+  fieldEvents: z.array(jobEventSchema).max(1000).optional(),
+  verification: verificationSchema.optional(),
+  createdAt: isoDate.optional(),
+  assignedAt: isoDate.optional(),
+  startedAt: isoDate.optional(),
+  repairedAt: isoDate.optional(),
+  verifiedAt: isoDate.optional(),
+  closedAt: isoDate.optional(),
+  closedBy: z.string().optional(),
+  heldFrom: workOrderStatusSchema.optional(),
+  history: z.array(historyEntrySchema).optional(),
+});
+
+/**
+ * A record two people changed at the same time, kept with both versions. `mine` is what this
+ * device had, `theirs` what the server had (null when that side deleted it). Nothing is lost
+ * whichever is chosen; the office sees every one.
+ */
+export const syncConflictSchema = z.object({
+  id,
+  collection: z.string().min(1).max(40),
+  recordId: z.string().min(1),
+  label: z.string().max(200),
+  baseVersion: z.number().int().nonnegative(),
+  theirVersion: z.number().int().nonnegative().nullable(),
+  mine: z.record(z.string(), z.unknown()).nullable(),
+  theirs: z.record(z.string(), z.unknown()).nullable(),
+  changedFields: z.array(z.string().max(80)).max(300),
+  detectedAt: isoDate,
+  detectedBy: z.string(),
+  status: syncConflictStatusSchema,
+  decidedAt: isoDate.optional(),
+  decidedBy: z.string().optional(),
+  note: z.string().max(500).optional(),
 });
 
 export const auditLogSchema = z.object({
@@ -584,6 +1162,128 @@ export const agentTripSchema = z.object({
   gaps: z.array(agentTrackingGapSchema),
   /** Agent notes keyed by the stop's start time in epoch ms. */
   stopNotes: z.record(z.string(), z.string()),
+});
+
+/* ------------------------------------------------------------------ */
+/* Outside plant: spans, attachments, ducts, slack loops, permissions  */
+/* ------------------------------------------------------------------ */
+
+const ospRecordFields = {
+  createdAt: isoDate,
+  createdBy: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+};
+
+/**
+ * An aerial span: the stretch between two structures (usually poles). It is a structure, never a
+ * cable; which cables it carries is recorded separately as attachments.
+ */
+export const spanSchema = z
+  .object({
+    id,
+    name: z.string().min(1),
+    fromStructureId: id,
+    toStructureId: id,
+    status: structureStatusSchema,
+    basis: linkBasisSchema,
+    /** Entered by a person (tape or wheel), never the map distance. */
+    measuredLengthMeters: z.number().positive().optional(),
+    roadCrossing: z.boolean().optional(),
+    captureRunId: z.string().optional(),
+    confirmedAt: isoDate.optional(),
+    confirmedBy: z.string().optional(),
+    ...ospRecordFields,
+  })
+  .refine((span) => span.fromStructureId !== span.toStructureId, {
+    message: 'A span must join two different structures.',
+    path: ['toStructureId'],
+  });
+
+/** One cable carried on one pole or one span. Saved only when a person confirms it. */
+export const attachmentSchema = z
+  .object({
+    id,
+    cableId: id,
+    structureId: z.string().min(1).optional(),
+    spanId: z.string().min(1).optional(),
+    status: attachmentStatusSchema,
+    basis: linkBasisSchema,
+    ...ospRecordFields,
+  })
+  .refine((a) => (a.structureId === undefined) !== (a.spanId === undefined), {
+    message: 'An attachment is on exactly one pole or one span.',
+    path: ['structureId'],
+  });
+
+export const subductSchema = z.object({
+  id,
+  /** As marked, such as "1", "Blue" or "40 mm left". */
+  label: z.string().min(1).max(40),
+  diameterMm: z.number().positive().max(500).optional(),
+  cableIds: z.array(z.string().min(1)),
+});
+
+/** An underground duct route. Occupancy lists the cables in it or in each of its sub-ducts. */
+export const ductSchema = z.object({
+  id,
+  name: z.string().min(1),
+  coordinates: z.array(latLngSchema).min(2),
+  fromStructureId: z.string().min(1).optional(),
+  toStructureId: z.string().min(1).optional(),
+  status: structureStatusSchema,
+  basis: linkBasisSchema,
+  /** Number of ducts laid together. */
+  wayCount: z.number().int().positive().max(100).optional(),
+  diameterMm: z.number().positive().max(2000).optional(),
+  material: z.string().max(60).optional(),
+  depthObservedMeters: z.number().positive().max(20).optional(),
+  permitDepthMeters: z.number().positive().max(20).optional(),
+  ownerName: z.string().max(120).optional(),
+  /** Cables in the duct itself, not in a sub-duct. */
+  cableIds: z.array(z.string().min(1)),
+  subducts: z.array(subductSchema),
+  importInfo: importInfoSchema.optional(),
+  ...ospRecordFields,
+});
+
+/** A coil of spare cable left at a place on the route, with the length a person recorded. */
+export const slackLoopSchema = z.object({
+  id,
+  name: z.string().min(1),
+  cableId: id,
+  /** The pole, chamber or box it hangs on or lies in. */
+  structureId: z.string().min(1).optional(),
+  lat: latitude,
+  lng: longitude,
+  lengthMeters: z.number().positive().max(5000),
+  /** marks: worked out from the printed marks either side of the loop. */
+  lengthSource: z.enum(['entered', 'marks']),
+  markBefore: z.number().nonnegative().optional(),
+  markAfter: z.number().nonnegative().optional(),
+  markUnit: lengthMarkUnitSchema.optional(),
+  ...ospRecordFields,
+});
+
+/**
+ * A permission or right-of-way record, as written on the paper. Amounts and dates are what the
+ * office typed in; nothing is calculated from rate tables.
+ */
+export const permissionSchema = z.object({
+  id,
+  /** The owner or authority who gave it, such as "BESCOM" or "BBMP". */
+  authority: z.string().trim().min(1).max(120),
+  kind: permissionKindSchema.optional(),
+  permitNumber: z.string().trim().max(80).optional(),
+  structureIds: z.array(z.string().min(1)),
+  cableIds: z.array(z.string().min(1)).optional(),
+  issuedOn: isoDate.optional(),
+  validFrom: isoDate.optional(),
+  validUntil: isoDate.optional(),
+  rentAmount: z.number().nonnegative().optional(),
+  /** As written, such as "per pole per year". */
+  rentTerms: z.string().max(120).optional(),
+  documentId: z.string().optional(),
+  ...ospRecordFields,
 });
 
 /**

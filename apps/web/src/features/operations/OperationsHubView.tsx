@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Camera, HardHat, Kanban, List, PlusCircle, Search } from 'lucide-react';
+import { AlertTriangle, Camera, GitMerge, HardHat, Kanban, List, PlusCircle, Search } from 'lucide-react';
 
-import { fieldFollowUps, resolveFieldSettings, type WorkOrder } from '@fibergis/shared';
+import { fieldFollowUps, resolveFieldSettings, WORK_ORDER_STATUS_LABELS, type WorkOrder } from '@fibergis/shared';
 
 import { addWorkOrder, updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
+import { useUiStore } from '../../stores/uiStore';
 import { FieldFollowUpPanel } from './FieldFollowUpPanel';
+import { SyncConflictsPanel } from './SyncConflictsPanel';
 
 export const OperationsHubView: React.FC = () => {
   const workOrders = useNetworkStore((s) => s.workOrders);
@@ -19,7 +21,7 @@ export const OperationsHubView: React.FC = () => {
   );
   const showToast = useToastStore((s) => s.show);
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'field'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'field' | 'conflicts'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string>('All');
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
@@ -29,8 +31,12 @@ export const OperationsHubView: React.FC = () => {
   const [newType, setNewType] = useState<WorkOrder['type']>('Repair');
   const [newPriority, setNewPriority] = useState<WorkOrder['priority']>('High');
   const [newTechName, setNewTechName] = useState('');
-  const newTechPhone = '+91 98450 11223';
+  // Typed by the office; never filled in for them.
+  const [newTechPhone, setNewTechPhone] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [newSteps, setNewSteps] = useState('');
+  const conflictCount = useNetworkStore((s) => s.syncConflicts.filter((c) => c.status === 'open' || c.status === 'office_decides').length);
+  const setModalOpen = useUiStore((s) => s.setModalOpen);
 
   // Filtered orders
   const filteredOrders = workOrders.filter((w) => {
@@ -45,32 +51,20 @@ export const OperationsHubView: React.FC = () => {
     return matchesSearch && matchesPriority;
   });
 
-  const columns: Array<{ status: WorkOrder['status']; label: string; color: string; count: number }> = [
-    {
-      status: 'Pending',
-      label: 'Pending Dispatch',
-      color: 'border-amber-400 bg-amber-50/40',
-      count: workOrders.filter((w) => w.status === 'Pending').length,
-    },
-    {
-      status: 'Assigned',
-      label: 'Assigned to Tech',
-      color: 'border-blue-400 bg-blue-50/40',
-      count: workOrders.filter((w) => w.status === 'Assigned').length,
-    },
-    {
-      status: 'In Progress',
-      label: 'Work In Progress',
-      color: 'border-purple-400 bg-purple-50/40',
-      count: workOrders.filter((w) => w.status === 'In Progress').length,
-    },
-    {
-      status: 'Completed',
-      label: 'Resolved / Closed',
-      color: 'border-emerald-400 bg-emerald-50/40',
-      count: workOrders.filter((w) => w.status === 'Completed').length,
-    },
+  /** Each column holds these statuses. Verified and Closed need a check; the move is refused without one. */
+  const COLUMNS: { status: WorkOrder['status']; holds: WorkOrder['status'][]; label: string; color: string }[] = [
+    { status: 'Pending', holds: ['Pending'], label: 'New, not assigned', color: 'border-amber-400 bg-amber-50/40' },
+    { status: 'Assigned', holds: ['Assigned', 'Accepted'], label: 'Assigned', color: 'border-blue-400 bg-blue-50/40' },
+    { status: 'In Progress', holds: ['In Progress', 'On Hold'], label: 'In progress or on hold', color: 'border-purple-400 bg-purple-50/40' },
+    { status: 'Completed', holds: ['Completed'], label: 'Repair done, check needed', color: 'border-orange-400 bg-orange-50/40' },
+    { status: 'Verified', holds: ['Verified', 'Closed'], label: 'Verified or closed', color: 'border-emerald-400 bg-emerald-50/40' },
   ];
+  const columns = COLUMNS.map((c) => ({ ...c, count: workOrders.filter((w) => c.holds.includes(w.status)).length }));
+
+  const nextStatus = (status: WorkOrder['status']): WorkOrder['status'] | null =>
+    status === 'Pending' ? 'Assigned' : status === 'Assigned' || status === 'Accepted' || status === 'On Hold' ? 'In Progress' : status === 'In Progress' ? 'Completed' : status === 'Completed' ? 'Verified' : status === 'Verified' ? 'Closed' : null;
+  const previousStatus = (status: WorkOrder['status']): WorkOrder['status'] | null =>
+    status === 'Completed' ? 'In Progress' : status === 'In Progress' || status === 'On Hold' ? 'Assigned' : null;
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,15 +77,16 @@ export const OperationsHubView: React.FC = () => {
       title: newTitle.trim(),
       type: newType,
       priority: newPriority,
-      status: newTechName.trim() ? 'Assigned' : 'Pending',
       technicianName: newTechName.trim(),
       technicianPhone: newTechPhone.trim(),
       notes: newNotes.trim(),
+      steps: newSteps.split('\n'),
     });
     if (!created) return;
     setIsNewOrderModalOpen(false);
     setNewTitle('');
     setNewNotes('');
+    setNewSteps('');
   };
 
   const getPriorityBadge = (priority: WorkOrder['priority']) => {
@@ -149,7 +144,26 @@ export const OperationsHubView: React.FC = () => {
               <Camera className="w-3.5 h-3.5" />
               <span>Field captures{fieldCount > 0 ? ` (${fieldCount})` : ''}</span>
             </button>
+            <button
+              onClick={() => setViewMode('conflicts')}
+              data-testid="ops-conflicts"
+              className={`px-2.5 py-1 rounded-md font-semibold flex items-center gap-1 transition-all ${
+                viewMode === 'conflicts' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <GitMerge className="w-3.5 h-3.5" />
+              <span>Changed twice{conflictCount > 0 ? ` (${conflictCount})` : ''}</span>
+            </button>
           </div>
+
+          <button
+            onClick={() => setModalOpen('faults', true)}
+            data-testid="ops-open-faults"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Faults and alarms</span>
+          </button>
 
           <button
             onClick={() => setIsNewOrderModalOpen(true)}
@@ -180,9 +194,9 @@ export const OperationsHubView: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-emerald-600 uppercase">Resolved This Month</div>
+          <div className="text-[11px] font-bold text-emerald-600 uppercase">Verified or closed</div>
           <div className="text-xl font-extrabold text-emerald-700 mt-0.5">
-            {workOrders.filter((w) => w.status === 'Completed').length}
+            {workOrders.filter((w) => w.status === 'Verified' || w.status === 'Closed').length}
           </div>
         </div>
       </div>
@@ -219,10 +233,12 @@ export const OperationsHubView: React.FC = () => {
       <div className="flex-1 overflow-auto p-4">
         {viewMode === 'field' ? (
           <FieldFollowUpPanel />
+        ) : viewMode === 'conflicts' ? (
+          <SyncConflictsPanel />
         ) : viewMode === 'kanban' ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 h-full">
             {columns.map((col) => {
-              const ordersInCol = filteredOrders.filter((w) => w.status === col.status);
+              const ordersInCol = filteredOrders.filter((w) => col.holds.includes(w.status));
 
               return (
                 <div
@@ -264,38 +280,25 @@ export const OperationsHubView: React.FC = () => {
                           <span className="text-[10px] text-slate-400 font-mono">{order.scheduledDate}</span>
                         </div>
 
-                        {/* Status Mover Buttons */}
+                        {order.isTest && <div className="mt-1 text-[10px] font-extrabold text-violet-800">TEST · not real</div>}
+                        <div className="mt-1 text-[10px] text-slate-500">{WORK_ORDER_STATUS_LABELS[order.status]}</div>
+
+                        {/* Status Mover Buttons: a move that needs a check is refused with a plain message. */}
                         <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
-                          {col.status !== 'Pending' && (
+                          {previousStatus(order.status) && (
                             <button
-                              onClick={() => {
-                                const prev =
-                                  col.status === 'Completed'
-                                    ? 'In Progress'
-                                    : col.status === 'In Progress'
-                                      ? 'Assigned'
-                                      : 'Pending';
-                                updateWorkOrderStatus(order.id, prev);
-                              }}
+                              onClick={() => updateWorkOrderStatus(order.id, previousStatus(order.status)!)}
                               className="text-[10px] text-slate-500 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
                             >
                               &larr; Back
                             </button>
                           )}
-                          {col.status !== 'Completed' && (
+                          {nextStatus(order.status) && (
                             <button
-                              onClick={() => {
-                                const next =
-                                  col.status === 'Pending'
-                                    ? 'Assigned'
-                                    : col.status === 'Assigned'
-                                      ? 'In Progress'
-                                      : 'Completed';
-                                updateWorkOrderStatus(order.id, next);
-                              }}
+                              onClick={() => updateWorkOrderStatus(order.id, nextStatus(order.status)!)}
                               className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50 ml-auto flex items-center gap-1"
                             >
-                              <span>Next</span> &rarr;
+                              <span>{order.status === 'Completed' ? 'Verified' : order.status === 'Verified' ? 'Close' : 'Next'}</span> &rarr;
                             </button>
                           )}
                         </div>
@@ -342,19 +345,24 @@ export const OperationsHubView: React.FC = () => {
                     <td className="py-3 px-4 font-mono text-slate-500">{order.scheduledDate}</td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        {order.status}
+                        {WORK_ORDER_STATUS_LABELS[order.status]}
                       </span>
+                      {order.isTest && <span className="ml-1 text-[10px] font-extrabold text-violet-800">TEST</span>}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {order.status !== 'Completed' ? (
+                      {order.status === 'In Progress' || order.status === 'Assigned' || order.status === 'Accepted' ? (
                         <button
                           onClick={() => updateWorkOrderStatus(order.id, 'Completed')}
                           className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md font-semibold text-[11px] transition-colors"
                         >
-                          Mark Done
+                          Repair done
+                        </button>
+                      ) : order.status === 'Completed' ? (
+                        <button onClick={() => setModalOpen('faults', true)} className="px-2.5 py-1 border rounded-md font-semibold text-[11px]">
+                          Needs a check
                         </button>
                       ) : (
-                        <span className="text-emerald-600 font-semibold text-[11px]">Completed</span>
+                        <span className="text-slate-600 font-semibold text-[11px]">{WORK_ORDER_STATUS_LABELS[order.status]}</span>
                       )}
                     </td>
                   </tr>
@@ -430,6 +438,26 @@ export const OperationsHubView: React.FC = () => {
                   value={newTechName}
                   onChange={(e) => setNewTechName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Technician phone (optional)</label>
+                <input
+                  type="tel"
+                  value={newTechPhone}
+                  onChange={(e) => setNewTechPhone(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Steps for the technician (one per line)</label>
+                <textarea
+                  rows={3}
+                  value={newSteps}
+                  onChange={(e) => setNewSteps(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 resize-none"
                 />
               </div>
 

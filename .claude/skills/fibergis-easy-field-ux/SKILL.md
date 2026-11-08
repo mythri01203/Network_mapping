@@ -104,12 +104,15 @@ Test on low-cost phones at midday, in both light and dark, since no good study s
 - Safety reminder on the danger screens, labelled draft wording pending a safety reviewer
 - Spans still do not exist: "Next pole" records order only (`previousAssetId`), never a cable
 
+**Phase 8 (November 2026) added the technician's jobs at `/jobs`** (`apps/web/src/features/jobs/JobsApp.tsx`), from the **My jobs** tile on the capture home. Same rules and parts as capture: "Who are you?" (a choice remembered on the phone, not a login), job cards with a picture, one action per screen, big targets, Start job → photo before → tick steps → material (picture, then a digits-only count) → note (optional typing) → photo after → Repair done → check (light reading with the meter photo and the dBm pad, saved `field_measured`, or a photo of the working device). Each action is one job event saved to IndexedDB first and uploaded with the capture photo queue (`captureService.save`, `kind: 'job'`); "Saved" plus **Undo** after each; the same sync chip. TEST jobs carry a purple "TEST job. Not real." line. The phone changes only the work order; the office closes the fault. **Someone else changed this** (`app/shell/ConflictChoiceHost.tsx`) asks one question with three big answers (Keep theirs, Keep mine, Office decides) and both versions are kept. Checked only by a script at 360 x 740 with a fake camera; **no technician has used it**, and its Telugu and Kannada words are unreviewed drafts like the rest. `TechnicianMobileView.tsx` (the old phone mock-up with "Mark Done" and a photo kept inside the equipment list) now only sends people to `/jobs`.
+
 Still true of the engineer screens, which Phase 2 left as they were:
 
 - `Button.tsx` sizes run 24 to 36 px (default 32), and about 570 uses of 10 and 11 px text exist; engineer screens are English only
 - Hover tooltips, shortcuts and drag-to-place carry essential tasks
 - Worst screens: `SpliceModal.tsx`, `SplicingModal.tsx`, the seven-tab `OltConfigModal.tsx`, `CustomerWizardModal.tsx` (typed coordinates)
-- `TechnicianMobileView.tsx` and `BikerModePanel.tsx` "Drop Pole Here" are older field tools outside the capture flow; prefer `/capture`
+- `BikerModePanel.tsx` "Drop Pole Here" is an older field tool outside the capture flow; prefer `/capture`. Bike Mode itself uses the phone's real GPS only (`watchPosition`, with accuracy and jump filters); nothing simulates a position
+- The office fault screens (Faults and field work) are English engineer screens with small controls, like the rest of the office side
 - Keep: `EquipmentIllustration`, plain labels, beginner knowledge base
 
 All new field capture goes through `/capture` and `captureService.save`; do not add capture to the engineer screens.

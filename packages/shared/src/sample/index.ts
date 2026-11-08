@@ -31,6 +31,16 @@ export function createSampleNetwork(): NetworkSnapshot {
     gpsRoutes: [],
     agentTrips: [],
     settings: [],
+    spans: [],
+    attachments: [],
+    ducts: [],
+    slackLoops: [],
+    permissions: [],
+    onts: [],
+    services: [],
+    buildings: [],
+    alarms: [],
+    syncConflicts: [],
   };
   return JSON.parse(JSON.stringify(snapshot)) as NetworkSnapshot;
 }

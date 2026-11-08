@@ -1,7 +1,25 @@
-import { Activity, GitMerge, Info, Link2, LocateFixed, MapPin, Navigation, Route, TriangleAlert, Waypoints } from 'lucide-react';
+import {
+  Activity,
+  GitMerge,
+  Info,
+  Link2,
+  LocateFixed,
+  MapPin,
+  Navigation,
+  Route,
+  TriangleAlert,
+  Waypoints,
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { type Customer, findServingOlt, hasRecordedLocation, LOCATION_METHOD_LABELS, RX_ORIGIN_LABELS, rxReadingOf } from '@fibergis/shared';
+import {
+  type Customer,
+  findServingOlt,
+  hasRecordedLocation,
+  LOCATION_METHOD_LABELS,
+  RX_ORIGIN_LABELS,
+  rxReadingOf,
+} from '@fibergis/shared';
 
 import { Badge, Button, cn, KeyValueList } from '../../components/ui';
 import { currentGpsPosition, gpsFailureMessage } from '../../lib/browser';
@@ -9,6 +27,15 @@ import { relinkCustomer, setCustomerLocation } from '../../stores/networkActions
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import {
+  ConnectionSection,
+  CustomerHistorySection,
+  CustomerPlaceSection,
+  DisconnectedNotice,
+  OntSection,
+  RxCheckSection,
+  ServicesSection,
+} from '../customers/ConnectionSections';
 import { navigateToSite } from './actions';
 import { formatDate, formatDateTime, formatDbm, joinPresent, orNotRecorded, presentItems, rxBudget } from './format';
 import { InspectorLayout, InspectorSection, Metric } from './sections';
@@ -110,7 +137,7 @@ function NotLinkedNotice({ customer }: { customer: Customer }) {
   const cableReady = useNetworkStore(
     (s) => !!customer.terminalBoxId && !!findServingOlt(customer.terminalBoxId, s).olt,
   );
-  if (customer.oltId) return null;
+  if (customer.oltId || customer.status === 'Disconnected') return null;
   return (
     <div role="status" className="mx-4 mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
       <p className="flex items-center gap-1.5 text-[13px] font-semibold">
@@ -191,13 +218,19 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
     { label: 'ONT serial', value: orNotRecorded(customer.ontSerialNumber), mono: true },
     { label: 'Router', value: orNotRecorded(customer.routerModel) },
     { label: 'IP address', value: orNotRecorded(customer.ipAddress), mono: true },
-    { label: 'Location', value: located ? `${customer.lat.toFixed(5)}, ${customer.lng.toFixed(5)}` : 'Not recorded', mono: located },
+    {
+      label: 'Location',
+      value: located ? `${customer.lat.toFixed(5)}, ${customer.lng.toFixed(5)}` : 'Not recorded',
+      mono: located,
+    },
     {
       label: 'Location from',
       value:
         located && customer.locationMethod
           ? `${LOCATION_METHOD_LABELS[customer.locationMethod]}${
-              customer.locationAccuracyMeters !== undefined ? `, within ${Math.round(customer.locationAccuracyMeters)} m` : ''
+              customer.locationAccuracyMeters !== undefined
+                ? `, within ${Math.round(customer.locationAccuracyMeters)} m`
+                : ''
             }`
           : undefined,
     },
@@ -211,7 +244,7 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
             Trace service path
           </Button>
           <Button size="sm" icon={GitMerge} onClick={() => openSpliceModal(customer)}>
-            Splice
+            Connect
           </Button>
           <Button
             size="sm"
@@ -232,33 +265,49 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
         </>
       }
     >
+      <DisconnectedNotice customer={customer} />
       <NotLinkedNotice customer={customer} />
       <NoLocationNotice customer={customer} />
 
-      <InspectorSection title="Optical signal" icon={Activity} aside={<Badge tone={budget.tone}>{budget.label}</Badge>}>
-        <div className="grid grid-cols-2 gap-2">
-          <Metric
-            label="Received power"
-            value={formatDbm(reading.valueDbm) ?? RX_ORIGIN_LABELS.not_recorded}
-            className={budget.text}
-          />
-          <Metric label="Fiber core" value={`Core ${customer.fiberCore}`} />
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
-          <span className="truncate">
-            {reading.measuredAt ? `Read ${formatDateTime(reading.measuredAt)}` : 'No live connection'}
-          </span>
-          <Badge tone={reading.isMeasured ? 'green' : 'neutral'}>{reading.originLabel}</Badge>
-        </div>
-      </InspectorSection>
+      {customer.status !== 'Disconnected' && (
+        <InspectorSection
+          title="Optical signal"
+          icon={Activity}
+          aside={<Badge tone={budget.tone}>{budget.label}</Badge>}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <Metric
+              label="Received power"
+              value={formatDbm(reading.valueDbm) ?? RX_ORIGIN_LABELS.not_recorded}
+              className={budget.text}
+            />
+            <Metric label="Fiber core" value={customer.fiberCore ? `Core ${customer.fiberCore}` : 'Not recorded'} />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+            <span className="truncate">
+              {reading.measuredAt ? `Read ${formatDateTime(reading.measuredAt)}` : 'No live connection'}
+            </span>
+            <Badge tone={reading.isMeasured ? 'green' : 'neutral'}>{reading.originLabel}</Badge>
+          </div>
+        </InspectorSection>
+      )}
+
+      <RxCheckSection customer={customer} />
 
       <InspectorSection title="Service path" icon={Waypoints}>
         <ServicePath steps={steps} />
       </InspectorSection>
 
+      <ConnectionSection customer={customer} />
+      <OntSection customer={customer} />
+      <ServicesSection customer={customer} />
+      <CustomerPlaceSection customer={customer} />
+
       <InspectorSection title="Subscriber" icon={Info} defaultOpen={detailed}>
         <KeyValueList items={details} />
       </InspectorSection>
+
+      <CustomerHistorySection customer={customer} />
     </InspectorLayout>
   );
 }

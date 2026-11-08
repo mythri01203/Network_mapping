@@ -37,7 +37,9 @@ function setup(options: { connected?: boolean } = {}) {
   let nextUpload: UploadOutcome = { kind: 'stored' };
   const state: { current: CaptureStatus } = { current: { ...initialCaptureStatus } };
   const storage = createMemoryCaptureStorage();
+  const conflicts: { collection: string; recordId: string; detectedAt: string }[] = [];
   const service = createCaptureService({
+    getConflicts: () => conflicts,
     storage,
     uploadPhoto: async (photo) => {
       uploads.push(photo.id);
@@ -49,7 +51,7 @@ function setup(options: { connected?: boolean } = {}) {
       const before = data;
       data = applyPatch(data, result.patch);
       // Like the sync engine: anything changed waits until the server acknowledges it.
-      for (const key of ['equipment', 'faults', 'customers'] as const) {
+      for (const key of ['equipment', 'faults', 'customers', 'workOrders'] as const) {
         if (before[key] !== data[key]) {
           const ids = new Set([...before[key], ...data[key]].map((r) => r.id));
           pending[key] = [...new Set([...(pending[key] ?? []), ...ids])].filter((id) => {
@@ -82,6 +84,8 @@ function setup(options: { connected?: boolean } = {}) {
     setConnected: (value: boolean) => (connected = value),
     setUpload: (outcome: UploadOutcome) => (nextUpload = outcome),
     tick: (ms: number) => (clock += ms),
+    addConflict: (recordId: string, at: number) => conflicts.push({ collection: 'workOrders', recordId, detectedAt: new Date(at).toISOString() }),
+    now: () => clock,
   };
 }
 
@@ -237,6 +241,91 @@ describe('capture service', () => {
     expect(t.data().customers[0].rxCaptureId).toBe(draft.id);
     await t.service.undo(entry.id);
     expect(t.data().customers[0]).toMatchObject({ rxOpticalPowerDbm: -20, rxSource: 'calculated' });
+  });
+});
+
+describe('technician job events (Phase 8)', () => {
+  const job = (): NetworkData['workOrders'][number] => ({
+    id: 'WO-TEST1',
+    title: 'Check box',
+    type: 'Repair',
+    priority: 'High',
+    status: 'In Progress',
+    technicianName: 'Ravi',
+    technicianPhone: '',
+    scheduledDate: '2026-11-07',
+    notes: '',
+    photos: [],
+    fieldEvents: [],
+    photoRefs: [],
+  });
+
+  async function photoEvent(t: ReturnType<typeof setup>, id = 'EVT-1') {
+    const photoId = await t.service.addEventPhoto(id, new Blob(['jpeg'], { type: 'image/jpeg' }));
+    const entry: OutboxEntry = {
+      id,
+      kind: 'job',
+      collection: 'workOrders',
+      recordId: 'WO-TEST1',
+      label: 'Check box: Photo before',
+      jobEvent: { id, kind: 'photo', at: new Date(0).toISOString(), by: 'Ravi', photoId, photoKind: 'before' },
+      photoIds: [photoId],
+      status: 'saved',
+      savedAt: t.now(),
+    };
+    return { entry, photoId };
+  }
+
+  it('saves on the phone first, applies once, uploads the photo, and a second save adds nothing', async () => {
+    const t = setup();
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    const { entry, photoId } = await photoEvent(t);
+    await t.service.save(entry);
+    await t.service.save(entry);
+    expect((await t.storage.listOutbox()).map((e) => e.id)).toEqual(['EVT-1']);
+    expect(t.data().workOrders[0].photoRefs).toEqual([expect.objectContaining({ photoId, kind: 'before', eventId: 'EVT-1' })]);
+    expect(t.data().workOrders[0].fieldEvents).toHaveLength(1);
+    expect(t.uploads).toEqual([photoId]);
+    expect(t.status().waitingCount).toBe(1);
+    t.serverAcknowledges();
+    await t.service.refresh();
+    expect(t.status().waitingCount).toBe(0);
+  });
+
+  it('puts a lost event back, but not one a conflict holds or one for a closed job', async () => {
+    const t = setup();
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    const { entry } = await photoEvent(t);
+    await t.service.save(entry);
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    await t.service.refresh();
+    expect(t.data().workOrders[0].photoRefs).toHaveLength(1);
+    // Someone else changed the job meanwhile: the conflict record holds this phone's version.
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    t.addConflict('WO-TEST1', t.now() + 1);
+    await t.service.refresh();
+    expect(t.data().workOrders[0].photoRefs).toHaveLength(0);
+  });
+
+  it('undo takes the event back and keeps a note of it in the job', async () => {
+    const t = setup();
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    const { entry } = await photoEvent(t);
+    await t.service.save(entry);
+    await t.service.undo('EVT-1');
+    const order = t.data().workOrders[0];
+    expect(order.photoRefs).toEqual([]);
+    expect(order.fieldEvents?.[0].undoneAt).toBeDefined();
+    expect((await t.storage.listOutbox())[0].status).toBe('undone');
+  });
+
+  it('saving a job event keeps an unfinished pole capture', async () => {
+    const t = setup();
+    t.setData({ ...emptyData(), workOrders: [job()] });
+    const draft = await t.service.startDraft('pole');
+    const { entry } = await photoEvent(t);
+    await t.service.save(entry);
+    expect((await t.service.getDraft())?.id).toBe(draft.id);
   });
 });
 

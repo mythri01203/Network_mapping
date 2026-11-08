@@ -106,11 +106,15 @@ function locationOf(selection: SelectedObject | null): BikerWaypoint | null {
   switch (selection.type) {
     case 'equipment':
     case 'customer':
-    case 'closure': {
+    case 'closure':
+    case 'slackLoop': {
       const { id, name, lat, lng } = selection.data;
       return { id, name: name || id, lat, lng };
     }
-    case 'cable': {
+    case 'span':
+      return null;
+    case 'cable':
+    case 'duct': {
       const start = selection.data.coordinates[0];
       return start
         ? { id: selection.data.id, name: selection.data.name || selection.data.id, lat: start[0], lng: start[1] }

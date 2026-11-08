@@ -1,10 +1,12 @@
 import React from 'react';
 import { Bike, Camera, CheckCircle2, Clock, MapPin } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
+
+import { WORK_ORDER_STATUS_LABELS } from '@fibergis/shared';
 
 import { useOpenView } from '../../app/views';
 import { useBikerStore } from '../../stores/bikerStore';
-import { updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useSyncStore } from '../../stores/syncStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -18,6 +20,7 @@ export const FieldWorkView: React.FC = () => {
     useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
   );
   const openView = useOpenView();
+  const navigate = useNavigate();
   const sync = useSyncStore();
   const syncText = sync.cacheWriteFailed
     ? 'Not saved on this phone: storage is full. Stay connected until changes reach the office.'
@@ -50,10 +53,11 @@ export const FieldWorkView: React.FC = () => {
               <Bike className="w-4 h-4" /> Open Biker Mode
             </button>
             <button
-              onClick={() => setModalOpen('technicianMobile', true)}
+              onClick={() => navigate('/jobs')}
+              data-testid="open-jobs"
               className="px-3 py-2 bg-white border rounded-xl text-xs font-semibold"
             >
-              Technician phone view
+              Technician jobs (phone)
             </button>
           </div>
         </div>
@@ -100,18 +104,11 @@ export const FieldWorkView: React.FC = () => {
                   >
                     Report fault
                   </button>
-                  {wo.status !== 'Completed' ? (
-                    <button
-                      onClick={() => updateWorkOrderStatus(wo.id, 'Completed')}
-                      className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Complete
-                    </button>
-                  ) : (
-                    <span className="px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> Completed
-                    </span>
-                  )}
+                  {/* A job is finished on the phone (/jobs) and closed by the office only with a check. */}
+                  <span className="px-2.5 py-1.5 text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    {wo.status === 'Verified' || wo.status === 'Closed' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> : <Clock className="w-3.5 h-3.5" />}
+                    {WORK_ORDER_STATUS_LABELS[wo.status]}
+                  </span>
                 </div>
               </div>
             );

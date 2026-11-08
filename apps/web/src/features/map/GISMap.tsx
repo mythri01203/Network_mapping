@@ -9,8 +9,8 @@ import { cn } from '../../components/ui';
 import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
 import { useBikerStore } from '../../stores/bikerStore';
 import { DEFAULT_VIEWPORT, useMapStore } from '../../stores/mapStore';
-import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
+import { placeEquipmentChecked } from '../../stores/ospActions';
 import { selectionLabel, useUiStore } from '../../stores/uiStore';
 import { BikerModePanel } from '../field-work/BikerModePanel';
 import { EquipmentToolbox } from './EquipmentToolbox';
@@ -20,6 +20,7 @@ import { CableLayer } from './layers/CableLayer';
 import { CustomerLayer } from './layers/CustomerLayer';
 import { EquipmentLayer } from './layers/EquipmentLayer';
 import { FaultLayer } from './layers/FaultLayer';
+import { OspLayer } from './layers/OspLayer';
 import { ProjectStartMarker } from './layers/ProjectStartMarker';
 import { useVisibleCables, useVisibleEquipment } from './layers/useVisibleNetwork';
 import { useLeafletMap } from './leaflet/useLeafletMap';
@@ -44,7 +45,7 @@ export const GISMap: React.FC = () => {
     e.dataTransfer.dropEffect = 'copy';
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     const rawType = e.dataTransfer.getData(EQUIPMENT_DRAG_TYPE) as EquipmentType;
     const rawPayload = e.dataTransfer.getData('text/plain');
     if (!map || (!rawType && !rawPayload)) return;
@@ -67,7 +68,7 @@ export const GISMap: React.FC = () => {
     }
 
     const placedType = type || 'Outdoor Splitter';
-    const created = addEquipment({
+    const created = await placeEquipmentChecked({
       // Poles take the next free number, never the catalog name.
       name: placedType.includes('Pole') ? nextPoleName(useNetworkStore.getState().equipment) : name,
       type: placedType,
@@ -149,6 +150,7 @@ function MapOverlays({ map, oltFilter }: { map: L.Map; oltFilter: OltFilter }) {
   const cables = useVisibleCables();
   return (
     <>
+      <OspLayer map={map} />
       <CableLayer map={map} cables={cables} />
       <EquipmentLayer map={map} equipment={equipment} />
       <CustomerLayer map={map} />

@@ -89,7 +89,7 @@ export const HelpModal: React.FC = () => {
               ))}
             </div>
             <p className="text-[10px] text-slate-400 italic">
-              Sequence repeats for higher core counts (24, 48, 96, 144, 288) inside numbered color-coded buffer tubes.
+              Common, not universal. Tube size and tube colours vary by maker, so a cable shows colours only when its scheme is recorded. Blue may not be fiber 1: check the drum.
             </p>
           </div>
 

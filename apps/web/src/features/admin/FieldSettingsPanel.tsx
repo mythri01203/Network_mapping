@@ -1,13 +1,23 @@
 import { useState } from 'react';
 
-import { FIELD_SETTING_DEFS, type FieldSettingDef } from '@fibergis/shared';
+import { FAULT_SETTING_DEFS, FIELD_SETTING_DEFS, OSP_SETTING_DEFS } from '@fibergis/shared';
+
+/** What a settings row needs: both field capture and outside-plant settings have this shape. */
+interface SettingRowDef {
+  id: string;
+  label: string;
+  unit: string;
+  defaultValue: number | string;
+  source: string;
+  check?: (value: number | string) => string | null;
+}
 
 import { logAudit } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
-function FieldSettingRow({ def }: { def: FieldSettingDef }) {
+function FieldSettingRow({ def }: { def: SettingRowDef }) {
   const override = useNetworkStore((s) => s.settings.find((item) => item.id === def.id));
   const role = useUiStore((s) => s.userRole);
   const isText = typeof def.defaultValue === 'string';
@@ -112,6 +122,59 @@ export function FieldSettingsPanel() {
           <table className="w-full text-left text-xs">
             <tbody className="divide-y divide-slate-100">
               {FIELD_SETTING_DEFS.map((def) => (
+                <FieldSettingRow key={def.id} def={def} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Limits for grouping alarms into a suspected shared cause (Phase 8). */
+export function FaultSettingsPanel() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-4" data-testid="fault-settings">
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">Fault checks settings</h3>
+        <p className="text-xs text-slate-500">
+          Used when alarms are compared to find a suspected shared cause (Faults and field work, Suspected causes). They decide how sure the screen
+          sounds, never what is true: every result stays "suspected" until someone checks on site. There is no live OLT connection, so a customer with
+          no alarm is not proven to be working.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <tbody className="divide-y divide-slate-100">
+              {FAULT_SETTING_DEFS.map((def) => (
+                <FieldSettingRow key={def.id} def={def} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** Limits for poles, routes and lengths: the "same one?" distance, pole suggestions and length flags. */
+export function OspSettingsPanel() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-4">
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">Poles and routes settings</h3>
+        <p className="text-xs text-slate-500">
+          Used when adding poles, chambers and boxes on the map, when suggesting poles near a cable line, and when comparing drawn,
+          sheath and optical lengths. They are proposals, not standards, and they only warn: nothing is ever blocked or linked by them.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <tbody className="divide-y divide-slate-100">
+              {OSP_SETTING_DEFS.map((def) => (
                 <FieldSettingRow key={def.id} def={def} />
               ))}
             </tbody>

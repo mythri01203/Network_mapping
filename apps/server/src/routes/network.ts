@@ -5,6 +5,7 @@ import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import type { NetworkRepository } from '../db/repository';
 import { badRequest } from '../lib/errors';
+import { changeSetGuard, replacementGuard } from '../lib/linkGuard';
 
 /** Whole-network operations: snapshot reads, batched changes, backup/restore and demo reset. */
 export const networkRoutes =
@@ -14,7 +15,7 @@ export const networkRoutes =
 
     app.post('/changes', async (request) => {
       const changes: ChangeSet = changeSetSchema.parse(request.body ?? {});
-      return repository.applyChanges(changes);
+      return repository.applyChanges(changes, changeSetGuard(changes));
     });
 
     app.get('/backup', async (_request, reply) => {
@@ -29,7 +30,7 @@ export const networkRoutes =
       const result = parseBackup(request.body);
       if (!result.ok) throw badRequest(result.error);
       const { collections, projectStartPoint } = result.backup;
-      const revision = await repository.replaceCollections(collections);
+      const revision = await repository.replaceCollections(collections, replacementGuard(collections));
       return { revision, restored: Object.keys(collections), projectStartPoint };
     });
 

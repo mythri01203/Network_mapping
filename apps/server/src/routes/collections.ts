@@ -4,6 +4,7 @@ import { type ChangeSet, COLLECTION_SCHEMAS, type CollectionName, isCollectionNa
 
 import type { NetworkRepository } from '../db/repository';
 import { badRequest, notFound } from '../lib/errors';
+import { changeSetGuard } from '../lib/linkGuard';
 
 interface CollectionParams {
   collection: string;
@@ -41,14 +42,16 @@ export const collectionRoutes =
       const record = COLLECTION_SCHEMAS[collection].parse(request.body);
       if (record.id !== request.params.id) throw badRequest('The record id must match the id in the URL.');
       const existed = (await repository.get(collection, record.id)) !== undefined;
-      const { revision } = await repository.applyChanges({ upserts: { [collection]: [record] } } as ChangeSet);
+      const changes = { upserts: { [collection]: [record] } } as ChangeSet;
+      const { revision } = await repository.applyChanges(changes, changeSetGuard(changes));
       reply.code(existed ? 200 : 201).header('x-network-revision', revision);
       return record;
     });
 
     app.delete<{ Params: RecordParams }>('/:collection/:id', async (request, reply) => {
       const collection = resolveCollection(request.params.collection);
-      const { revision, deleted } = await repository.applyChanges({ deletes: { [collection]: [request.params.id] } });
+      const changes: ChangeSet = { deletes: { [collection]: [request.params.id] } };
+      const { revision, deleted } = await repository.applyChanges(changes, changeSetGuard(changes));
       if (deleted === 0) throw notFound(`${collection}/${request.params.id} does not exist.`);
       return reply.code(204).header('x-network-revision', revision).send();
     });

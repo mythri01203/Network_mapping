@@ -10,9 +10,12 @@ import {
   type CollectionRecord,
   isCollectionName,
   type NetworkSnapshot,
+  type RecordVersions,
+  type VersionConflict,
 } from '@fibergis/shared';
 
-import type { NetworkRepository } from './repository';
+import { versionConflict } from '../lib/errors';
+import type { NetworkRepository, WriteGuard } from './repository';
 
 /** Ordered schema migrations; `PRAGMA user_version` records how many have been applied. */
 const MIGRATIONS = [
@@ -29,6 +32,15 @@ const MIGRATIONS = [
    INSERT INTO meta (key, value) VALUES ('revision', '0');`,
 ];
 
+/**
+ * Phase 8: each record keeps the revision of the write that last stored it, so a client can say
+ * which version it edited. Existing rows start at 0. The column is added without changing
+ * `user_version`, so an older server can still open the database: it never names the column, and
+ * its writes leave the version as it was (such a write is then not seen as a change by a version
+ * check). A pre-release build numbered this as migration 2; such a database is set back to 1.
+ */
+const VERSION_COLUMN = 'ALTER TABLE records ADD COLUMN version INTEGER NOT NULL DEFAULT 0';
+
 type Row = Record<string, unknown>;
 
 const prepareStatements = (db: DatabaseSync) => ({
@@ -36,10 +48,12 @@ const prepareStatements = (db: DatabaseSync) => ({
   get: db.prepare('SELECT data FROM records WHERE collection = ? AND id = ?'),
   counts: db.prepare('SELECT collection, COUNT(*) AS total FROM records GROUP BY collection'),
   upsert: db.prepare(
-    `INSERT INTO records (collection, id, position, data, updated_at)
-       VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?), ?, ?)
-       ON CONFLICT (collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+    `INSERT INTO records (collection, id, position, data, updated_at, version)
+       VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?), ?, ?, ?)
+       ON CONFLICT (collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, version = excluded.version`,
   ),
+  version: db.prepare('SELECT version, data FROM records WHERE collection = ? AND id = ?'),
+  versions: db.prepare('SELECT collection, id, version FROM records'),
   remove: db.prepare('DELETE FROM records WHERE collection = ? AND id = ?'),
   clear: db.prepare('DELETE FROM records WHERE collection = ?'),
   revision: db.prepare("SELECT CAST(value AS INTEGER) AS revision FROM meta WHERE key = 'revision'"),
@@ -69,7 +83,13 @@ export class SqliteNetworkRepository implements NetworkRepository {
   async getNetwork() {
     return this.transaction('DEFERRED', () => {
       const data = Object.fromEntries(COLLECTION_NAMES.map((name) => [name, this.readCollection(name)]));
-      return { revision: this.readRevision(), data: data as NetworkSnapshot };
+      const versions: RecordVersions = {};
+      for (const row of this.statements.versions.all() as Row[]) {
+        const name = row.collection as CollectionName;
+        if (!isCollectionName(name)) continue;
+        (versions[name] ??= {})[String(row.id)] = Number(row.version);
+      }
+      return { revision: this.readRevision(), data: data as NetworkSnapshot, versions };
     });
   }
 
@@ -94,14 +114,21 @@ export class SqliteNetworkRepository implements NetworkRepository {
     return row ? (JSON.parse(String(row.data)) as CollectionRecord<C>) : undefined;
   }
 
-  async applyChanges(changes: ChangeSet): Promise<ChangeResult> {
+  async applyChanges(changes: ChangeSet, guard?: WriteGuard): Promise<ChangeResult> {
     return this.transaction('IMMEDIATE', () => {
+      // Version checks first: a stale edit is refused whole, before any other check or write.
+      const conflicts = this.findConflicts(changes);
+      if (conflicts.length > 0) throw versionConflict(conflicts);
+      guard?.((collection) => this.readCollection(collection));
       const now = new Date().toISOString();
+      const version = this.readRevision() + 1;
+      const versions: RecordVersions = {};
       let upserted = 0;
       let deleted = 0;
       for (const [collection, records] of this.entries(changes.upserts)) {
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version);
+          (versions[collection] ??= {})[record.id] = version;
           upserted += 1;
         }
       }
@@ -111,17 +138,43 @@ export class SqliteNetworkRepository implements NetworkRepository {
         }
       }
       const revision = upserted + deleted > 0 ? this.bumpRevision() : this.readRevision();
-      return { revision, upserted, deleted };
+      return { revision, upserted, deleted, versions };
     });
   }
 
-  async replaceCollections(collections: Partial<NetworkSnapshot>) {
+  /**
+   * Records whose stored version is not the one the client said it edited. A delete of a record
+   * that is already gone is not a conflict: both sides wanted it gone.
+   */
+  private findConflicts(changes: ChangeSet): VersionConflict[] {
+    const conflicts: VersionConflict[] = [];
+    const deleting = new Set(this.entries(changes.deletes).flatMap(([collection, ids]) => (ids as string[]).map((id) => `${collection}/${id}`)));
+    for (const [collection, expected] of this.entries(changes.expect)) {
+      for (const [id, version] of Object.entries(expected as unknown as Record<string, number>)) {
+        const row = this.statements.version.get(collection, id) as Row | undefined;
+        if (!row) {
+          if (deleting.has(`${collection}/${id}`)) continue;
+          conflicts.push({ collection, id, expected: version, current: null, record: null });
+          continue;
+        }
+        const current = Number(row.version);
+        if (current !== version) {
+          conflicts.push({ collection, id, expected: version, current, record: JSON.parse(String(row.data)) as Record<string, unknown> });
+        }
+      }
+    }
+    return conflicts;
+  }
+
+  async replaceCollections(collections: Partial<NetworkSnapshot>, guard?: WriteGuard) {
     return this.transaction('IMMEDIATE', () => {
+      guard?.((collection) => this.readCollection(collection));
       const now = new Date().toISOString();
+      const version = this.readRevision() + 1;
       for (const [collection, records] of this.entries(collections)) {
         this.statements.clear.run(collection);
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version);
         }
       }
       return this.bumpRevision();
@@ -135,7 +188,12 @@ export class SqliteNetworkRepository implements NetworkRepository {
   }
 
   private migrate() {
-    const { user_version: applied } = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
+    let { user_version: applied } = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
+    if (applied === 2 && this.hasVersionColumn()) {
+      // Only the pre-release "migration 2" (the version column) ever used this number.
+      this.db.exec('PRAGMA user_version = 1');
+      applied = 1;
+    }
     if (applied > MIGRATIONS.length) {
       throw new Error(`Database schema v${applied} is newer than this server supports (v${MIGRATIONS.length}).`);
     }
@@ -145,6 +203,11 @@ export class SqliteNetworkRepository implements NetworkRepository {
         this.db.exec(`PRAGMA user_version = ${applied + index + 1}`);
       });
     });
+    if (!this.hasVersionColumn()) this.transaction('IMMEDIATE', () => this.db.exec(VERSION_COLUMN));
+  }
+
+  private hasVersionColumn(): boolean {
+    return (this.db.prepare('PRAGMA table_info(records)').all() as Row[]).some((c) => c.name === 'version');
   }
 
   private readCollection<C extends CollectionName>(collection: C) {

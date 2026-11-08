@@ -159,15 +159,18 @@ export const updateCustomer = (customerId: string, patch: Partial<Customer>): bo
 export const recordNewFault = (draft: domain.FaultDraft): Fault | null =>
   run((data, ctx) => domain.reportFault(data, draft, ctx))?.value ?? null;
 
+/** Closes a fault. Refused without a check (Phase 8). */
 export const resolveExistingFault = (faultId: string) => {
-  run((data, ctx) => domain.resolveFault(data, faultId, ctx));
+  run((data, ctx) => domain.setFaultStatus(data, faultId, 'Closed', {}, ctx));
 };
 
-export const addWorkOrder = (draft: domain.WorkOrderDraft): WorkOrder | null =>
-  run((data, ctx) => domain.createWorkOrder(data, draft, ctx))?.value ?? null;
+/** Makes a work order with a random id (Phase 8), so two offline devices never clash. */
+export const addWorkOrder = (draft: domain.JobDraft): WorkOrder | null =>
+  run((data, ctx) => domain.createJob(data, draft, ctx))?.value ?? null;
 
+/** Moves a work order. Verified and Closed are refused without a check (Phase 8). */
 export const updateWorkOrderStatus = (workOrderId: string, status: WorkOrder['status']) => {
-  run((data, ctx) => domain.setWorkOrderStatus(data, workOrderId, status, ctx));
+  run((data, ctx) => domain.setJobStatus(data, workOrderId, status, {}, ctx));
 };
 
 // --- Zones & documents ---------------------------------------------------------------------------
