@@ -1,3 +1,4 @@
+export * from './domain/access';
 export * from './domain/agentTracking';
 export * from './domain/cables';
 export * from './domain/command';
@@ -30,6 +31,8 @@ export * from './domain/ports';
 export * from './domain/provisioning';
 export * from './domain/reconciliation';
 export * from './domain/records';
+export * from './domain/reports';
+export * from './domain/restoreCheck';
 export * from './domain/rxReading';
 export * from './domain/serviceTopology';
 export * from './domain/splices';

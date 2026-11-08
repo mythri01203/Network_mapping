@@ -23,7 +23,7 @@ import {
 import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
-import { isFaultOpen, type UserRole } from '@fibergis/shared';
+import { ACCOUNT_ROLE_LABELS, isFaultOpen, type UserRole } from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import {
@@ -37,6 +37,7 @@ import {
   MenuSeparator,
   Popover,
 } from '../../components/ui';
+import { currentAccount, useAuthStore } from '../../stores/authStore';
 import { useMapStore } from '../../stores/mapStore';
 import { backupSystem, exportKML, resetToSampleData, restoreSystem } from '../../stores/networkActions';
 import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
@@ -108,6 +109,9 @@ export const TopNavBar: React.FC = () => {
     })),
   );
   const setIsLayersDrawerOpen = useMapStore((s) => s.setLayersDrawerOpen);
+  // Phase 9: once someone is logged in, the menu shows them instead of a role choice.
+  const account = useAuthStore((s) => currentAccount(s));
+  const shownName = account ? account.displayName : userRole;
 
   const activeView = useActiveView();
   const showOnMap = useShowOnMap();
@@ -512,9 +516,11 @@ export const TopNavBar: React.FC = () => {
               )}
             >
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-600 text-[10.5px] font-semibold text-white">
-                {roleInitials(userRole)}
+                {roleInitials(shownName)}
               </span>
-              <span className="hidden text-[13px] font-medium text-slate-200 xl:inline">{userRole}</span>
+              <span className="hidden text-[13px] font-medium text-slate-200 xl:inline" data-testid="user-menu-name">
+                {shownName}
+              </span>
               <ChevronDown size={14} className="text-slate-500" />
             </button>
           )}
@@ -522,22 +528,45 @@ export const TopNavBar: React.FC = () => {
           {(close) => (
             <>
               <div className="border-b border-slate-100 px-3 pb-2.5 pt-1.5">
-                <div className="text-[13px] font-semibold text-slate-900">{userRole}</div>
-                <div className="text-xs text-slate-500">Shared workspace · saved to the FiberGIS server</div>
+                <div className="text-[13px] font-semibold text-slate-900">{shownName}</div>
+                <div className="text-xs text-slate-500">
+                  {account ? `${ACCOUNT_ROLE_LABELS[account.role]} · logged in as ${account.username}` : 'Login is off (setup mode) · saved to the FiberGIS server'}
+                </div>
               </div>
-              <MenuLabel>Switch role</MenuLabel>
-              {ROLES.map((role) => (
-                <MenuItem
-                  key={role}
-                  label={role}
-                  active={role === userRole}
-                  icon={role === userRole ? Check : undefined}
-                  onClick={() => {
-                    setUserRole(role);
-                    close();
-                  }}
-                />
-              ))}
+              {account ? (
+                <>
+                  <MenuItem
+                    label="Change my password"
+                    onClick={() => {
+                      useAuthStore.getState().setPasswordChangeOpen(true);
+                      close();
+                    }}
+                  />
+                  <MenuItem
+                    label="Log out"
+                    onClick={() => {
+                      close();
+                      void useAuthStore.getState().logout();
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <MenuLabel>Switch role (login is off)</MenuLabel>
+                  {ROLES.map((role) => (
+                    <MenuItem
+                      key={role}
+                      label={role}
+                      active={role === userRole}
+                      icon={role === userRole ? Check : undefined}
+                      onClick={() => {
+                        setUserRole(role);
+                        close();
+                      }}
+                    />
+                  ))}
+                </>
+              )}
               <MenuSeparator />
               <MenuLabel>Interface</MenuLabel>
               <div className="px-3 pb-1.5">

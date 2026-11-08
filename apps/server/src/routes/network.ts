@@ -1,43 +1,177 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 
-import { type ChangeSet, changeSetSchema, createBackup, type NetworkSnapshot, parseBackup } from '@fibergis/shared';
+import {
+  AUDIT_ROLE_FOR,
+  type AuditLog,
+  type ChangeSet,
+  changeSetSchema,
+  COLLECTION_NAMES,
+  createBackup,
+  describeRestoreCheck,
+  formatLogTimestamp,
+  type NetworkSnapshot,
+  newRestoreProblems,
+  parseBackup,
+  randomCode,
+} from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
+import { noStore, prepareAuditEntries, redactForViewer, requireSystem, writeOptionsFor } from '../auth/access';
 import type { NetworkRepository } from '../db/repository';
-import { badRequest } from '../lib/errors';
-import { changeSetGuard, replacementGuard } from '../lib/linkGuard';
+import { buildBackupZip, readBackupZip, restorePhotos, writeSafetyCopy } from '../lib/backups';
+import { badRequest, HttpError } from '../lib/errors';
+import { changeSetGuard } from '../lib/linkGuard';
+
+export interface NetworkRouteOptions {
+  photosDir: string;
+  backupsDir: string;
+  backupKeep: number;
+  restoreMaxBytes: number;
+}
+
+/** Change sets carry whole records; a big KML import or a first upload can be large. */
+export const CHANGES_BODY_LIMIT = 10 * 1024 * 1024;
+
+/** Problems listed in a refused restore. The count says how many there are in all. */
+const LISTED_PROBLEMS = 50;
 
 /** Whole-network operations: snapshot reads, batched changes, backup/restore and demo reset. */
 export const networkRoutes =
-  (repository: NetworkRepository): FastifyPluginAsync =>
+  (repository: NetworkRepository, options: NetworkRouteOptions): FastifyPluginAsync =>
   async (app) => {
-    app.get('/network', async () => repository.getNetwork());
+    app.addContentTypeParser('application/zip', { parseAs: 'buffer', bodyLimit: options.restoreMaxBytes }, (_request, body, done) => done(null, body));
 
-    app.post('/changes', async (request) => {
-      const changes: ChangeSet = changeSetSchema.parse(request.body ?? {});
-      return repository.applyChanges(changes, changeSetGuard(changes));
-    });
+    /** A server-written audit entry, stamped with the person (or setup mode). */
+    const auditEntry = (request: FastifyRequest, action: string, details: string): AuditLog => {
+      const account = request.auth.account;
+      return {
+        id: `LOG-${randomCode(10)}`,
+        timestamp: formatLogTimestamp(new Date()),
+        user: account ? account.displayName : 'Setup mode (login off)',
+        role: account ? AUDIT_ROLE_FOR[account.role] : 'Administrator',
+        action,
+        details: details.slice(0, 1000),
+        assetId: 'SYSTEM',
+        assetType: 'System',
+      };
+    };
 
-    app.get('/backup', async (_request, reply) => {
+    const backupJson = async () => {
       const { data } = await repository.getNetwork();
       const exportedAt = new Date().toISOString();
-      reply.header('content-disposition', `attachment; filename="fibergis-backup-${exportedAt.slice(0, 10)}.json"`);
-      return createBackup(data, exportedAt);
+      return { json: JSON.stringify(createBackup(data, exportedAt)), exportedAt, data };
+    };
+
+    /** A zip of the whole network and every photo, saved in the backups folder before anything is replaced. */
+    const safetyCopy = async (reason: 'before-reset' | 'before-restore') => {
+      try {
+        const { json } = await backupJson();
+        const { zip } = await buildBackupZip(json, options.photosDir);
+        return await writeSafetyCopy(options.backupsDir, zip, reason, options.backupKeep);
+      } catch (error) {
+        app.log.error({ err: error }, 'Safety copy failed');
+        throw new HttpError(500, 'safety_copy_failed', 'The server could not save a safety copy first, so nothing was changed. Check the disk space and the backups folder.');
+      }
+    };
+
+    app.get('/network', async (request, reply) => {
+      noStore(reply);
+      const network = await repository.getNetwork();
+      return { ...network, data: redactForViewer(request, network.data) };
     });
 
-    /** Replaces only the collections present in the backup, so partial backups merge cleanly. */
-    app.post('/restore', async (request) => {
-      const result = parseBackup(request.body);
+    app.post('/changes', { bodyLimit: CHANGES_BODY_LIMIT }, async (request) => {
+      const parsed: ChangeSet = changeSetSchema.parse(request.body ?? {});
+      const changes = await prepareAuditEntries(request, parsed, repository);
+      return repository.applyChanges(changes, changeSetGuard(changes), writeOptionsFor(request, changes));
+    });
+
+    /** JSON as before; `?photos=1` gives a zip with every field photo. Administrator only once login is on. */
+    app.get<{ Querystring: { photos?: string } }>('/backup', async (request, reply) => {
+      requireSystem(request, 'backup');
+      const { json, exportedAt } = await backupJson();
+      noStore(reply);
+      if (request.query.photos === '1' || request.query.photos === 'true') {
+        const { zip, photos } = await buildBackupZip(json, options.photosDir);
+        reply.header('content-type', 'application/zip');
+        reply.header('content-disposition', `attachment; filename="fibergis-backup-${exportedAt.slice(0, 10)}.zip"`);
+        reply.header('x-backup-photos', photos);
+        return reply.send(Buffer.from(zip));
+      }
+      reply.header('content-type', 'application/json; charset=utf-8');
+      reply.header('content-disposition', `attachment; filename="fibergis-backup-${exportedAt.slice(0, 10)}.json"`);
+      return reply.send(json);
+    });
+
+    /**
+     * Replaces only the collections present in the backup, so partial backups merge cleanly. The
+     * result is checked against the link, fiber, connection and fault rules; problems the stored
+     * network does not already have refuse the restore with a list, unless the administrator
+     * restores anyway (`?accept=problems`). A safety copy is always saved first.
+     */
+    app.post<{ Querystring: { accept?: string } }>('/restore', { bodyLimit: options.restoreMaxBytes }, async (request) => {
+      requireSystem(request, 'restore');
+      let raw: unknown = request.body;
+      let photos: Awaited<ReturnType<typeof readBackupZip>> | undefined;
+      if (Buffer.isBuffer(request.body)) {
+        photos = readBackupZip(new Uint8Array(request.body), options.restoreMaxBytes * 4);
+        if (!photos.ok) throw badRequest(photos.error);
+        raw = photos.json;
+      }
+      const result = parseBackup(raw);
       if (!result.ok) throw badRequest(result.error);
       const { collections, projectStartPoint } = result.backup;
-      const revision = await repository.replaceCollections(collections, replacementGuard(collections));
-      return { revision, restored: Object.keys(collections), projectStartPoint };
+
+      const { data: current } = await repository.getNetwork();
+      const after = { ...current, ...collections } as NetworkSnapshot;
+      const check = newRestoreProblems(current, after);
+      const accepted = request.query.accept === 'problems';
+      if (check.problems.length > 0 && !accepted) {
+        throw new HttpError(409, 'restore_refused', `Nothing was restored. ${describeRestoreCheck(check)}`, {
+          problems: check.problems.slice(0, LISTED_PROBLEMS).map(({ rule, message, refs }) => ({ rule, message, refs })),
+          counts: check.counts,
+          total: check.problems.length,
+        });
+      }
+
+      const copy = await safetyCopy('before-restore');
+      const revision = await repository.replaceCollections(collections);
+      const photosAdded = photos?.ok ? await restorePhotos(photos.photos, options.photosDir) : 0;
+      const restored = Object.keys(collections);
+      const details = `Restored ${restored.length} dataset(s) from a backup${photos ? ' with photos' : ''}. Safety copy first: ${copy}.${
+        photosAdded ? ` ${photosAdded} photo(s) added.` : ''
+      }${check.problems.length > 0 ? ` Restored with ${check.problems.length} problem(s) the administrator accepted.` : ''}`;
+      const audit = await repository.applyChanges({ upserts: { auditLogs: [auditEntry(request, 'BACKUP_RESTORED', details)] } });
+      request.log.info({ restored: restored.length, problems: check.problems.length, photosAdded }, 'Backup restored');
+      return {
+        revision: audit.revision ?? revision,
+        restored,
+        projectStartPoint,
+        safetyCopy: copy,
+        photosAdded,
+        photosSkipped: photos?.ok ? photos.skipped.length : 0,
+        acceptedProblems: check.problems.length,
+      };
     });
 
-    /** Reloads the demo network. The user's custom equipment catalog is kept. */
-    app.post('/reset', async () => {
+    /** Reloads the demo network over everything except the custom catalog. Needs `{ "confirm": "reset" }`. */
+    app.post<{ Body: { confirm?: string } | undefined }>('/reset', async (request) => {
+      requireSystem(request, 'reset');
+      if (request.auth.mode === 'enforced' && request.body?.confirm !== 'reset') {
+        throw badRequest('Send { "confirm": "reset" } to replace the whole network with the sample. Nothing was changed.');
+      }
+      const before = await repository.counts();
+      const copy = await safetyCopy('before-reset');
       const sample: Partial<NetworkSnapshot> = createSampleNetwork();
       delete sample.catalog;
-      return { revision: await repository.replaceCollections(sample) };
+      await repository.replaceCollections(sample);
+      const lost = COLLECTION_NAMES.filter((name) => name !== 'catalog' && before[name] > 0)
+        .map((name) => `${before[name]} ${name}`)
+        .join(', ');
+      const audit = await repository.applyChanges({
+        upserts: { auditLogs: [auditEntry(request, 'NETWORK_RESET', `Network replaced with the sample. Before: ${lost || 'nothing'}. Safety copy first: ${copy}.`)] },
+      });
+      request.log.info('Network reset to the sample');
+      return { revision: audit.revision, safetyCopy: copy };
     });
   };

@@ -21,9 +21,11 @@ import type {
 } from '@fibergis/shared';
 import * as domain from '@fibergis/shared';
 
-import { syncEngine } from '../api/syncEngine';
+import { ApiError } from '../api/client';
+import { syncEngine, type SyncOutcome } from '../api/syncEngine';
 import { downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';
+import { currentAccount, loginIsOn } from './authStore';
 import { requestConfirm } from './confirmStore';
 import { useMapStore } from './mapStore';
 import {
@@ -34,6 +36,7 @@ import {
   selectOpticalSettings,
   useNetworkStore,
 } from './networkStore';
+import { useRestoreStore } from './restoreStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { useUiStore } from './uiStore';
@@ -236,7 +239,45 @@ function clearTransientState() {
   useMapStore.getState().resetSketches();
 }
 
+/** Reset, restore and full backups are the administrator's once login is on (Phase 9). */
+function adminOnly(what: string): boolean {
+  if (!loginIsOn()) return true;
+  const account = currentAccount();
+  if (account?.role === 'admin') return true;
+  showToast('error', 'Administrator only', `Only the administrator can ${what}. Nothing was changed.`);
+  return false;
+}
+
+/** The server's full backup, as a zip with every field photo (Phase 9). */
+export async function downloadServerBackup(): Promise<boolean> {
+  if (!adminOnly('download a full backup')) return false;
+  try {
+    const response = await fetch(`${(import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')}${domain.API_PREFIX}/backup?photos=1`, {
+      credentials: import.meta.env.VITE_API_URL ? 'include' : 'same-origin',
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      showToast('error', 'Backup not downloaded', body?.message ?? `The server answered ${response.status}.`);
+      return false;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fibergis-backup-${domain.isoDate()}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast('success', 'Backup downloaded', `The whole network and ${response.headers.get('x-backup-photos') ?? 'all'} photo(s). Keep it somewhere safe: it holds customer details.`);
+    logAudit('BACKUP_EXPORTED', `Downloaded a full backup with ${response.headers.get('x-backup-photos') ?? '?'} photo(s)`, 'SYSTEM', 'System');
+    return true;
+  } catch {
+    showToast('error', 'Backup not downloaded', 'The server could not be reached. Try again with a connection.');
+    return false;
+  }
+}
+
 export function backupSystem() {
+  if (!adminOnly('download a full backup')) return;
   const { projectStartPoint } = useNetworkStore.getState();
   const snapshot = getNetworkSnapshot();
   const backup = domain.createBackup(snapshot, new Date().toISOString(), projectStartPoint ?? undefined);
@@ -254,46 +295,110 @@ export function backupSystem() {
  * Restores a backup file. The file is validated here; the data then goes to the server (or this
  * browser while offline). Resolves to whether anything was restored.
  */
-export async function restoreSystem(json: string): Promise<boolean> {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch {
-    showToast('error', 'Restore Failed', 'The selected file is not valid JSON.');
-    return false;
-  }
-  const parsed = domain.parseBackup(raw);
-  if (!parsed.ok) {
-    showToast('error', 'Restore Failed', parsed.error);
-    return false;
+/** What is in the network now, in words, for confirmations that replace it. */
+function networkCounts(): string {
+  const s = getNetworkSnapshot();
+  const parts: [number, string][] = [
+    [s.equipment.length, 'network items'],
+    [s.cables.length, 'cables'],
+    [s.customers.length, 'customers'],
+    [s.faults.length, 'faults'],
+    [s.workOrders.length, 'jobs'],
+    [s.spans.length, 'spans'],
+    [s.onts.length, 'ONTs'],
+  ];
+  return parts
+    .filter(([n]) => n > 0)
+    .map(([n, what]) => `${n} ${what}`)
+    .join(', ');
+}
+
+/**
+ * Restores a backup file: JSON (as before) or a zip with photos. The server checks it against the
+ * link, fiber, connection and fault rules and saves a safety copy first. A refused backup is listed
+ * on the Backup screen with "restore anyway" for the administrator.
+ */
+export async function restoreSystem(input: string | Blob, options: { acceptProblems?: boolean } = {}): Promise<boolean> {
+  if (!adminOnly('restore a backup')) return false;
+  let send: () => Promise<SyncOutcome>;
+  let names: string[] = [];
+  if (typeof input === 'string') {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(input);
+    } catch {
+      showToast('error', 'Restore Failed', 'The selected file is not valid JSON.');
+      return false;
+    }
+    const parsed = domain.parseBackup(raw);
+    if (!parsed.ok) {
+      showToast('error', 'Restore Failed', parsed.error);
+      return false;
+    }
+    names = Object.keys(parsed.backup.collections);
+    send = () => syncEngine.restore(parsed.backup, options);
+  } else {
+    send = () => syncEngine.restoreZip(input, options);
   }
 
-  const outcome = await syncEngine.restore(parsed.backup);
+  if (!options.acceptProblems) {
+    const confirmed = await requestConfirm({
+      title: 'Replace the network with this backup?',
+      message: `Now on the server: ${networkCounts() || 'nothing'}. ${
+        names.length ? `The backup replaces: ${names.join(', ')}.` : 'The backup replaces every list it holds.'
+      } Changes made since the backup will be lost. The server saves a safety copy first.`,
+      confirmLabel: 'Replace with the backup',
+      cancelLabel: 'Keep my network',
+      tone: 'danger',
+    });
+    if (!confirmed) return false;
+  }
+
+  useRestoreStore.getState().setRefusal(null);
+  let outcome;
+  try {
+    outcome = await send();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'restore_refused') {
+      const body = error.body as { total?: number; counts?: Record<string, number>; problems?: { rule: domain.RestoreRule; message: string; refs: string[] }[] };
+      useRestoreStore.getState().setRefusal({
+        message: error.message,
+        total: body.total ?? body.problems?.length ?? 0,
+        counts: body.counts ?? {},
+        problems: body.problems ?? [],
+        retryAccepting: () => restoreSystem(input, { acceptProblems: true }),
+      });
+      showToast('error', 'Backup refused', `${error.message} The list is under Administration, Backup.`);
+      return false;
+    }
+    throw error;
+  }
   if (outcome === 'failed') return false;
-  const restored = Object.keys(parsed.backup.collections);
   clearTransientState();
+  const result = useRestoreStore.getState().lastResult;
   showToast(
     'success',
     'System Restored',
-    `Restored ${restored.length} dataset(s): ${restored.join(', ')}${outcome === 'local' ? ' (offline; will sync when the server is back)' : ''}`,
+    `Restored ${result?.restored.length ?? names.length} list(s). Safety copy on the server: ${result?.safetyCopy ?? 'made'}.${result?.photosAdded ? ` ${result.photosAdded} photo(s) added.` : ''}`,
   );
-  logAudit('BACKUP_RESTORED', `Restored datasets: ${restored.join(', ')}`, 'SYSTEM', 'System');
   return true;
 }
 
-/** Reloads the demo network. The component catalog is user configuration, so it is kept. */
+/** Reloads the demo network over everything except the catalog. Administrator only, safety copy first. */
 export async function resetToSampleData(): Promise<boolean> {
+  if (!adminOnly('reset the network')) return false;
   const confirmed = await requestConfirm({
-    title: 'Reset to sample data',
-    message: 'Replace the entire network with the bundled sample dataset? All network changes will be lost.',
-    confirmLabel: 'Reset network',
+    title: 'Replace your network with the sample?',
+    message: `This deletes ${networkCounts() || 'everything in the network'} and loads the demo network instead. Only the custom equipment catalog is kept. The server saves a safety copy first (backups folder), but everyone will see the sample until it is restored.`,
+    confirmLabel: 'Delete and load the sample',
+    cancelLabel: 'Keep my network',
     tone: 'danger',
   });
   if (!confirmed) return false;
   const outcome = await syncEngine.reset();
   if (outcome === 'failed') return false;
   clearTransientState();
-  showToast('info', 'Sample Data Restored', 'The network has been reset to the bundled sample dataset.');
+  showToast('info', 'Sample Data Restored', 'The network was replaced with the sample. A safety copy of the old one is in the server backups folder.');
   return true;
 }
 

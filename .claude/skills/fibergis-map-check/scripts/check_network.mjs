@@ -868,6 +868,7 @@ async function main(argv) {
   return findings.some((f) => f.severity === 'error') ? 1 : 0;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Only when this file itself is run. The server bundles it for the Reports screen, so the name is checked too.
+if (process.argv[1] && /check_network\.mjs$/.test(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1]) {
   process.exitCode = await main(process.argv);
 }

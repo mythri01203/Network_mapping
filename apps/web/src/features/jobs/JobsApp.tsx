@@ -34,6 +34,7 @@ import {
 
 import { type MessageKey, MESSAGES } from '../../i18n/messages';
 import { useT } from '../../i18n/useT';
+import { currentAccount, useAuthStore } from '../../stores/authStore';
 import { useBikerStore } from '../../stores/bikerStore';
 import { getNetworkData, selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { preferenceKey, preferenceStorage } from '../../stores/persistStorage';
@@ -149,7 +150,10 @@ function CountPad({ digits, onDigits }: { digits: string; onDigits: (d: string) 
 export function JobsApp() {
   const navigate = useNavigate();
   const { t, lang } = useT();
-  const me = useJobsMe((s) => s.name);
+  // Phase 9: with login on, the technician is the person logged in. The name picker stays for setup mode.
+  const account = useAuthStore((s) => currentAccount(s));
+  const picked = useJobsMe((s) => s.name);
+  const me = account ? account.displayName : picked;
   const setMe = useJobsMe((s) => s.setName);
   const workOrders = useNetworkStore((s) => s.workOrders);
   const customers = useNetworkStore((s) => s.customers);
@@ -392,7 +396,19 @@ export function JobsApp() {
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" data-testid="jobs-list">
             <div className="flex items-center gap-2">
               <h1 className="flex-1 text-[1.5rem] font-bold text-slate-900">{t('jobs.tile')}</h1>
-              <button type="button" onClick={() => { setMe(null); setScreen({ name: 'who' }); }} className="flex min-h-[3rem] items-center gap-1 rounded-xl border-2 border-slate-900 bg-white px-2 text-[1rem] font-semibold">
+              <button
+                type="button"
+                data-testid="jobs-not-me"
+                onClick={() => {
+                  if (account) {
+                    void useAuthStore.getState().logout();
+                    return;
+                  }
+                  setMe(null);
+                  setScreen({ name: 'who' });
+                }}
+                className="flex min-h-[3rem] items-center gap-1 rounded-xl border-2 border-slate-900 bg-white px-2 text-[1rem] font-semibold"
+              >
                 <User className="h-5 w-5" aria-hidden /> {me} · {t('jobs.notMe')}
               </button>
             </div>

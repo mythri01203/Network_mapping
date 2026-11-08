@@ -132,12 +132,12 @@ Marked as read from code but not run: the splicing screen crash when no closures
 
 ## 8. Security
 
-- **No login.** The role is a menu choice stored in the browser, and the audit log's "user" is that choice.
-- `/reset` and `/restore` can overwrite the whole network and are unauthenticated.
-- No rate limits. CORS allow-list and default host `127.0.0.1` are sound.
-- `npm audit --omit=dev` reports 5 vulnerabilities: 1 critical, 1 high, 3 moderate. Not yet reviewed in detail.
+- ~~**No login.** The role is a menu choice stored in the browser, and the audit log's "user" is that choice.~~ **Fixed in Phase 9:** accounts with scrypt password hashes, httpOnly SameSite session cookies, five roles enforced on the server, and the audit log names the real person. Login is off ("setup mode") only until the first administrator account exists; see `DEPLOYMENT_GUIDE.md`.
+- ~~`/reset` and `/restore` can overwrite the whole network and are unauthenticated.~~ **Fixed in Phase 9** once login is on: administrator only, safety copy first, restore checked against the shared rules. **In setup mode they are still open**, as before, so create the first administrator before the server is reachable by others.
+- ~~No rate limits.~~ **Fixed in Phase 9:** login limit (5 wrong tries, 15 minutes), a general per-address limit, small body limits on login routes, security headers and a Content-Security-Policy. CORS allow-list and default host `127.0.0.1` are sound.
+- **npm audit, reviewed in Phase 9:** was 14 (5 in production, including 1 critical and 1 high). It is now **10, all moderate, all development-only, and 0 in production** (`npm audit --omit=dev`). The critical and high advisories were in jsPDF 2.5; it was upgraded to 4.2.1, and the calls the agent-tracking PDF uses were checked to still work. The 10 left are one advisory, minimatch's ReDoS-style denial of service (GHSA-g3hv-75wg-m249), pulled in by ESLint 10 and typescript-eslint (`@eslint/config-array`, `@eslint/js`, `eslint`, `minimatch` and six `@typescript-eslint` packages). They run only on a developer's computer when linting the project's own files, never in the app or on the server. The only "fix" npm offers is a move to a different major version (ESLint 9.39.5 and typescript-eslint 8.36.0, older than what is installed), which could change lint rules for the whole codebase; it is left until ESLint 10 ships a patched minimatch. The server also uses minimatch (through @fastify/static), but version 11.0.5, which is not affected. No `npm audit fix --force` was used.
 
-Do not expose the server beyond a trusted network until login exists.
+Phase 9 makes it reasonable to reach the server from the office network or a VPN. Before putting it on the public internet: create the administrator, set `SETUP_TOKEN` or `AUTH_REQUIRED=true` on new installs, use https (`DEPLOYMENT_GUIDE.md`), and keep regular backups.
 
 ## 9. Ease of use for field staff
 

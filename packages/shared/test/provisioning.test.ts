@@ -29,34 +29,35 @@ describe('provisionCustomer', () => {
     if (!result.ok) throw new Error(result.error.message);
     const { customer: created, dropCable } = result.value;
 
+    expect(created.id).toMatch(/^CUST-[0-9A-HJKMNP-TV-Z]{10}$/);
+    expect(created.dropCableId).toMatch(/^DROP-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(created).toMatchObject({
-      id: 'CUST-002',
       name: 'Asha',
       oltId: 'OLT-01',
       ponPort: 'PON-01',
       feederCableId: 'FEED-01',
       distributionCableId: 'DIST-01',
       splitterOutputPort: 2,
-      dropCableId: 'DROP-001',
+      dropCableId: dropCable.id,
       installationDate: '2026-11-04',
     });
     expect(created.ipAddress).toBe('');
     expect(dropCable).toMatchObject({ type: 'Drop Fiber', startEquipmentId: 'FAT-01', fiberCount: 2 });
-    expect(dropCable.cores[0]).toMatchObject({ status: 'In Use', customerId: 'CUST-002' });
+    expect(dropCable.cores[0]).toMatchObject({ status: 'In Use', customerId: created.id });
 
     const next = applyPatch(data, result.patch);
     const port = next.splitters[0].outputPorts.find((p) => p.portNumber === 2)!;
     expect(port).toMatchObject({
       status: 'Occupied',
-      connectedCustomerId: 'CUST-002',
-      connectedDropCableId: 'DROP-001',
+      connectedCustomerId: created.id,
+      connectedDropCableId: dropCable.id,
     });
     expect(next.equipment.find((e) => e.id === 'OLT-01')!.ponPorts![0].connectedCustomersCount).toBe(2);
     const fat = next.equipment.find((e) => e.id === 'FAT-01')!;
     expect(fat.usedPorts).toBe(1);
-    expect(fat.logicalPorts![1]).toMatchObject({ status: 'Used', customerId: 'CUST-002', assignedDate: '2026-11-04' });
+    expect(fat.logicalPorts![1]).toMatchObject({ status: 'Used', customerId: created.id, assignedDate: '2026-11-04' });
     expect(next.customers).toHaveLength(2);
-    expect(next.cables.map((c) => c.id)).toContain('DROP-001');
+    expect(next.cables.map((c) => c.id)).toContain(dropCable.id);
     expect(result.notice?.tone).toBe('success');
   });
 

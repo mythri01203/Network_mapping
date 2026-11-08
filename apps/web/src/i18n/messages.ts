@@ -275,6 +275,39 @@ export const MESSAGES = {
   'conflict.more': { en: '{count} more changes', te: d('ఇంకా {count} మార్పులు'), kn: d('ಇನ್ನೂ {count} ಬದಲಾವಣೆಗಳು') },
   'conflict.deleted': { en: 'Deleted', te: d('తొలగించారు'), kn: d('ಅಳಿಸಲಾಗಿದೆ') },
   'conflict.kept': { en: 'Both versions are kept. The office can see them.', te: d('రెండూ దాచి ఉంచాము. ఆఫీస్ చూడగలదు.'), kn: d('ಎರಡನ್ನೂ ಉಳಿಸಲಾಗಿದೆ. ಆಫೀಸ್ ನೋಡಬಹುದು.') },
+
+  // Login (Phase 9)
+  'login.title': { en: 'Log in', te: d('లాగిన్ అవ్వండి'), kn: d('ಲಾಗಿನ್ ಆಗಿ') },
+  'login.whoAreYou': { en: 'Who are you?', te: d('మీరు ఎవరు?'), kn: d('ನೀವು ಯಾರು?') },
+  'login.someoneElse': { en: 'Someone else', te: d('వేరే వ్యక్తి'), kn: d('ಬೇರೆ ವ್ಯಕ್ತಿ') },
+  'login.name': { en: 'Your login name', te: d('మీ లాగిన్ పేరు'), kn: d('ನಿಮ್ಮ ಲಾಗಿನ್ ಹೆಸರು') },
+  'login.password': { en: 'Your password', te: d('మీ పాస్‌వర్డ్'), kn: d('ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್') },
+  'login.show': { en: 'Show', te: d('చూపించు'), kn: d('ತೋರಿಸು') },
+  'login.hide': { en: 'Hide', te: d('దాచు'), kn: d('ಮರೆಮಾಡು') },
+  'login.go': { en: 'Log in', te: d('లాగిన్'), kn: d('ಲಾಗಿನ್') },
+  'login.back': { en: 'Back', te: d('వెనక్కి'), kn: d('ಹಿಂದೆ') },
+  'login.next': { en: 'Next', te: d('తర్వాత'), kn: d('ಮುಂದೆ') },
+  'login.checking': { en: 'Checking', te: d('పరిశీలిస్తోంది'), kn: d('ಪರಿಶೀಲಿಸುತ್ತಿದೆ') },
+  'login.kept': {
+    en: '{count} saved on this phone. They are sent after you log in.',
+    te: d('{count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి.'),
+    kn: d('{count} ಈ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿದಿವೆ. ನೀವು ಲಾಗಿನ್ ಆದ ನಂತರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ.'),
+  },
+  'login.forgot': {
+    en: 'Forgot the password? Ask the office for a new one.',
+    te: d('పాస్‌వర్డ్ మర్చిపోయారా? కొత్తది ఆఫీస్‌ను అడగండి.'),
+    kn: d('ಪಾಸ್‌ವರ್ಡ್ ಮರೆತಿರಾ? ಹೊಸದನ್ನು ಆಫೀಸ್‌ನಲ್ಲಿ ಕೇಳಿ.'),
+  },
+  'login.newPassword': { en: 'Choose your own password', te: d('మీ సొంత పాస్‌వర్డ్ ఎంచుకోండి'), kn: d('ನಿಮ್ಮದೇ ಪಾಸ್‌ವರ್ಡ್ ಆರಿಸಿ') },
+  'login.oldPassword': { en: 'Password you have now', te: d('ఇప్పుడు ఉన్న పాస్‌వర్డ్'), kn: d('ಈಗಿರುವ ಪಾಸ್‌ವರ್ಡ್') },
+  'login.minLength': { en: 'At least {count} letters or digits.', te: d('కనీసం {count} అక్షరాలు లేదా అంకెలు.'), kn: d('ಕನಿಷ್ಠ {count} ಅಕ್ಷರಗಳು ಅಥವಾ ಅಂಕೆಗಳು.') },
+  'login.savePassword': { en: 'Save password', te: d('పాస్‌వర్డ్ సేవ్ చేయండి'), kn: d('ಪಾಸ್‌ವರ್ಡ್ ಉಳಿಸಿ') },
+  'login.later': { en: 'Not now', te: d('ఇప్పుడు కాదు'), kn: d('ಈಗ ಬೇಡ') },
+  'login.offline': {
+    en: 'No internet. You can keep working as {name}. Log in when the signal is back.',
+    te: d('ఇంటర్నెట్ లేదు. {name}గా పని కొనసాగించవచ్చు. సిగ్నల్ వచ్చాక లాగిన్ అవ్వండి.'),
+    kn: d('ಇಂಟರ್ನೆಟ್ ಇಲ್ಲ. {name} ಆಗಿ ಕೆಲಸ ಮುಂದುವರಿಸಬಹುದು. ಸಿಗ್ನಲ್ ಬಂದ ನಂತರ ಲಾಗಿನ್ ಆಗಿ.'),
+  },
 } satisfies Catalog;
 
 export type MessageKey = keyof typeof MESSAGES;

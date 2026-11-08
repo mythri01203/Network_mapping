@@ -14,8 +14,9 @@ import {
   type VersionConflict,
 } from '@fibergis/shared';
 
+import { SqliteAuthStore } from '../auth/authStore';
 import { versionConflict } from '../lib/errors';
-import type { NetworkRepository, WriteGuard } from './repository';
+import type { NetworkRepository, RecordLookup, WriteGuard, WriteOptions } from './repository';
 
 /** Ordered schema migrations; `PRAGMA user_version` records how many have been applied. */
 const MIGRATIONS = [
@@ -41,6 +42,13 @@ const MIGRATIONS = [
  */
 const VERSION_COLUMN = 'ALTER TABLE records ADD COLUMN version INTEGER NOT NULL DEFAULT 0';
 
+/**
+ * Phase 9: the account that first stored each record, so a technician's "undo my own capture" can
+ * be told apart from deleting somebody else's. Empty for older rows and in setup mode. Added the same
+ * way as `version`: no schema number change, and an older server's writes simply leave it as it is.
+ */
+const CREATED_BY_COLUMN = 'ALTER TABLE records ADD COLUMN created_by TEXT';
+
 type Row = Record<string, unknown>;
 
 const prepareStatements = (db: DatabaseSync) => ({
@@ -48,11 +56,12 @@ const prepareStatements = (db: DatabaseSync) => ({
   get: db.prepare('SELECT data FROM records WHERE collection = ? AND id = ?'),
   counts: db.prepare('SELECT collection, COUNT(*) AS total FROM records GROUP BY collection'),
   upsert: db.prepare(
-    `INSERT INTO records (collection, id, position, data, updated_at, version)
-       VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?), ?, ?, ?)
+    `INSERT INTO records (collection, id, position, data, updated_at, version, created_by)
+       VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM records WHERE collection = ?), ?, ?, ?, ?)
        ON CONFLICT (collection, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, version = excluded.version`,
   ),
   version: db.prepare('SELECT version, data FROM records WHERE collection = ? AND id = ?'),
+  lookup: db.prepare('SELECT data, created_by FROM records WHERE collection = ? AND id = ?'),
   versions: db.prepare('SELECT collection, id, version FROM records'),
   remove: db.prepare('DELETE FROM records WHERE collection = ? AND id = ?'),
   clear: db.prepare('DELETE FROM records WHERE collection = ?'),
@@ -70,6 +79,8 @@ export class SqliteNetworkRepository implements NetworkRepository {
   private readonly db: DatabaseSync;
   private readonly statements: ReturnType<typeof prepareStatements>;
   private closed = false;
+  /** Accounts and sessions (Phase 9), in the same database file. */
+  readonly auth: SqliteAuthStore;
 
   constructor(path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -78,6 +89,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
     this.migrate();
 
     this.statements = prepareStatements(this.db);
+    this.auth = new SqliteAuthStore(this.db);
   }
 
   async getNetwork() {
@@ -114,9 +126,21 @@ export class SqliteNetworkRepository implements NetworkRepository {
     return row ? (JSON.parse(String(row.data)) as CollectionRecord<C>) : undefined;
   }
 
-  async applyChanges(changes: ChangeSet, guard?: WriteGuard): Promise<ChangeResult> {
+  async getVersion(collection: CollectionName, id: string) {
+    const row = this.statements.version.get(collection, id) as Row | undefined;
+    return row ? Number(row.version) : undefined;
+  }
+
+  private readonly lookup: RecordLookup = (collection, id) => {
+    const row = this.statements.lookup.get(collection, id) as Row | undefined;
+    if (!row) return undefined;
+    return { record: JSON.parse(String(row.data)) as Record<string, unknown>, createdBy: row.created_by == null ? null : String(row.created_by) };
+  };
+
+  async applyChanges(changes: ChangeSet, guard?: WriteGuard, options: WriteOptions = {}): Promise<ChangeResult> {
     return this.transaction('IMMEDIATE', () => {
-      // Version checks first: a stale edit is refused whole, before any other check or write.
+      // Who may write comes first, then versions: a stale edit is refused whole, before any other check or write.
+      options.access?.(this.lookup);
       const conflicts = this.findConflicts(changes);
       if (conflicts.length > 0) throw versionConflict(conflicts);
       guard?.((collection) => this.readCollection(collection));
@@ -127,7 +151,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
       let deleted = 0;
       for (const [collection, records] of this.entries(changes.upserts)) {
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version, options.actorId ?? null);
           (versions[collection] ??= {})[record.id] = version;
           upserted += 1;
         }
@@ -174,7 +198,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
       for (const [collection, records] of this.entries(collections)) {
         this.statements.clear.run(collection);
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version, null);
         }
       }
       return this.bumpRevision();
@@ -203,7 +227,12 @@ export class SqliteNetworkRepository implements NetworkRepository {
         this.db.exec(`PRAGMA user_version = ${applied + index + 1}`);
       });
     });
-    if (!this.hasVersionColumn()) this.transaction('IMMEDIATE', () => this.db.exec(VERSION_COLUMN));
+    if (!this.hasColumn('version')) this.transaction('IMMEDIATE', () => this.db.exec(VERSION_COLUMN));
+    if (!this.hasColumn('created_by')) this.transaction('IMMEDIATE', () => this.db.exec(CREATED_BY_COLUMN));
+  }
+
+  private hasColumn(name: string): boolean {
+    return (this.db.prepare('PRAGMA table_info(records)').all() as Row[]).some((c) => c.name === name);
   }
 
   private hasVersionColumn(): boolean {

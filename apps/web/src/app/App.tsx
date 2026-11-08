@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 
 import { AgentTrackingRuntime } from '../features/agent-tracking/AgentTrackingRuntime';
+import { AuthGate, SetupBanner, ViewerBanner } from '../features/auth/AuthGate';
 import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
 import { ModalHost } from './ModalHost';
@@ -68,6 +69,8 @@ const AppContent: React.FC = () => {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 font-sans">
       <TopNavBar />
+      <SetupBanner />
+      <ViewerBanner />
       <div className="relative flex flex-1 overflow-hidden">
         <LeftSidebar />
         <Suspense fallback={<ViewFallback />}>
@@ -92,7 +95,9 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <AuthGate>
+        <AppContent />
+      </AuthGate>
     </BrowserRouter>
   );
 }

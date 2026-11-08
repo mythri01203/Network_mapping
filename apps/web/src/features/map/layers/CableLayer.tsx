@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 
 import type { Cable } from '@fibergis/shared';
@@ -8,9 +8,11 @@ import { useTraceStore } from '../../../stores/traceStore';
 import { useUiStore } from '../../../stores/uiStore';
 import { cableStyle } from '../../../theme/network';
 import { cableLayerKey } from '../layerFilters';
+import { lineTouchesBox } from '../leaflet/clustering';
 import { selectFeatureOnClick } from '../leaflet/featureClick';
 import { PANES } from '../leaflet/panes';
 import { useLayerGroup } from '../leaflet/useLayerGroup';
+import { useMapView } from '../leaflet/useMapView';
 import { formatDistance, tooltipHtml } from '../markerIcons';
 
 type HaloKind = 'traced' | 'selected' | null;
@@ -76,13 +78,20 @@ export function CableLayer({ map, cables }: CableLayerProps) {
   const selectedId = useUiStore((s) => (s.selectedObject?.type === 'cable' ? s.selectedObject.data.id : null));
   const tracedIds = useTraceStore((s) => s.cableIds);
   const layerOpacity = useMapStore((s) => s.layerOpacity);
+  // Phase 9: only cables passing through the view (plus a margin) are drawn; the selected or traced ones always.
+  const view = useMapView(map);
+  const inView = useMemo(() => {
+    const keep = new Set(tracedIds);
+    if (selectedId) keep.add(selectedId);
+    return cables.filter((c) => keep.has(c.id) || lineTouchesBox(c.coordinates, view.bbox));
+  }, [cables, view, tracedIds, selectedId]);
 
   useEffect(() => {
     const current = entries.current;
     const traced = new Set(tracedIds);
     const seen = new Set<string>();
 
-    for (const cable of cables) {
+    for (const cable of inView) {
       seen.add(cable.id);
       const isTraced = traced.has(cable.id);
       const isSelected = cable.id === selectedId;
@@ -130,7 +139,7 @@ export function CableLayer({ map, cables }: CableLayerProps) {
       if (entry.halo) group.removeLayer(entry.halo);
       current.delete(id);
     }
-  }, [group, cables, selectedId, tracedIds, layerOpacity]);
+  }, [group, inView, selectedId, tracedIds, layerOpacity]);
 
   return null;
 }

@@ -11,6 +11,7 @@ import {
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { storageKey } from '../lib/storage';
+import { useAuthStore } from '../stores/authStore';
 import type * as NetworkStore from '../stores/networkStore';
 import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
 import { useSyncStore } from '../stores/syncStore';
@@ -462,19 +463,36 @@ describe('reset and restore', () => {
     expect(phase()).toBe('synced');
   });
 
-  it('resets locally while offline and uploads the result later', async () => {
+  it('refuses a reset while offline and changes nothing (Phase 9: the server saves a safety copy first)', async () => {
     await startEngine();
-    renameFirstEquipment('Saved first');
+    const id = renameFirstEquipment('Saved first');
     await idle();
     server.goDown();
+    await vi.advanceTimersByTimeAsync(POLL);
 
-    await expect(engine.reset()).resolves.toBe('local');
-    expect(getNetworkSnapshot().equipment).toEqual(createSampleNetwork().equipment);
+    await expect(engine.reset()).resolves.toBe('failed');
+    expect(getNetworkSnapshot().equipment.find((e) => e.id === id)?.name).toBe('Saved first');
+    expect(server.client.reset).not.toHaveBeenCalled();
+  });
 
+  it('keeps unsent work when the server asks for a login, and sends it after login (Phase 9)', async () => {
+    await startEngine();
+    server.goDown();
+    await vi.advanceTimersByTimeAsync(POLL);
+    const id = renameFirstEquipment('Edited while logged out');
+    vi.mocked(server.client.getNetwork).mockRejectedValueOnce(new ApiError(401, 'login_required', 'Please log in.'));
     server.comeBack();
-    await vi.advanceTimersByTimeAsync(RETRY);
+    await vi.advanceTimersByTimeAsync(RETRY * 4);
     await idle();
-    expect(server.records('equipment')).toEqual(createSampleNetwork().equipment);
+    expect(phase()).toBe('signin');
+    expect(useAuthStore.getState().loginNeeded).toBe(true);
+    expect(engine.unsentIds().equipment).toContain(id);
+    expect(server.records('equipment').find((e) => e.id === id)).not.toMatchObject({ name: 'Edited while logged out' });
+
+    useAuthStore.setState({ account: { id: 'U1', username: 'ravi', displayName: 'Ravi', role: 'engineer' }, loginNeeded: false });
+    await idle();
+    expect(server.records('equipment').find((e) => e.id === id)).toMatchObject({ name: 'Edited while logged out' });
+    useAuthStore.setState({ account: null });
   });
 
   it('restores on the server and applies the start point locally', async () => {

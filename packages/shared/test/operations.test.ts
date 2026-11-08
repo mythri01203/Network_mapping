@@ -35,8 +35,8 @@ describe('reportFault', () => {
   it('derives location and affected customers from the failed equipment', () => {
     const result = reportFault(smallNetwork(), { affectedEquipmentId: 'FAT-01', severity: 'High' }, ctx);
     if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.id).toMatch(/^FLT-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(result.value).toMatchObject({
-      id: 'FLT-2026-001',
       title: 'Fiber Cut at FAT-01',
       affectedLocation: { lat: 17.42, lng: 78.42 },
       affectedCustomerIds: ['CUST-001'],
@@ -60,10 +60,10 @@ describe('reportFault', () => {
     expect(fallback.value.affectedLocation).toEqual({ lat: 12, lng: 77 });
   });
 
-  it('continues the yearly sequence and rejects duplicates', () => {
+  it('makes a random id (Phase 9) and rejects duplicates', () => {
     const data = { ...emptyNetwork(), faults: [fault({ id: 'FLT-2026-007' })] };
     const next = reportFault(data, {}, ctx);
-    expect(next.ok && next.value.id).toBe('FLT-2026-008');
+    expect(next.ok && next.value.id).toMatch(/^FLT-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(reportFault(data, { id: 'FLT-2026-007' }, ctx)).toMatchObject({
       ok: false,
       error: { title: 'Duplicate Fault ID' },
@@ -120,14 +120,14 @@ describe('work orders', () => {
     const data = { ...emptyNetwork(), faults: [fault({ id: 'F1' })] };
     const result = createWorkOrder(data, { title: ' Splice repair ', faultId: 'F1', technicianName: 'Ravi' }, ctx);
     if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.id).toMatch(/^WO-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(result.value).toMatchObject({
-      id: 'WO-2026-001',
       title: 'Splice repair',
       status: 'Assigned',
       scheduledDate: '2026-11-04',
     });
     expect(applyPatch(data, result.patch).faults[0]).toMatchObject({
-      workOrderId: 'WO-2026-001',
+      workOrderId: result.value.id,
       status: 'Dispatched',
       assignedTechnician: 'Ravi',
     });

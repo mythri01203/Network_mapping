@@ -14,7 +14,7 @@ import { connectionUsesOf } from './connectionRules';
 import { buildCores, defaultFiberCount, isLatLngPair } from './defaults';
 import { fiberCascadeForCable } from './fiberCommands';
 import { polylineLengthMeters } from './geo';
-import { cableIdPrefix, nextSequentialId } from './ids';
+import { cableIdPrefix, newRecordId } from './ids';
 import { buildOltPonPorts } from './oltConfig';
 import { cascadeAudit, ospCascadeForCable } from './outsidePlant';
 import { isoDate } from './time';
@@ -37,13 +37,7 @@ export function buildCoresWithCapacity(count: number, reserved = 0, damaged = 0)
 }
 
 export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandContext = {}): CommandResult<Cable> {
-  const id =
-    draft.id?.trim() ||
-    nextSequentialId(
-      cableIdPrefix(draft.type),
-      data.cables.map((c) => c.id),
-      draft.type === 'Drop Fiber' ? 3 : 2,
-    );
+  const id = draft.id?.trim() || newRecordId(cableIdPrefix(draft.type));
   if (data.cables.some((c) => sameId(c.id, id))) {
     return fail('Duplicate Cable ID', `Cable with ID "${id}" already exists.`);
   }

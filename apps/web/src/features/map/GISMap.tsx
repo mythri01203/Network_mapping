@@ -28,7 +28,7 @@ import { useUserLocation } from './leaflet/useUserLocation';
 import { MapControls, OltFilterControl } from './MapControls';
 import { MapToolbar } from './MapToolbar';
 import { categoryForType } from './markerIcons';
-import { nextPoleName } from './sketch/poleNaming';
+import { newEquipmentName, nextPoleName } from './sketch/poleNaming';
 import { SketchTools } from './sketch/SketchTools';
 
 /** The map canvas: owns the Leaflet instance and composes the network layers, tools and controls. */
@@ -52,7 +52,7 @@ export const GISMap: React.FC = () => {
     e.preventDefault();
     const { lat, lng } = map.mouseEventToLatLng(e.nativeEvent);
 
-    let name = `New ${rawType || 'Equipment'}`;
+    let name = '';
     let type = rawType;
     let totalPorts: number | undefined;
 
@@ -70,7 +70,7 @@ export const GISMap: React.FC = () => {
     const placedType = type || 'Outdoor Splitter';
     const created = await placeEquipmentChecked({
       // Poles take the next free number, never the catalog name.
-      name: placedType.includes('Pole') ? nextPoleName(useNetworkStore.getState().equipment) : name,
+      name: placedType.includes('Pole') ? nextPoleName(useNetworkStore.getState().equipment) : name || newEquipmentName(placedType, useNetworkStore.getState().equipment),
       type: placedType,
       locationMethod: 'map_pick',
       lat,

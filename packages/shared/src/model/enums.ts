@@ -6,6 +6,8 @@ export const USER_ROLES = [
   'Network Operator',
   'Field Technician',
   'Supervisor',
+  /** Phase 9: a look-only account. Never writes, so it never appears in audit entries it made. */
+  'Viewer',
 ] as const;
 export const userRoleSchema = z.enum(USER_ROLES);
 export type UserRole = z.infer<typeof userRoleSchema>;

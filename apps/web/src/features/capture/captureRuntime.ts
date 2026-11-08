@@ -16,8 +16,11 @@ async function uploadPhotoHttp(photo: PhotoEntry): Promise<UploadOutcome> {
       headers: { 'content-type': photo.type },
       body: photo.blob,
       signal: AbortSignal.timeout(60_000),
+      credentials: API_BASE ? 'include' : 'same-origin',
     });
     if (response.ok) return { kind: 'stored' };
+    // Login needed (Phase 9): the photo stays on the phone and goes after someone logs in. Never dropped.
+    if (response.status === 401 || response.status === 403) return { kind: 'retry' };
     if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
       const body = (await response.json().catch(() => null)) as { message?: string } | null;
       return { kind: 'refused', reason: body?.message ?? `HTTP ${response.status}` };

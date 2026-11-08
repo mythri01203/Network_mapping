@@ -9,7 +9,7 @@ import {
   sameId,
   succeed,
 } from './command';
-import { nextSequentialId } from './ids';
+import { newRecordId } from './ids';
 import { isoDate } from './time';
 
 export type ZoneDraft = Partial<NetworkZone> & { name: string; areaCode: string };
@@ -24,11 +24,7 @@ export function createZone(data: NetworkData, draft: ZoneDraft, ctx: CommandCont
   if (!name || !areaCode) return fail('Missing Zone Details', 'A zone needs a name and an area code.');
 
   const id =
-    draft.id ||
-    nextSequentialId(
-      'ZONE-',
-      data.zones.map((z) => z.id),
-    );
+    draft.id || newRecordId('ZONE-');
   if (data.zones.some((z) => sameId(z.id, id))) return fail('Duplicate Zone ID', `Zone ${id} already exists.`);
 
   const [lat, lng] = networkAnchor(data, ctx.fallbackLocation) ?? [0, 0];
@@ -104,12 +100,7 @@ export function createDocument(
   const title = draft.title.trim();
   if (!title) return fail('Missing Title', 'A document needs a title.');
   const id =
-    draft.id ||
-    nextSequentialId(
-      'DOC-',
-      data.documents.map((d) => d.id),
-      3,
-    );
+    draft.id || newRecordId('DOC-');
   if (data.documents.some((d) => sameId(d.id, id)))
     return fail('Duplicate Document ID', `Document ${id} already exists.`);
 

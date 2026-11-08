@@ -28,13 +28,14 @@ describe('createEquipment', () => {
     expect(result).toMatchObject({ ok: false, error: { title: 'Duplicate ID Error' } });
   });
 
-  it('assigns the next sequential id, fills defaults and builds logical ports', () => {
+  it('assigns a random id (Phase 9), fills defaults and builds logical ports', () => {
     const data = { ...emptyNetwork(), equipment: [equipment({ id: 'FAT-04', type: 'FAT' })] };
     const result = createEquipment(data, { name: 'New FAT', type: 'FAT', lat: 17.5, lng: 78.5 }, ctx);
     if (!result.ok) throw new Error(result.error.message);
 
+    expect(result.value.id).toMatch(/^FAT-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(result.value).toMatchObject({
-      id: 'FAT-05',
+      name: 'New FAT',
       status: 'Active',
       installedDate: '2026-11-04',
       usedPorts: 0,
@@ -42,8 +43,8 @@ describe('createEquipment', () => {
     expect(result.value.totalPorts).toBeGreaterThan(0);
     expect(result.value.availablePorts).toBe(result.value.totalPorts);
     expect(result.value.logicalPorts).toHaveLength(result.value.totalPorts!);
-    expect(result.patch.equipment?.map((e) => e.id)).toEqual(['FAT-04', 'FAT-05']);
-    expect(result.audit[0]).toMatchObject({ action: 'EQUIPMENT_CREATED', assetId: 'FAT-05' });
+    expect(result.patch.equipment?.map((e) => e.id)).toEqual(['FAT-04', result.value.id]);
+    expect(result.audit[0]).toMatchObject({ action: 'EQUIPMENT_CREATED', assetId: result.value.id });
   });
 });
 

@@ -1,90 +1,21 @@
 import React, { useState } from 'react';
-import { Check, Download, Layers, Search, Upload, X } from 'lucide-react';
+import { Download, Layers, Search, Upload } from 'lucide-react';
 
-import { type FiberColorDef, STANDARD_12_COLORS, type UserRole } from '@fibergis/shared';
+import { type FiberColorDef, STANDARD_12_COLORS } from '@fibergis/shared';
 
-import { backupSystem, exportKML, restoreSystem } from '../../stores/networkActions';
+import { exportKML } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { BackupRestorePanel } from '../admin/BackupRestorePanel';
 import { FaultSettingsPanel, FieldSettingsPanel, OspSettingsPanel } from '../admin/FieldSettingsPanel';
 import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
+import { UsersPanel } from '../admin/UsersPanel';
 
 export const AdminConfigView: React.FC = () => {
-  const userRole = useUiStore((s) => s.userRole);
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
   const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
-
-  const permissionsList = [
-    { key: 'view_gis', label: 'View Leaflet GIS Network Map' },
-    { key: 'add_equipment', label: 'Add & Configure Network Equipment' },
-    { key: 'draw_cables', label: 'Draw Fiber Cables & Manage Routes' },
-    { key: 'splicing', label: 'Core Allocation & Fusion Splicing Matrix' },
-    { key: 'customer_onboard', label: 'Customer Subscriber Connection Wizard' },
-    { key: 'outage_mgmt', label: 'Log & Resolve Network Faults' },
-    { key: 'photo_upload', label: 'Upload Field Photos & Port Markings' },
-    { key: 'reports_export', label: 'Generate Reports (PDF, CSV, GeoJSON, KML)' },
-    { key: 'sys_admin', label: 'System Configuration & Database Backup/Restore' },
-  ];
-
-  const rolePermissions: Record<UserRole, Record<string, boolean>> = {
-    Administrator: {
-      view_gis: true,
-      add_equipment: true,
-      draw_cables: true,
-      splicing: true,
-      customer_onboard: true,
-      outage_mgmt: true,
-      photo_upload: true,
-      reports_export: true,
-      sys_admin: true,
-    },
-    'Network Engineer': {
-      view_gis: true,
-      add_equipment: true,
-      draw_cables: true,
-      splicing: true,
-      customer_onboard: true,
-      outage_mgmt: true,
-      photo_upload: true,
-      reports_export: true,
-      sys_admin: false,
-    },
-    'Network Operator': {
-      view_gis: true,
-      add_equipment: false,
-      draw_cables: false,
-      splicing: false,
-      customer_onboard: true,
-      outage_mgmt: true,
-      photo_upload: true,
-      reports_export: true,
-      sys_admin: false,
-    },
-    'Field Technician': {
-      view_gis: true,
-      add_equipment: false,
-      draw_cables: false,
-      splicing: true,
-      customer_onboard: false,
-      outage_mgmt: true,
-      photo_upload: true,
-      reports_export: false,
-      sys_admin: false,
-    },
-    Supervisor: {
-      view_gis: true,
-      add_equipment: false,
-      draw_cables: false,
-      splicing: false,
-      customer_onboard: false,
-      outage_mgmt: false,
-      photo_upload: false,
-      reports_export: true,
-      sys_admin: false,
-    },
-  };
 
   const filteredLogs = auditLogs.filter(
     (log) =>
@@ -95,18 +26,6 @@ export const AdminConfigView: React.FC = () => {
       log.user.toLowerCase().includes(auditSearch.toLowerCase()),
   );
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        void restoreSystem(content);
-      };
-      reader.readAsText(file);
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
       {/* Top Header */}
@@ -114,7 +33,7 @@ export const AdminConfigView: React.FC = () => {
         <div>
           <h2 className="text-base font-bold text-slate-800">System Administration & Global Configuration</h2>
           <p className="text-xs text-slate-500">
-            RBAC role matrix, 12-fiber color code standards, audit logs, and database backup
+            Users and roles, 12-fiber color code standards, audit logs, and database backup
           </p>
         </div>
 
@@ -126,7 +45,7 @@ export const AdminConfigView: React.FC = () => {
               activeTab === 'roles' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            User Roles & RBAC
+            Users and roles
           </button>
           <button
             onClick={() => setActiveTab('color_standards')}
@@ -195,70 +114,7 @@ export const AdminConfigView: React.FC = () => {
       {/* Main Tab Views */}
       <div className="flex-1 overflow-auto p-6">
         {/* Tab 1: Roles Matrix */}
-        {activeTab === 'roles' && (
-          <div className="max-w-5xl mx-auto space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">Role-Based Access Control (RBAC) Matrix</h3>
-                <p className="text-xs text-slate-500">
-                  Configured permissions for telecom operators, field technicians, and engineers
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500">Current Active Role:</span>
-                <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
-                  {userRole}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 text-[11px] uppercase font-bold">
-                    <th className="py-3 px-4">Permission Module</th>
-                    <th className="py-3 px-3 text-center">Administrator</th>
-                    <th className="py-3 px-3 text-center">Network Engineer</th>
-                    <th className="py-3 px-3 text-center">Network Operator</th>
-                    <th className="py-3 px-3 text-center">Field Technician</th>
-                    <th className="py-3 px-3 text-center">Supervisor</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {permissionsList.map((perm) => (
-                    <tr key={perm.key} className="hover:bg-slate-50/60">
-                      <td className="py-3 px-4 font-semibold text-slate-800">{perm.label}</td>
-                      {(
-                        [
-                          'Administrator',
-                          'Network Engineer',
-                          'Network Operator',
-                          'Field Technician',
-                          'Supervisor',
-                        ] as UserRole[]
-                      ).map((r) => {
-                        const allowed = rolePermissions[r][perm.key];
-                        return (
-                          <td key={r} className="py-3 px-3 text-center">
-                            {allowed ? (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 text-slate-300">
-                                <X className="w-3 h-3" />
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {activeTab === 'roles' && <UsersPanel />}
 
         {/* Tab 2: Color Standards */}
         {activeTab === 'color_standards' && (
@@ -386,43 +242,8 @@ export const AdminConfigView: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* JSON Backup Card */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                    <Download className="w-5 h-5" />
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-800">Export Complete JSON Backup</h4>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Downloads all equipment, fiber cables, splitters, joint closures, subscriber paths, faults, and
-                    zones in structured JSON.
-                  </p>
-                </div>
-                <button
-                  onClick={backupSystem}
-                  className="mt-6 w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Backup File</span>
-                </button>
-              </div>
-
-              {/* Restore Card */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-800">Restore System from JSON</h4>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Import a previously exported backup file to restore complete network configuration.
-                  </p>
-                </div>
-                <label className="mt-6 w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Choose JSON Backup File</span>
-                  <input type="file" accept=".json" onChange={handleFileUpload} className="hidden" />
-                </label>
+              <div className="md:col-span-2">
+                <BackupRestorePanel />
               </div>
 
               {/* Google Earth KML Card */}

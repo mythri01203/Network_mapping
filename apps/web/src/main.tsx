@@ -14,7 +14,7 @@ void import('./features/capture/captureRuntime').then((m) => m.startCaptureRunti
 // workers only on https or localhost, so a phone on plain http over the LAN simply goes without.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => console.warn('Offline support could not start', error));
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((error) => console.warn('Offline support could not start', error));
   });
 }
 

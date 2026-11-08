@@ -55,6 +55,13 @@ const PHASES: Record<SyncPhase, PhaseMeta> = {
     description:
       'The server is unreachable. You can keep working; changes are kept in this browser and sent when it is back.',
   },
+  signin: {
+    label: 'Log in to send',
+    icon: CloudAlert,
+    tone: 'text-amber-300',
+    dot: 'bg-amber-400',
+    description: 'Login is on and nobody is logged in on this device. Your changes are kept here and are sent after you log in.',
+  },
   error: {
     label: 'Sync error',
     icon: CloudAlert,

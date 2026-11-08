@@ -1,17 +1,22 @@
 import { create } from 'zustand';
 
 import {
+  type Account,
   type AgentTrip,
   applyPatch,
+  AUDIT_ROLE_FOR,
   type AuditEntry,
   type AuditLog,
   type CatalogComponent,
+  type ChangeSet,
+  checkChangeAccess,
   COLLECTION_NAMES,
   type CollectionName,
   type ColorScheme,
   type CommandContext,
   type CommandResult,
   type CommandSuccess,
+  describeAccessProblems,
   formatLogTimestamp,
   type GpsRoute,
   isLatLngPair,
@@ -24,6 +29,7 @@ import {
   resolveColorSchemes,
   resolveOpticalSettings,
   resolveOspSettings,
+  roleMay,
   type Setting,
   type SyncConflict,
   uniqueId,
@@ -32,6 +38,7 @@ import {
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { browserStorage, readJson, removeKeys, storageKey, writeJson } from '../lib/storage';
+import { currentAccount, loginIsOn } from './authStore';
 import { requestConfirm } from './confirmStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
@@ -111,6 +118,14 @@ const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
 };
 
 export type Command<T> = (data: NetworkData, ctx: CommandContext) => CommandResult<T>;
+
+/** Settings are for engineers and the administrator once login is on (Phase 9). */
+function settingsAllowed(): boolean {
+  const account = enforcedAccount();
+  if (!account || roleMay(account.role, 'change_settings')) return true;
+  showToast('error', 'Not allowed for your account', 'Only engineers and the administrator change settings. Nothing was changed.');
+  return false;
+}
 
 export interface CommandOptions {
   /** Apply without a notice toast or audit entries (e.g. continuous drags). */
@@ -219,13 +234,45 @@ function syncSelection(before: NetworkData, after: NetworkData): void {
   if (existed) select(null);
 }
 
-const toAuditLog = (entry: AuditEntry, role: UserRole, now: Date): AuditLog => ({
+/** The logged-in person (Phase 9), or the older role choice in setup mode. The server stamps the real person again. */
+const toAuditLog = (entry: AuditEntry, role: UserRole, now: Date, account: Account | null): AuditLog => ({
   id: uniqueId('LOG'),
   timestamp: formatLogTimestamp(now),
-  user: `${role} (local session)`,
-  role,
+  user: account ? account.displayName : `${role} (local session)`,
+  role: account ? AUDIT_ROLE_FOR[account.role] : role,
   ...entry,
 });
+
+/** The person whose rules apply here, or null when login is off (setup mode: everything allowed, as before). */
+const enforcedAccount = (): Account | null => (loginIsOn() ? currentAccount() : null);
+
+/**
+ * The same access rules the server applies (`checkChangeAccess`), run before a change is made, so
+ * the person is told at once in plain words instead of finding a refused item later. The server
+ * stays the last word (it also knows who first saved each record).
+ */
+function accessProblem(before: NetworkData, patch: NetworkPatch): string | null {
+  const account = enforcedAccount();
+  if (!account) return null;
+  const changes: ChangeSet = { upserts: {}, deletes: {} };
+  for (const key of DATA_KEYS) {
+    const next = patch[key] as readonly { id: string }[] | undefined;
+    const prev = before[key] as readonly { id: string }[];
+    if (!next || next === prev) continue;
+    const old = new Map(prev.map((r) => [r.id, r]));
+    const upserts = next.filter((r) => old.get(r.id) !== r);
+    const kept = new Set(next.map((r) => r.id));
+    const deletes = prev.filter((r) => !kept.has(r.id)).map((r) => r.id);
+    if (upserts.length) (changes.upserts as Record<string, unknown[]>)[key] = upserts;
+    if (deletes.length) (changes.deletes as Record<string, string[]>)[key] = deletes;
+  }
+  const lookup = (collection: CollectionName, id: string) => {
+    const record = (before[collection as keyof NetworkData] as readonly { id: string }[] | undefined)?.find((r) => r.id === id);
+    return record ? { record: record as unknown as Record<string, unknown> } : undefined;
+  };
+  const problems = checkChangeAccess(account, changes, lookup);
+  return problems.length > 0 ? describeAccessProblems(problems) : null;
+}
 
 let opticalCache: { records: readonly Setting[]; merged: OpticalSettings } | null = null;
 
@@ -257,15 +304,22 @@ export const selectOspSettings = (state: Pick<NetworkSnapshot, 'settings'>): Osp
 export const useNetworkStore = create<NetworkState>()((set, get) => {
   const initial = loadInitialState();
 
-  const commit = (patch: NetworkPatch) => {
+  /** False when the person may not make this change; nothing is changed then. */
+  const commit = (patch: NetworkPatch): boolean => {
     const state = get();
     const before = pickData(state);
-    if (!DATA_KEYS.some((key) => patch[key] !== undefined && patch[key] !== before[key])) return;
+    if (!DATA_KEYS.some((key) => patch[key] !== undefined && patch[key] !== before[key])) return true;
+    const refused = accessProblem(before, patch);
+    if (refused) {
+      showToast('error', 'Not allowed for your account', refused);
+      return false;
+    }
     const after = applyPatch(before, patch);
     const { stack, index } = state.history;
     const nextStack = [...stack.slice(0, index + 1), after].slice(-MAX_HISTORY);
     set({ ...patch, history: { stack: nextStack, index: nextStack.length - 1 } });
     syncSelection(before, after);
+    return true;
   };
 
   const travel = (index: number) => {
@@ -282,9 +336,10 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
   const evaluate = <T>(command: Command<T>): CommandSuccess<T> | null => {
     const state = get();
     const role = useUiStore.getState().userRole;
+    const account = currentAccount();
     const result = command(pickData(state), {
       now: new Date(),
-      actor: `${role} User`,
+      actor: account ? account.displayName : `${role} User`,
       fallbackLocation: state.projectStartPoint ?? undefined,
       optical: selectOpticalSettings(state),
       schemes: selectColorSchemes(state),
@@ -294,11 +349,12 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     return null;
   };
 
-  const apply = <T>(result: CommandSuccess<T>, options: CommandOptions) => {
-    commit(result.patch);
-    if (options.silent) return;
+  const apply = <T>(result: CommandSuccess<T>, options: CommandOptions): boolean => {
+    if (!commit(result.patch)) return false;
+    if (options.silent) return true;
     if (result.notice) showToast(result.notice.tone, result.notice.title, result.notice.message);
     get().logAudit(...result.audit);
+    return true;
   };
 
   return {
@@ -312,8 +368,7 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
         void get().runConfirmedCommand(command, options);
         return null;
       }
-      apply(result, options);
-      return result;
+      return apply(result, options) ? result : null;
     },
 
     runConfirmedCommand: async (command, options = {}) => {
@@ -329,16 +384,18 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
         // Re-run against the network as it is now; it may have changed while the dialog was open.
         return confirmed ? get().runCommand(command, { ...options, skipConfirm: true }) : null;
       }
-      apply(result, options);
-      return result;
+      return apply(result, options) ? result : null;
     },
 
     logAudit: (...entries) => {
       if (entries.length === 0) return;
       const role = useUiStore.getState().userRole;
+      const account = currentAccount();
+      // A look-only account changes nothing, so it writes no audit entries either.
+      if (account?.role === 'viewer') return;
       const now = new Date();
       // Newest first, matching how the audit trail is displayed.
-      const logs = entries.map((entry) => toAuditLog(entry, role, now)).reverse();
+      const logs = entries.map((entry) => toAuditLog(entry, role, now, account)).reverse();
       set((s) => ({ auditLogs: [...logs, ...s.auditLogs].slice(0, MAX_AUDIT_LOGS) }));
     },
 
@@ -387,10 +444,12 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     },
 
     saveSetting: (setting) => {
+      if (!settingsAllowed()) return;
       set((s) => ({ settings: [...s.settings.filter((item) => item.id !== setting.id), setting] }));
     },
 
     deleteSetting: (id) => {
+      if (!settingsAllowed()) return;
       set((s) => ({ settings: s.settings.filter((item) => item.id !== id) }));
     },
 
@@ -406,7 +465,7 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       const list = state[collection] as readonly { id: string }[];
       const found = list.some((r) => r.id === id);
       const next = record ? (found ? list.map((r) => (r.id === id ? record : r)) : [...list, record]) : list.filter((r) => r.id !== id);
-      if ((DATA_KEYS as readonly string[]).includes(collection)) commit({ [collection]: next } as NetworkPatch);
+      if ((DATA_KEYS as readonly string[]).includes(collection)) void commit({ [collection]: next } as NetworkPatch);
       else set({ [collection]: next } as Partial<NetworkState>);
     },
   };

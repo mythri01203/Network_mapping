@@ -25,12 +25,12 @@ describe('createApiClient', () => {
     expect(init?.headers).toMatchObject({ 'content-type': 'application/json' });
   });
 
-  it('omits the content type on body-less POSTs', async () => {
+  it('sends the plain confirmation with a reset (Phase 9)', async () => {
     const { fetch, client } = clientWith(() => jsonResponse({ revision: 1 }));
     await client.reset();
     const init = fetch.mock.calls[0][1];
-    expect(init?.body).toBeUndefined();
-    expect(init?.headers).not.toHaveProperty('content-type');
+    expect(JSON.parse(String(init?.body))).toEqual({ confirm: 'reset' });
+    expect(init?.headers).toMatchObject({ 'content-type': 'application/json' });
   });
 
   it('sends backups in the restore request format', async () => {

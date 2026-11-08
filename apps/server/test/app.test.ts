@@ -24,6 +24,7 @@ async function start(overrides: Partial<AppConfig> = {}, fetchImpl?: typeof fetc
     databasePath: ':memory:',
     // Never the real data folder.
     photosDir: join(mkdtempSync(join(tmpdir(), 'fibergis-photos-')), 'photos'),
+    backupsDir: join(mkdtempSync(join(tmpdir(), 'fibergis-backups-')), 'backups'),
     ...overrides,
   };
   repository = new SqliteNetworkRepository(config.databasePath);
@@ -130,7 +131,13 @@ describe('API', () => {
     await app.inject({ method: 'POST', url: api('/changes'), payload: { deletes: { equipment: ['OLT-01'] } } });
     const restore = await app.inject({ method: 'POST', url: api('/restore'), payload: backup });
     expect(restore.statusCode).toBe(200);
-    expect((await getNetwork()).data).toEqual(sample);
+    expect(restore.json().safetyCopy).toMatch(/^fibergis-before-restore-.+\.zip$/);
+    const { auditLogs, ...rest } = (await getNetwork()).data;
+    const { auditLogs: sampleLogs, ...sampleRest } = sample;
+    expect(rest).toEqual(sampleRest);
+    // Phase 9: the server adds one audit entry for the restore, naming the safety copy.
+    expect(auditLogs.filter((l) => l.action === 'BACKUP_RESTORED')).toHaveLength(1);
+    expect(auditLogs).toHaveLength(sampleLogs.length + 1);
   });
 
   it('restores legacy backups and leaves missing collections untouched', async () => {
@@ -164,7 +171,7 @@ describe('API', () => {
       },
     });
     const reset = await app.inject({ method: 'POST', url: api('/reset') });
-    expect(reset.json()).toEqual({ revision: 3 });
+    expect(reset.json()).toMatchObject({ revision: 4, safetyCopy: expect.stringMatching(/^fibergis-before-reset-/) });
 
     const { data } = await getNetwork();
     expect(data.cables).toEqual(sample.cables);
@@ -375,7 +382,8 @@ describe('outside-plant link checks', () => {
     await send({ upserts: { spans: [span] } });
     const response = await app.inject({ method: 'POST', url: api('/restore'), payload: { equipment: [] } });
     expect(response.statusCode).toBe(409);
-    expect(response.json().message).toMatch(/broken links/);
+    expect(response.json()).toMatchObject({ error: 'restore_refused', total: 2, counts: { links: 2 } });
+    expect(response.json().message).toMatch(/Nothing was restored/);
   });
 
   it('keeps old records without the new fields working', async () => {

@@ -231,3 +231,22 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `conflict.more` | {count} more changes | ఇంకా {count} మార్పులు | ಇನ್ನೂ {count} ಬದಲಾವಣೆಗಳು |
 | `conflict.deleted` | Deleted | తొలగించారు | ಅಳಿಸಲಾಗಿದೆ |
 | `conflict.kept` | Both versions are kept. The office can see them. | రెండూ దాచి ఉంచాము. ఆఫీస్ చూడగలదు. | ಎರಡನ್ನೂ ಉಳಿಸಲಾಗಿದೆ. ಆಫೀಸ್ ನೋಡಬಹುದು. |
+| `login.title` | Log in | లాగిన్ అవ్వండి | ಲಾಗಿನ್ ಆಗಿ |
+| `login.whoAreYou` | Who are you? | మీరు ఎవరు? | ನೀವು ಯಾರು? |
+| `login.someoneElse` | Someone else | వేరే వ్యక్తి | ಬೇರೆ ವ್ಯಕ್ತಿ |
+| `login.name` | Your login name | మీ లాగిన్ పేరు | ನಿಮ್ಮ ಲಾಗಿನ್ ಹೆಸರು |
+| `login.password` | Your password | మీ పాస్‌వర్డ్ | ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ |
+| `login.show` | Show | చూపించు | ತೋರಿಸು |
+| `login.hide` | Hide | దాచు | ಮರೆಮಾಡು |
+| `login.go` | Log in | లాగిన్ | ಲಾಗಿನ್ |
+| `login.back` | Back | వెనక్కి | ಹಿಂದೆ |
+| `login.next` | Next | తర్వాత | ಮುಂದೆ |
+| `login.checking` | Checking | పరిశీలిస్తోంది | ಪರಿಶೀಲಿಸುತ್ತಿದೆ |
+| `login.kept` | {count} saved on this phone. They are sent after you log in. | {count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి. | {count} ಈ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿದಿವೆ. ನೀವು ಲಾಗಿನ್ ಆದ ನಂತರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. |
+| `login.forgot` | Forgot the password? Ask the office for a new one. | పాస్‌వర్డ్ మర్చిపోయారా? కొత్తది ఆఫీస్‌ను అడగండి. | ಪಾಸ್‌ವರ್ಡ್ ಮರೆತಿರಾ? ಹೊಸದನ್ನು ಆಫೀಸ್‌ನಲ್ಲಿ ಕೇಳಿ. |
+| `login.newPassword` | Choose your own password | మీ సొంత పాస్‌వర్డ్ ఎంచుకోండి | ನಿಮ್ಮದೇ ಪಾಸ್‌ವರ್ಡ್ ಆರಿಸಿ |
+| `login.oldPassword` | Password you have now | ఇప్పుడు ఉన్న పాస్‌వర్డ్ | ಈಗಿರುವ ಪಾಸ್‌ವರ್ಡ್ |
+| `login.minLength` | At least {count} letters or digits. | కనీసం {count} అక్షరాలు లేదా అంకెలు. | ಕನಿಷ್ಠ {count} ಅಕ್ಷರಗಳು ಅಥವಾ ಅಂಕೆಗಳು. |
+| `login.savePassword` | Save password | పాస్‌వర్డ్ సేవ్ చేయండి | ಪಾಸ್‌ವರ್ಡ್ ಉಳಿಸಿ |
+| `login.later` | Not now | ఇప్పుడు కాదు | ಈಗ ಬೇಡ |
+| `login.offline` | No internet. You can keep working as {name}. Log in when the signal is back. | ఇంటర్నెట్ లేదు. {name}గా పని కొనసాగించవచ్చు. సిగ్నల్ వచ్చాక లాగిన్ అవ్వండి. | ಇಂಟರ್ನೆಟ್ ಇಲ್ಲ. {name} ಆಗಿ ಕೆಲಸ ಮುಂದುವರಿಸಬಹುದು. ಸಿಗ್ನಲ್ ಬಂದ ನಂತರ ಲಾಗಿನ್ ಆಗಿ. |

@@ -54,7 +54,7 @@ describe('createCable', () => {
       ctx,
     );
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.id).toBe('CBL-FEEDER-01');
+    expect(result.value.id).toMatch(/^CBL-FEEDER-[0-9A-HJKMNP-TV-Z]{10}$/);
     expect(result.value.lengthMeters).toBeGreaterThan(1400);
     expect(result.value.lengthMeters).toBeLessThan(1600);
     expect(result.value.cores).toHaveLength(result.value.fiberCount);
@@ -66,7 +66,7 @@ describe('createCable', () => {
   it('pads drop cable ids to three digits', () => {
     const result = createCable(emptyNetwork(), { name: 'Drop', type: 'Drop Fiber', coordinates: route }, ctx);
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.id).toBe('DROP-001');
+    expect(result.value.id).toMatch(/^DROP-[0-9A-HJKMNP-TV-Z]{10}$/);
   });
 });
 

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { PHOTO_ID_PATTERN, photoUrl } from '@fibergis/shared';
 
+import { requireSystem } from '../auth/access';
 import { badRequest, HttpError, notFound } from '../lib/errors';
 
 /** Phone photos are compressed to about 1280 px before upload, so 5 MB leaves a wide margin. */
@@ -70,6 +71,8 @@ export const photoRoutes =
     };
 
     app.put<{ Params: PhotoParams }>('/photos/:id', async (request, reply) => {
+      // Look-only accounts send no photos (Phase 9). Login is checked for every API request.
+      requireSystem(request, 'upload_photo');
       const { id } = request.params;
       checkId(id);
       const type = String(request.headers['content-type'] ?? '')

@@ -14,7 +14,7 @@ import { connectionUsesOf } from './connectionRules';
 import { defaultPortCount, isValidCoordinate } from './defaults';
 import { fiberCascadeForEquipment } from './fiberCommands';
 import { polylineLengthMeters } from './geo';
-import { equipmentIdPrefix, nextSequentialId, uniqueId } from './ids';
+import { equipmentIdPrefix, newRecordId, uniqueId } from './ids';
 import { cascadeAudit, ospCascadeForEquipment } from './outsidePlant';
 import { generateLogicalPorts, summarizePorts } from './ports';
 import { createSplitter } from './provisioning';
@@ -34,12 +34,8 @@ export function createEquipment(
     return fail('Invalid Location', 'Equipment needs a valid latitude (-90..90) and longitude (-180..180).');
   }
 
-  const id =
-    draft.id?.trim() ||
-    nextSequentialId(
-      equipmentIdPrefix(draft.type),
-      data.equipment.map((e) => e.id),
-    );
+  // Phase 9: a random ID, so two people working offline never make the same one. The name is what people see.
+  const id = draft.id?.trim() || newRecordId(equipmentIdPrefix(draft.type));
   if (data.equipment.some((e) => sameId(e.id, id))) {
     return fail('Duplicate ID Error', `Equipment with ID "${id}" already exists.`);
   }

@@ -12,7 +12,9 @@ import {
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { readJson, writeJson } from '../lib/storage';
-import { getNetworkSnapshot, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
+import { currentAccount, useAuthStore } from '../stores/authStore';
+import { getNetworkSnapshot, MAX_AUDIT_LOGS, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
+import { useRestoreStore } from '../stores/restoreStore';
 import { initialSyncState, type RefusedRecord, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
 import { useUiStore } from '../stores/uiStore';
@@ -30,7 +32,7 @@ import {
   recordKey,
   sameValue,
 } from './changeTracking';
-import { type ApiClient, apiClient, ApiError, describeApiError, isTransientError } from './client';
+import { type ApiClient, apiClient, ApiError, describeApiError, isTransientError, type RestoreResult } from './client';
 
 type RecordKey = { collection: CollectionName; id: string };
 
@@ -95,6 +97,9 @@ const findRecord = (snapshot: NetworkSnapshot, { collection, id }: RecordKey) =>
 
 export type ConflictChoice = 'theirs' | 'mine' | 'office';
 
+/** Who this device is working for, for conflict records: the logged-in person, or the older role choice. */
+const deviceUser = () => currentAccount()?.displayName ?? useUiStore.getState().userRole;
+
 /** One line for the sync status: which record, why, and what to do next. */
 const describeRefusal = (records: readonly RefusedRecord[]): string => {
   const [first] = records;
@@ -119,8 +124,14 @@ export interface SyncEngine {
   discardLocalChanges(): Promise<void>;
   /** Reloads the demo network (keeping the catalog) on the server, or locally while offline. */
   reset(): Promise<SyncOutcome>;
-  /** Replaces the collections in a backup on the server, or locally while offline. */
-  restore(backup: ParsedBackup): Promise<SyncOutcome>;
+  /**
+   * Replaces the collections in a backup on the server. Since Phase 9 only the server does this
+   * (it saves a safety copy first and checks the backup), so with no connection nothing happens.
+   * A backup the checks refuse rejects with that `ApiError` (`restore_refused`) and its problem list.
+   */
+  restore(backup: ParsedBackup, options?: { acceptProblems?: boolean }): Promise<SyncOutcome>;
+  /** The same for a `.zip` backup with photos. */
+  restoreZip(zip: Blob, options?: { acceptProblems?: boolean }): Promise<SyncOutcome>;
   isConnected(): boolean;
   /** Records the server has not acknowledged yet: waiting, being sent, refused, or held in a conflict. */
   unsentIds(): PendingIds;
@@ -160,7 +171,8 @@ export function createSyncEngine({
   let started = false;
   let meta: SyncMeta = { revision: null, pending: {} };
   let sending: PendingIds | null = null;
-  let link: 'connecting' | 'online' | 'offline' = 'connecting';
+  /** `signin`: login is on and this device has no session. Everything unsent is kept until someone logs in. */
+  let link: 'connecting' | 'online' | 'offline' | 'signin' = 'connecting';
   let linkError: string | null = null;
   /** Records the server refused. They stay in this browser and do not hold up anything else. */
   let refused: RefusedRecord[] = [];
@@ -222,7 +234,13 @@ export function createSyncEngine({
       revision: meta.revision,
       pendingCount,
       lastSyncedAt,
-      error: refused[0] ? describeRefusal(refused) : link === 'offline' ? linkError : null,
+      error: refused[0]
+        ? describeRefusal(refused)
+        : link === 'offline'
+          ? linkError
+          : link === 'signin'
+            ? `Log in to send. ${pendingCount > 0 ? `${pendingCount} change(s) are kept on this device until then.` : 'Nothing is lost.'}`
+            : null,
       refused,
       held: flatten(held()).map((k) => recordKey(k.collection, k.id)),
     });
@@ -289,7 +307,7 @@ export function createSyncEngine({
         theirs: conflict.record,
         changedFields: changedFields(mine, conflict.record).slice(0, 300),
         detectedAt: new Date().toISOString(),
-        detectedBy: `${useUiStore.getState().userRole} (this device)`,
+        detectedBy: `${deviceUser()} (this device)`,
         status: 'open',
       };
       useNetworkStore.getState().saveSyncConflict(record);
@@ -304,7 +322,10 @@ export function createSyncEngine({
   const applyRemote = (collections: Partial<NetworkSnapshot>) => {
     applyingRemote = true;
     try {
-      useNetworkStore.getState().replaceCollections(collections);
+      // The server keeps the whole audit trail (Phase 9); this device keeps the newest entries only.
+      const logs = collections.auditLogs;
+      const trimmed = logs && logs.length > MAX_AUDIT_LOGS ? { ...collections, auditLogs: logs.slice(0, MAX_AUDIT_LOGS) } : collections;
+      useNetworkStore.getState().replaceCollections(trimmed);
     } finally {
       applyingRemote = false;
     }
@@ -341,6 +362,19 @@ export function createSyncEngine({
     reconnectTimer = setTimeout(() => void exclusive(connect), delay);
   };
 
+  /** The server wants a login. Nothing is refused or dropped: the work waits here until someone logs in. */
+  const needLogin = () => {
+    link = 'signin';
+    linkError = null;
+    clearFlushTimers();
+    clearTimeout(reconnectTimer);
+    stopPolling();
+    updateStatus();
+    useAuthStore.getState().markLoginNeeded();
+  };
+
+  const isLoginError = (error: unknown) => error instanceof ApiError && error.isLoginRequired;
+
   const goOffline = (error: unknown) => {
     link = 'offline';
     linkError = describeApiError(error);
@@ -376,6 +410,11 @@ export function createSyncEngine({
       recordWritten(keys, result);
       return result.upserted + result.deleted;
     } catch (error) {
+      if (isLoginError(error)) {
+        notSent.push(...keys);
+        needLogin();
+        return 0;
+      }
       if (isTransientError(error)) {
         notSent.push(...keys);
         goOffline(error);
@@ -414,7 +453,8 @@ export function createSyncEngine({
     try {
       response = await client.getNetwork();
     } catch (error) {
-      goOffline(error);
+      if (isLoginError(error)) needLogin();
+      else goOffline(error);
       return;
     }
     if (!started) return;
@@ -458,11 +498,12 @@ export function createSyncEngine({
     try {
       result = await client.applyChanges(buildChangeSet(batch, getNetworkSnapshot(), meta.bases));
     } catch (error) {
-      if (isTransientError(error)) {
+      if (isLoginError(error) || isTransientError(error)) {
         meta.pending = mergePending(batch, meta.pending);
         sending = null;
         persistMeta();
-        handleFailure(error);
+        if (isLoginError(error)) needLogin();
+        else handleFailure(error);
         return;
       }
       const keys = flatten(batch);
@@ -519,6 +560,7 @@ export function createSyncEngine({
         const health = await client.health();
         if (health.revision !== meta.revision) await connect();
       } catch (error) {
+        if (isLoginError(error)) needLogin();
         if (isTransientError(error)) goOffline(error);
       }
     });
@@ -528,7 +570,11 @@ export function createSyncEngine({
 
   const onLocalChange = (state: NetworkSnapshot, prev: NetworkSnapshot) => {
     if (applyingRemote) return;
-    const all = changedIds(prev, state);
+    const changedAll = changedIds(prev, state);
+    // Audit entries this device drops to keep only its newest are not deleted on the server.
+    const keptLogs = new Set(state.auditLogs.map((l) => l.id));
+    const all = changedAll.auditLogs ? { ...changedAll, auditLogs: changedAll.auditLogs.filter((id) => keptLogs.has(id)) } : changedAll;
+    if (all.auditLogs?.length === 0) delete all.auditLogs;
     if (isEmptyPending(all)) return;
     // A record in an open conflict stays held: further edits wait for the person's choice.
     const heldKeys = new Set(flatten(held()).map((k) => recordKey(k.collection, k.id)));
@@ -571,10 +617,56 @@ export function createSyncEngine({
     client.applyChanges(changes, { keepalive: true }).catch(() => undefined);
   };
 
-  const localReset = () => {
-    const sample = createSampleNetwork();
-    useNetworkStore.getState().replaceCollections({ ...sample, catalog: useNetworkStore.getState().catalog });
+  /** Reset and restore need the server (safety copy and checks), so offline they are refused plainly. */
+  const needServer = (what: string): SyncOutcome => {
+    showToast('warning', 'Needs the server', `${what} works only with a connection to the office server, which saves a safety copy first. Nothing was changed.`);
+    return 'failed';
   };
+
+  /** After the server replaced collections: drop what was waiting for them and reload. */
+  const afterRestore = async (result: RestoreResult, projectStartPoint?: ParsedBackup['projectStartPoint']) => {
+    useRestoreStore.getState().setLastResult({
+      restored: result.restored,
+      safetyCopy: result.safetyCopy,
+      photosAdded: result.photosAdded,
+      photosSkipped: result.photosSkipped,
+      acceptedProblems: result.acceptedProblems,
+    });
+    meta.pending = omitCollections(meta.pending, result.restored);
+    meta.held = omitCollections(held(), result.restored);
+    meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => !result.restored.includes(k.split('/')[0] as CollectionName)));
+    refused = refused.filter((item) => !result.restored.includes(item.collection as CollectionName));
+    persistMeta();
+    await connect();
+    const start = projectStartPoint ?? result.projectStartPoint;
+    if (start) useNetworkStore.getState().setProjectStartPoint(start);
+  };
+
+  const runRestore = (send: () => Promise<RestoreResult>, projectStartPoint?: ParsedBackup['projectStartPoint']) =>
+    exclusive(async (): Promise<SyncOutcome> => {
+      if (started && link === 'online') await sendPending();
+      if (!started || link !== 'online') return needServer('Restore');
+      try {
+        await afterRestore(await send(), projectStartPoint);
+        return 'server';
+      } catch (error) {
+        if (error instanceof ApiError && error.code === 'restore_refused') throw error;
+        if (isLoginError(error)) needLogin();
+        else if (isTransientError(error)) goOffline(error);
+        else handleFailure(error);
+        return 'failed';
+      }
+    });
+
+  const sendPending = () => send();
+
+  // After a login, send what waited and load what changed meanwhile.
+  useAuthStore.subscribe((state, prev) => {
+    if (started && state.account && state.account !== prev.account && link === 'signin') {
+      retryAttempt = 0;
+      void exclusive(connect);
+    }
+  });
 
   return {
     start() {
@@ -636,53 +728,30 @@ export function createSyncEngine({
       exclusive(async (): Promise<SyncOutcome> => {
         // Catalog edits survive a reset, so they are saved first.
         if (started && link === 'online') await send();
-        if (started && link === 'online') {
-          try {
-            await client.reset();
-            meta.pending = meta.pending.catalog ? { catalog: meta.pending.catalog } : {};
-            meta.held = {};
-            meta.bases = {};
-            refused = [];
-            persistMeta();
-            await connect();
-            return 'server';
-          } catch (error) {
-            if (!isTransientError(error)) {
-              handleFailure(error);
-              return 'failed';
-            }
-            goOffline(error);
-          }
+        if (!started || link !== 'online') return needServer('Reset');
+        try {
+          await client.reset();
+          meta.pending = meta.pending.catalog ? { catalog: meta.pending.catalog } : {};
+          meta.held = {};
+          meta.bases = {};
+          refused = [];
+          persistMeta();
+          await connect();
+          return 'server';
+        } catch (error) {
+          if (isLoginError(error)) needLogin();
+          else if (isTransientError(error)) goOffline(error);
+          else handleFailure(error);
+          return 'failed';
         }
-        // Offline: reset this copy; the change tracker uploads the result once the server is back.
-        localReset();
-        return 'local';
       }),
 
-    restore: (backup) =>
-      exclusive(async (): Promise<SyncOutcome> => {
-        if (started && link === 'online') await send();
-        if (started && link === 'online') {
-          try {
-            const result = await client.restore(backup);
-            meta.pending = omitCollections(meta.pending, result.restored);
-            meta.held = omitCollections(held(), result.restored);
-            meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => !result.restored.includes(k.split('/')[0] as CollectionName)));
-            refused = refused.filter((item) => !result.restored.includes(item.collection as CollectionName));
-            persistMeta();
-            await connect();
-            if (backup.projectStartPoint) useNetworkStore.getState().setProjectStartPoint(backup.projectStartPoint);
-            return 'server';
-          } catch (error) {
-            if (!isTransientError(error)) {
-              handleFailure(error);
-              return 'failed';
-            }
-            goOffline(error);
-          }
-        }
-        useNetworkStore.getState().replaceCollections(backup.collections, backup.projectStartPoint);
-        return 'local';
+    restore: (backup, options = {}) => runRestore(() => client.restore(backup, options), backup.projectStartPoint),
+
+    restoreZip: (zip, options = {}) =>
+      runRestore(() => {
+        if (!client.restoreZip) throw new ApiError(400, 'not_supported', 'This client cannot send zip backups.');
+        return client.restoreZip(zip, options);
       }),
 
     isConnected: () => started && link === 'online',
@@ -716,7 +785,7 @@ export function createSyncEngine({
         }
         meta.bases = bases;
         const status = choice === 'mine' ? 'kept_mine' : choice === 'theirs' ? 'kept_theirs' : 'office_decides';
-        const who = `${useUiStore.getState().userRole} (this device)`;
+        const who = `${deviceUser()} (this device)`;
         useNetworkStore.getState().saveSyncConflict({ ...conflict, status, decidedAt: new Date().toISOString(), decidedBy: who });
         useNetworkStore.getState().logAudit({
           action: 'SYNC_CONFLICT_CHOICE',

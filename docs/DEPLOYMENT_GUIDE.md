@@ -23,7 +23,9 @@ fibergis.example.in {
 }
 ```
 
-Then build and start the app (`npm run build`, then `npm start`) and open `https://fibergis.example.in/capture` on the phone. **Do not expose the server to the internet before login exists** (see the security section of `AUDIT_REPORT.md`); keep the domain reachable only on your own network or VPN.
+Then build and start the app (`npm run build`, then `npm start`) and open `https://fibergis.example.in/capture` on the phone. **Create the first administrator account (see "Login" below) before the address is reachable by anyone else**, and set `TRUST_PROXY=1` so the server sees the real https address and client IP (needed for secure cookies and for the login limit).
+
+The server can also serve https itself: set `HTTPS_CERT_FILE` and `HTTPS_KEY_FILE` to a certificate and key. Keep key files out of the repository (`certs/` is git-ignored).
 
 ### B. Testing on the office network: `dev:https` (opt-in)
 
@@ -66,3 +68,37 @@ The first start of a Phase 8 server adds a `version` column to the records table
 ## Settings for the field
 
 Administration, **Field capture settings**: GPS accept and warn limits, readings to average, how long to wait before offering "office will place it", the "same one?" search radius, light meter decimals and plausible range, and the supervisor's phone number (the **Call supervisor** button stays hidden until it is set). All limits are proposals from `fibergis-osp-mapping`; test them on your own streets.
+
+## Login (Phase 9)
+
+**Setup mode.** A server with no user accounts runs with login off, as before, and every screen shows "Login is off — create the first admin account; keep this server on a trusted network". This is so an existing server is not locked out when it is upgraded. In setup mode anyone who can reach the server can change or reset data, and can create the first administrator, so do this straight away:
+
+1. Open the app, go to Administration, **Users and roles**, and create the first administrator account. Login is on from that moment.
+2. Add an account for each person with the right role: **admin** (everything, including users, reset and restore), **engineer** (network design), **office** (customers, faults, work orders), **technician** (their own jobs and field capture; cannot delete network records), **viewer** (look only; phone numbers hidden).
+3. New accounts get a temporary password, shown once. The person must set their own at first login.
+
+To be safe before anyone else can reach the server, set `SETUP_TOKEN` (the first administrator then also needs that code) or `AUTH_REQUIRED=true` (no setup mode at all).
+
+**Nobody can log in?** On the server's own computer: `npm run user -w @fibergis/server -- list`, and `npm run user -w @fibergis/server -- reset-password <login name>`, which prints a temporary password once.
+
+**Unsent work is kept.** If a phone's session ends while it holds unsent changes, the app asks the person to log in again and then sends them.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `AUTH_REQUIRED` | `false` | `true`: login is required even before the first account exists |
+| `SETUP_TOKEN` | not set | Code needed to create the first administrator |
+| `SESSION_DAYS` | 30 | How long a login lasts |
+| `PASSWORD_MIN_LENGTH` | 8 | Shortest allowed password |
+| `LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES` | 5, 15 | Wrong passwords allowed before waiting, and how long |
+| `RATE_LIMIT_PER_MINUTE` | 1200 | Requests per minute per address |
+| `COOKIE_SECURE` | `auto` | Secure cookies when the request came over https |
+| `TRUST_PROXY` | not set | Trust a reverse proxy's forwarded address and protocol |
+| `CORS_ORIGINS` | not set | Other web addresses allowed to call the API |
+| `HTTPS_CERT_FILE`, `HTTPS_KEY_FILE` | not set | Let the server serve https itself |
+| `CSP`, `CSP_IMG_SOURCES` | `on`, not set | Security policy for the web app; add other map tile hosts here |
+| `BACKUPS_DIR`, `BACKUP_KEEP` | `backups` beside the database, 20 | Safety copies made before each reset and restore |
+| `RESTORE_MAX_MB` | 200 | Largest backup file accepted |
+
+## Backups and restore (Phase 9)
+
+Administration, **Backup & KML**. A backup with photos is a zip (`GET /api/v1/backup?photos=1`); without photos it is the JSON file as before. A safety copy is saved before every reset and restore. A restore is checked first: if the backup would leave broken links, double-used fibers or other rule errors, nothing is restored and the problems are listed; the administrator may then restore anyway, and that choice is written to the audit log.

@@ -6,7 +6,7 @@ import { activeAssignment, checkedFiberChange, completeCores, type SplitterInput
 import { coreKey, newFiberId } from './fiberIndex';
 import { traceCoreUpstream } from './fiberPath';
 import { polylineLengthMeters } from './geo';
-import { nextSequentialId } from './ids';
+import { newRecordId } from './ids';
 import { DEFAULT_OPTICAL_SETTINGS } from './opticalSettings';
 import { setPortUsage } from './ports';
 import { isoDate } from './time';
@@ -58,12 +58,7 @@ export function createSplitter(
   if (!terminal) return fail('Terminal Not Found', `Terminal box ${draft.terminalBoxId} does not exist.`);
 
   const id =
-    draft.id?.trim() ||
-    nextSequentialId(
-      'SPL-',
-      data.splitters.map((s) => s.id),
-      2,
-    );
+    draft.id?.trim() || newRecordId('SPL-');
   if (data.splitters.some((s) => sameId(s.id, id))) {
     return fail('Duplicate Splitter ID', `Splitter ${id} already exists.`);
   }
@@ -201,12 +196,7 @@ export function provisionCustomer(
   }
 
   const id =
-    draft.id?.trim() ||
-    nextSequentialId(
-      'CUST-',
-      data.customers.map((c) => c.id),
-      3,
-    );
+    draft.id?.trim() || newRecordId('CUST-');
   if (data.customers.some((c) => sameId(c.id, id))) {
     return fail('Duplicate Customer ID', `Customer ${id} already exists.`);
   }
@@ -225,11 +215,7 @@ export function provisionCustomer(
       ]
     : [];
   const dropLength = hasLocation ? Math.max(1, Math.round(polylineLengthMeters(dropRoute))) : 0;
-  const dropId = nextSequentialId(
-    'DROP-',
-    data.cables.map((c) => c.id),
-    3,
-  );
+  const dropId = newRecordId('DROP-');
   const dropCable: Cable = {
     id: dropId,
     name: `Drop ${fat.id} → ${id}`,

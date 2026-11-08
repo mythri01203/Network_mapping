@@ -15,7 +15,7 @@ import { PANES } from '../leaflet/panes';
 import { useLayerGroup } from '../leaflet/useLayerGroup';
 import { MapModeBar } from '../MapToolbar';
 import { categoryForType, pathLengthMeters } from '../markerIcons';
-import { nextPoleName } from './poleNaming';
+import { newEquipmentName, nextPoleName } from './poleNaming';
 
 const DRAW = { line: '#0284c7', vertex: '#2563eb', endpoint: '#3b82f6' };
 const MEASURE = { line: '#f59e0b', vertex: '#d97706' };
@@ -184,7 +184,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
         // Poles always get the next free number: a template name would give every pole the same one.
         const name = isPole
           ? nextPoleName(useNetworkStore.getState().equipment)
-          : tpl?.name || (type === 'Fiber Slack Loop' ? 'Fiber Slack Loop' : `New ${type}`);
+          : tpl?.name || (type === 'Fiber Slack Loop' ? 'Fiber Slack Loop' : newEquipmentName(type, useNetworkStore.getState().equipment));
         const totalPorts = tpl?.totalPorts;
 
         // "Same one?" first when an item of the same kind is already this close. It never blocks.

@@ -3,7 +3,7 @@ import { Cable as CableIcon, Check, ChevronDown, ChevronRight, X } from 'lucide-
 import { useShallow } from 'zustand/react/shallow';
 
 import type { Cable, CableType, Equipment, RouteStatus } from '@fibergis/shared';
-import { buildCoresWithCapacity, buildOltPonPorts, defaultFiberCount, polylineLengthMeters } from '@fibergis/shared';
+import { buildCoresWithCapacity, buildOltPonPorts, cableIdPrefix, defaultFiberCount, newRecordId, polylineLengthMeters } from '@fibergis/shared';
 
 import { requestConfirm } from '../../stores/confirmStore';
 import { useMapStore } from '../../stores/mapStore';
@@ -89,7 +89,8 @@ export const CableWizardModal: React.FC = () => {
     setOwner('');
     setInstallationType(installationFor(cableTypeToDraw));
 
-    setCableId(`CBL-${Date.now().toString().slice(-5)}`);
+    // Phase 9: a random permanent ID, so two offline devices never pick the same one. The name is what people read.
+    setCableId(newRecordId(cableIdPrefix(cableTypeToDraw)));
     setCableName('');
     setRemarks('');
     setReservedCores(0);

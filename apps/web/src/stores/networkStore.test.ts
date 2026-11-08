@@ -171,17 +171,20 @@ describe('undo / redo', () => {
 });
 
 describe('backup restore', () => {
-  it('restores a backup created from the current network', async () => {
+  it('asks before replacing the network, and with no server changes nothing (Phase 9)', async () => {
     const snapshot = { ...getNetworkSnapshot(), equipment: getNetworkSnapshot().equipment.slice(0, 2) };
     const backup = createBackup(snapshot, '2026-01-01T00:00:00.000Z', [1, 2]);
     actions.addEquipment(draft);
+    const before = useNetworkStore.getState().equipment;
 
-    await expect(actions.restoreSystem(JSON.stringify(backup))).resolves.toBe(true);
-    const state = useNetworkStore.getState();
-    expect(state.equipment).toEqual(snapshot.equipment);
-    expect(state.projectStartPoint).toEqual([1, 2]);
-    expect(state.history).toMatchObject({ index: 0 });
-    expect(state.auditLogs[0].action).toBe('BACKUP_RESTORED');
+    const pending = actions.restoreSystem(JSON.stringify(backup));
+    await vi.waitFor(() => expect(useConfirmStore.getState().pending).not.toBeNull());
+    expect(useConfirmStore.getState().pending?.message).toMatch(/safety copy/);
+    useConfirmStore.getState().respond(true);
+    // The sync engine is not running here, as with no server: a restore needs the server.
+    await expect(pending).resolves.toBe(false);
+    expect(useNetworkStore.getState().equipment).toBe(before);
+    expect(lastToast()?.title).toBe('Needs the server');
   });
 
   it('rejects invalid JSON and invalid backups', async () => {

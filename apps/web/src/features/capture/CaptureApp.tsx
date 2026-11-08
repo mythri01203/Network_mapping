@@ -30,6 +30,7 @@ import { type Language, translate } from '../../i18n/format';
 import { type MessageKey, MESSAGES } from '../../i18n/messages';
 import { LANGUAGE_NAMES, useFieldLanguage, useT } from '../../i18n/useT';
 import { requestPersistentStorage } from '../../lib/idb';
+import { currentAccount, useAuthStore } from '../../stores/authStore';
 import { getNetworkData, selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { CameraStep, type GuideShape, TagStep } from './CameraStep';
@@ -121,6 +122,8 @@ export function CaptureApp() {
   const projectStart = useNetworkStore((s) => s.projectStartPoint);
   const optical = useNetworkStore(selectOpticalSettings);
   const role = useUiStore((s) => s.userRole);
+  // Phase 9: the logged-in person's name, or the older role label while login is off.
+  const account = useAuthStore((s) => currentAccount(s));
   const field = useMemo(() => resolveFieldSettings(settingsRecords), [settingsRecords]);
 
   const [screen, setScreen] = useState<Screen>({ name: 'loading' });
@@ -281,7 +284,7 @@ export function CaptureApp() {
   const buildEntry = (d: CaptureDraft): OutboxEntry | null => {
     const data = getNetworkData();
     const now = new Date();
-    const capturedBy = `${role} (phone capture)`;
+    const capturedBy = `${account ? account.displayName : role} (phone capture)`;
     if (!d.photoId) return null;
     const base = { id: d.id, kind: d.kind, photoIds: [d.photoId], status: 'saved' as const, savedAt: now.getTime() };
     if (d.kind === 'light') {

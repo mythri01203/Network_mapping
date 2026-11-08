@@ -10,6 +10,16 @@ import type {
 /** Reads one stored collection. Handed to a write guard so it sees the state the write will change. */
 export type CollectionReader = <C extends CollectionName>(collection: C) => CollectionRecord<C>[];
 
+/** One stored record and the account that first stored it (`null`: not recorded, such as setup mode or older rows). */
+export type RecordLookup = (collection: CollectionName, id: string) => { record: Record<string, unknown>; createdBy: string | null } | undefined;
+
+export interface WriteOptions {
+  /** Runs first, inside the transaction, before the version check. Throwing refuses the whole write. */
+  access?: (lookup: RecordLookup) => void;
+  /** The account making the write. New records remember it (`created_by`), so "own" can be checked later. */
+  actorId?: string;
+}
+
 /**
  * Runs inside the write transaction, before anything is written. Throwing refuses the whole write.
  * Used for checks that need other records, such as a span pointing to two existing poles.
@@ -29,8 +39,10 @@ export interface NetworkRepository {
   counts(): Promise<Record<CollectionName, number>>;
   list<C extends CollectionName>(collection: C): Promise<CollectionRecord<C>[]>;
   get<C extends CollectionName>(collection: C, id: string): Promise<CollectionRecord<C> | undefined>;
+  /** The stored version of one record (Phase 8), or undefined when it does not exist. */
+  getVersion(collection: CollectionName, id: string): Promise<number | undefined>;
   /** Applies upserts then deletes atomically. Records must already be validated. */
-  applyChanges(changes: ChangeSet, guard?: WriteGuard): Promise<ChangeResult>;
+  applyChanges(changes: ChangeSet, guard?: WriteGuard, options?: WriteOptions): Promise<ChangeResult>;
   /** Replaces the full contents of each given collection atomically; others are left untouched. */
   replaceCollections(collections: Partial<NetworkSnapshot>, guard?: WriteGuard): Promise<number>;
   close(): Promise<void>;

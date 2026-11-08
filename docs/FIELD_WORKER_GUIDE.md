@@ -8,6 +8,13 @@ This is the easy way to add poles, boxes, house wires, light levels and danger. 
 
 **Open it:** on the map, tap the green **Field capture** button at the bottom left. Or open the menu (top left) and tap **Field capture**. The first time, choose your language, look at the pictures, and tap **Start**.
 
+**Log in** (once the office has turned login on; until then there is no login screen):
+1. **Who are you?** Tap your name if it is there (names already used on this phone). Not there: tap **Someone else**, type **Your login name**, tap **Next**.
+2. Type **Your password** (tap **Show** to see it), tap **Log in**.
+3. The first time, the phone asks you to **Choose your own password**. Type the one the office gave you, then your new one, tap **Save password**.
+
+Forgot the password? Ask the office for a new one. Too many wrong tries: wait the minutes shown. Work saved on the phone is never lost: the screen says how many are waiting, and they are sent after you log in. No internet: keep working; log in when the signal is back.
+
 **The phone asks two questions the first time:** "Use your camera?" and "Know your location?". Tap **Allow** both times. If you tapped **Block** by mistake: tap the lock next to the web address, then **Permissions**, then **Allow**.
 
 ### Add a pole

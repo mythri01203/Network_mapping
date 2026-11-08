@@ -9,7 +9,7 @@ import {
   succeed,
 } from './command';
 import { faultVerificationOf } from './faultRules';
-import { nextSequentialId } from './ids';
+import { newRecordId } from './ids';
 import { formatTimestamp, isoDate } from './time';
 import { collectDownstream } from './trace';
 
@@ -44,12 +44,7 @@ export function reportFault(data: NetworkData, draft: FaultDraft, ctx: CommandCo
   if (draft.affectedCableId && !cable) return fail('Asset Missing', `Cable ${draft.affectedCableId} was not found.`);
 
   const id =
-    draft.id ||
-    nextSequentialId(
-      `FLT-${now.getFullYear()}-`,
-      data.faults.map((f) => f.id),
-      3,
-    );
+    draft.id || newRecordId('FLT-');
   if (data.faults.some((f) => f.id === id)) return fail('Duplicate Fault ID', `Fault ${id} already exists.`);
 
   let location = draft.affectedLocation;
@@ -177,12 +172,7 @@ export function createWorkOrder(
     return fail('Fault Missing', `Fault ${draft.faultId} was not found.`);
   }
   const id =
-    draft.id ||
-    nextSequentialId(
-      `WO-${now.getFullYear()}-`,
-      data.workOrders.map((w) => w.id),
-      3,
-    );
+    draft.id || newRecordId('WO-');
   if (data.workOrders.some((w) => w.id === id)) return fail('Duplicate Work Order', `Work order ${id} already exists.`);
 
   const order: WorkOrder = {

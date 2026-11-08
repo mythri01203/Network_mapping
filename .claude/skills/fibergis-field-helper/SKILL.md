@@ -25,6 +25,10 @@ Answer so that someone who left school early can follow it, or a supervisor can 
 
 A printable version for workers: `docs/FIELD_WORKER_GUIDE.md`. Keep it in step with this file.
 
+## Logging in (Phase 9)
+
+Until the office creates the first administrator account, there is no login screen ("Login is off" banner). After that: 1. **Who are you?** Tap your name if it is shown, or **Someone else**, type **Your login name**, **Next**. 2. Type **Your password** (**Show** to see it), **Log in**. 3. First time: **Choose your own password**: the one the office gave, then a new one, **Save password**. Forgot it: the office sets a new one (Administration, **Users and roles**). Too many wrong tries: wait the minutes shown. Unsent work on the phone is kept and sent after login. A **viewer** can only look; a **technician** can do jobs and field capture but cannot delete network items (the screen says so in plain words). Nobody has tried this on a real phone yet.
+
 ## Field capture (phone, in the street)
 
 **Before the first time:** the phone asks "Use your camera?" and "Know your location?". Tap **Allow** both times. Tapped **Block** by mistake? Tap the lock next to the web address, then **Permissions**, then **Allow**. On a phone the address must start with **https**; if the screen says "This address is not secure", tell the owner (`docs/DEPLOYMENT_GUIDE.md`).
@@ -51,7 +55,7 @@ A printable version for workers: `docs/FIELD_WORKER_GUIDE.md`. Keep it in step w
 
 Since Phase 8 a technician does an office job on the phone at **/jobs**: tap **My jobs** on the Field capture home. Checked only by a script at phone size with a fake camera, never by a technician or on a real phone.
 
-1. **Who are you?** Tap your name (names come from the jobs the office made). Not there: the office must put your name on the job. This is a choice on the phone, not a login.
+1. With login on, the jobs are the logged-in technician's own. While login is off (setup mode), **Who are you?** asks you to tap your name (names come from the jobs the office made); not there, the office must put your name on the job.
 2. Tap the job. **TEST job. Not real.** in purple means a practice job.
 3. **Show the way** opens the bike map with real GPS. Do not touch the phone while riding.
 4. **Start job**, then the camera: **Photo before**.

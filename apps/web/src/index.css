@@ -310,6 +310,22 @@
   background: none;
   border: 0;
 }
+/* A group of nearby pins with its count (Phase 9). */
+.gis-group {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 3px solid #fff;
+  background: var(--group-color);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--group-color) 30%, transparent),
+    0 2px 6px rgb(15 23 42 / 0.3);
+}
 .gis-pin {
   position: relative;
   box-sizing: border-box;

@@ -8,9 +8,10 @@ import { showToast } from './toastStore';
  * - `synced`: the server has every local change.
  * - `pending` / `saving`: local changes are waiting for / being sent to the server.
  * - `offline`: the server is unreachable; changes are kept in this browser and retried.
+ * - `signin`: login is on and nobody is logged in here; changes are kept and sent after login (Phase 9).
  * - `error`: the server refused a record; it stays local until fixed, retried or discarded.
  */
-export type SyncPhase = 'connecting' | 'synced' | 'pending' | 'saving' | 'offline' | 'error';
+export type SyncPhase = 'connecting' | 'synced' | 'pending' | 'saving' | 'offline' | 'signin' | 'error';
 
 /** A record the server would not accept. Everything else is still sent. */
 export interface RefusedRecord {

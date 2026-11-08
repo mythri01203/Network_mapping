@@ -289,3 +289,22 @@ export function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(meters < 10000 ? 2 : 1)} km`;
 }
+
+/**
+ * A round marker for a group of nearby pins (Phase 9), showing how many pins it holds so no pin
+ * is ever hidden. Tapping it zooms in.
+ */
+export function groupMarkerIcon(count: number, kind: 'equipment' | 'customer'): L.DivIcon {
+  const text = count >= 10_000 ? `${Math.floor(count / 1000)}k` : count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
+  const size = count >= 1000 ? 48 : count >= 100 ? 42 : 36;
+  const color = kind === 'customer' ? '#0f766e' : '#1d4ed8';
+  return cached(`group:${kind}:${text}:${size}`, () =>
+    L.divIcon({
+      html: `<div class="gis-group" style="--group-color:${color};width:${size}px;height:${size}px"><span>${escapeHtml(text)}</span></div>`,
+      className: 'gis-marker gis-marker--group',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      tooltipAnchor: [0, -size / 2 - 2],
+    }),
+  );
+}

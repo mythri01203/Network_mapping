@@ -10,6 +10,7 @@ import { useUiStore } from '../../../stores/uiStore';
 import { equipmentLayerKey } from '../layerFilters';
 import { selectFeatureOnClick } from '../leaflet/featureClick';
 import { PANES } from '../leaflet/panes';
+import { useClusteredPoints } from '../leaflet/useClusteredPoints';
 import { useMapZoom } from '../leaflet/useLeafletMap';
 import { type MarkerSpec, useMarkerLayer } from '../leaflet/useMarkerLayer';
 import { equipmentMarkerIcon, equipmentMarkerSize, labelIcon, tooltipHtml } from '../markerIcons';
@@ -42,9 +43,18 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
 
   const byId = useMemo(() => new Map(equipment.map((eq) => [eq.id, eq])), [equipment]);
 
+  // Phase 9: only pins in view are drawn, and crowded areas as groups with a count.
+  const points = useMemo(() => equipment.map((eq) => ({ id: eq.id, lat: eq.lat, lng: eq.lng })), [equipment]);
+  const keep = useMemo(
+    () => new Set([...tracedIds, ...(selectedId ? [selectedId] : []), ...(movingId ? [movingId] : [])]),
+    [tracedIds, selectedId, movingId],
+  );
+  const shown = useClusteredPoints(map, points, keep, 'equipment');
+  const inView = useMemo(() => equipment.filter((eq) => shown.has(eq.id)), [equipment, shown]);
+
   const markers = useMemo<MarkerSpec[]>(() => {
     const traced = new Set(tracedIds);
-    return equipment.map((eq) => {
+    return inView.map((eq) => {
       const selected = eq.id === selectedId;
       const layer = equipmentLayerKey(eq);
       const kind = eq.type === 'OLT' ? `${eq.type} · ${eq.technology ?? 'GPON'}` : eq.type;
@@ -59,7 +69,7 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
         draggable: eq.id === movingId,
       };
     });
-  }, [equipment, selectedId, tracedIds, layerOpacity, movingId]);
+  }, [inView, selectedId, tracedIds, layerOpacity, movingId]);
 
   const onClick = useCallback(
     (id: string, event: L.LeafletMouseEvent) => {
@@ -82,7 +92,7 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
 
   const labels = useMemo<MarkerSpec[]>(() => {
     if (!showLabels || zoom < LABEL_MIN_ZOOM) return [];
-    return equipment
+    return inView
       .filter((eq) => {
         const layer = equipmentLayerKey(eq);
         return layer !== 'poles' && layer !== 'manholes';
@@ -92,7 +102,7 @@ export function EquipmentLayer({ map, equipment }: EquipmentLayerProps) {
         latlng: [eq.lat, eq.lng],
         icon: labelIcon(eq.name, equipmentMarkerSize(eq) / 2 + 4),
       }));
-  }, [equipment, showLabels, zoom]);
+  }, [inView, showLabels, zoom]);
 
   useMarkerLayer(map, labels, { interactive: false, pane: PANES.labels });
 

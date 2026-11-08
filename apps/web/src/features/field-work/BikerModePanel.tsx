@@ -36,7 +36,7 @@ import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
-import { nextPoleName } from '../map/sketch/poleNaming';
+import { newEquipmentName, nextPoleName } from '../map/sketch/poleNaming';
 
 type SplitRatio = '1:2' | '1:4' | '1:8' | '1:16' | '1:32' | 'ratio_90_10';
 type SlackLength = 10 | 20 | 30 | 50;
@@ -188,7 +188,7 @@ export const BikerModePanel: React.FC = () => {
       availablePorts: template.totalPorts,
       notes: template.notes,
       ...template,
-      name: isPole ? nextPoleName(useNetworkStore.getState().equipment) : template.name || `New ${type}`,
+      name: isPole ? nextPoleName(useNetworkStore.getState().equipment) : template.name || newEquipmentName(type, useNetworkStore.getState().equipment),
       lat: fix.lat,
       lng: fix.lng,
       locationMethod: 'gps',

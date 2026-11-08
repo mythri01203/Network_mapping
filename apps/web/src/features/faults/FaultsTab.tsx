@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ClipboardCheck, Lock, MapPin, Pause, Play, Wrench } from 'lucide-react';
 
 import {
@@ -13,11 +13,33 @@ import {
   isFaultOpen,
 } from '@fibergis/shared';
 
+import { useAuthStore } from '../../stores/authStore';
 import { checkFault, makeJob, moveFault, resume } from '../../stores/faultActions';
 import { useMapStore } from '../../stores/mapStore';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { when } from './faultFormat';
+
+/**
+ * Technicians with an account (Phase 9), so a job goes to exactly the name they log in with: the
+ * phone shows a technician only the jobs with their own name. Empty while login is off.
+ */
+function useTechnicianNames(): string[] {
+  const account = useAuthStore((s) => s.account);
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (!account) return;
+    let live = true;
+    fetch(`${(import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')}/api/v1/auth/technicians`, { credentials: import.meta.env.VITE_API_URL ? 'include' : 'same-origin' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { displayName: string }[]) => live && setNames(list.map((p) => p.displayName)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [account]);
+  return names;
+}
 import { buttonClass, ConfidenceBadge, inputClass, Section, TestBadge } from './faultUi';
 import { WorkOrderDetail } from './JobsTab';
 import { ImpactList } from './SuspectedTab';
@@ -43,12 +65,18 @@ function NewJobForm({ fault, onDone }: { fault: Fault; onDone: (id: string) => v
   const [title, setTitle] = useState(`Check ${fault.suspected?.label ?? fault.title}`.slice(0, 120));
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const technicians = useTechnicianNames();
   const [steps, setSteps] = useState((fault.suspected?.checks ?? ['Find and repair the fault.']).join('\n'));
   return (
     <div className="space-y-1.5 rounded-lg border border-blue-200 bg-blue-50 p-2" data-testid="new-job-form">
       <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Work order title" data-testid="job-title" />
       <div className="grid gap-1.5 sm:grid-cols-2">
-        <input className={inputClass} placeholder="Technician name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Technician name" data-testid="job-technician" />
+        <input className={inputClass} placeholder="Technician name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Technician name" data-testid="job-technician" list="technician-accounts" />
+        <datalist id="technician-accounts">
+          {technicians.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
         <input className={inputClass} placeholder="Technician phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Technician phone" />
       </div>
       <textarea className={inputClass} rows={3} value={steps} onChange={(e) => setSteps(e.target.value)} aria-label="Steps, one per line" data-testid="job-steps" />

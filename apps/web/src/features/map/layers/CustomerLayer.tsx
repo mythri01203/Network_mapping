@@ -7,6 +7,7 @@ import { useMapStore } from '../../../stores/mapStore';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { useUiStore } from '../../../stores/uiStore';
 import { selectFeatureOnClick } from '../leaflet/featureClick';
+import { useClusteredPoints } from '../leaflet/useClusteredPoints';
 import { type MarkerSpec, useMarkerLayer } from '../leaflet/useMarkerLayer';
 import { customerMarkerIcon, tooltipHtml } from '../markerIcons';
 
@@ -20,9 +21,17 @@ export function CustomerLayer({ map }: { map: L.Map }) {
 
   const byId = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
+  // Phase 9: only pins in view are drawn, and crowded areas as groups with a count.
+  const placed = useMemo(
+    () => (!visible || networkMode === 'CableTV' ? [] : customers.filter(hasRecordedLocation)),
+    [customers, visible, networkMode],
+  );
+  const points = useMemo(() => placed.map((c) => ({ id: c.id, lat: c.lat, lng: c.lng })), [placed]);
+  const keep = useMemo(() => new Set(selectedId ? [selectedId] : []), [selectedId]);
+  const shown = useClusteredPoints(map, points, keep, 'customer');
+
   const markers = useMemo<MarkerSpec[]>(() => {
-    if (!visible || networkMode === 'CableTV') return [];
-    return customers.filter(hasRecordedLocation).map((c) => ({
+    return placed.filter((c) => shown.has(c.id)).map((c) => ({
       id: c.id,
       latlng: [c.lat, c.lng],
       icon: customerMarkerIcon(c.status, { selected: c.id === selectedId, traced: false }),
@@ -31,7 +40,7 @@ export function CustomerLayer({ map }: { map: L.Map }) {
       opacity,
       zIndexOffset: c.id === selectedId ? 1000 : 0,
     }));
-  }, [customers, visible, networkMode, selectedId, opacity]);
+  }, [placed, shown, selectedId, opacity]);
 
   const onClick = useCallback(
     (id: string, event: L.LeafletMouseEvent) => {
