@@ -79,7 +79,9 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:5000',
-        changeOrigin: true,
+        // Keep the page's own address (for example localhost:5174) so the server's same-site check
+        // matches it on any dev port. Requests from other websites are still refused.
+        changeOrigin: false,
       },
     },
   },
