@@ -288,6 +288,16 @@ export const MESSAGES = {
   'login.back': { en: 'Back', te: d('వెనక్కి'), kn: d('ಹಿಂದೆ') },
   'login.next': { en: 'Next', te: d('తర్వాత'), kn: d('ಮುಂದೆ') },
   'login.checking': { en: 'Checking', te: d('పరిశీలిస్తోంది'), kn: d('ಪರಿಶೀಲಿಸುತ್ತಿದೆ') },
+  'jobs.noPhotoHint': {
+    en: 'Write why no photo is possible. The office will see it.',
+    te: d('ఫోటో ఎందుకు తీయలేరో రాయండి. ఆఫీసు చూస్తుంది.'),
+    kn: d('ಫೋಟೋ ಏಕೆ ತೆಗೆಯಲು ಆಗುವುದಿಲ್ಲ ಎಂದು ಬರೆಯಿರಿ. ಆಫೀಸ್ ನೋಡುತ್ತದೆ.'),
+  },
+  'login.notSetUp': {
+    en: 'Logins are not set up yet. The office must first make the administrator account on the server computer. Then log in here.',
+    te: d('లాగిన్లు ఇంకా సిద్ధం కాలేదు. ముందుగా ఆఫీసు సర్వర్ కంప్యూటర్‌లో అడ్మినిస్ట్రేటర్ ఖాతా చేయాలి. తర్వాత ఇక్కడ లాగిన్ అవ్వండి.'),
+    kn: d('ಲಾಗಿನ್‌ಗಳು ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಮೊದಲು ಆಫೀಸ್ ಸರ್ವರ್ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಆಡ್ಮಿನಿಸ್ಟ್ರೇಟರ್ ಖಾತೆ ಮಾಡಬೇಕು. ನಂತರ ಇಲ್ಲಿ ಲಾಗಿನ್ ಆಗಿ.'),
+  },
   'login.kept': {
     en: '{count} saved on this phone. They are sent after you log in.',
     te: d('{count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి.'),

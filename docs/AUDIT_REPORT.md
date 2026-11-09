@@ -166,6 +166,31 @@ Pure domain commands and their tests, sync engine, undo and audit store, `Equipm
 - `network mapping/` inside the project root is an old, git-ignored copy of a build. Safe to review and remove; left in place.
 - Agent Tracking and the custom equipment type fix are still uncommitted.
 
+## 12. Second audit, Phases 1 to 9 (November 2026), and its fixes
+
+A read-only audit after all nine phases were built found these; all were fixed on branch `fix/phase9-security`, each with tests.
+
+| Phase | Problem found | Fix |
+|---|---|---|
+| 9 | Login off (no account) let any device on the network read, reset or restore, and a page from another site could reset | Setup mode works only on the server computer (loopback address and name); other devices are logged out and keep their work; `SETUP_TOKEN` lets one make the first admin remotely; reset always needs its confirm word; origin `null` refused |
+| 9 | Login limit could be passed by sending many tries at once; no limit per account | Each try counted before the password check; a per-name limit from any address |
+| 9 | Temporary password usable for everything; sessions could last for ever | Server allows only choosing a password first; `SESSION_MAX_DAYS` (90) |
+| 9 | A technician could fill a conflict record that an office user then saved; trips and routes writable by others | Personal records belong to their maker (engineer and admin excepted); the office may only record its decision; the conflict screen lists every field the phone version would change |
+| 9 | A restore replaced the audit trail and who made each record | Stored audit entries are kept; owners are kept |
+| 9 | Viewers saw conflict copies; `/health` gave counts to anyone | Hidden |
+| 9 | Unsent work on a shared phone was sent under whoever logged in next; logout left the network in the browser | Work waits for its maker's login; logout clears the copy when nothing is waiting |
+| 7 | Monitoring rows were never removed; made-up tokens were not rate limited; a switched-off source could still store a queued push; stale times had no upper limit | `MONITORING_KEEP_DAYS`/`MONITORING_MAX_ROWS` (newest per ONT always kept); per-address limit; re-checked; limits of 1 day and 7 days |
+| 1, 5 | Any user could save a light reading as "reported by the device" | Only the monitoring connection may |
+| 1, 4, 5 | Adding a customer, "Link to OLT" and the cable wizard stored a guessed OLT, PON port and cables when the fibers were not recorded; the cable walk took the first of several cables | Stored only from a recorded path or an explicit choice; the gap is named; ambiguous feeds stop the walk |
+| 4, 5 | Wizards preselected the first box, splitter, output, PON port, a 1:8 ratio and fiber 1; an incomplete path showed an "Estimated Rx" number | Nothing preselected; "Not known: path not complete" |
+| 4 | Two customers on one splitter output and `two_pon_one_tree` were checked in the browser only | Server rules |
+| 8 | Jobs and faults could close without before/after photos | Needed, or a recorded "No photo possible" reason |
+| 8 | Fault impact ignored Cable TV customers; danger reports never reached correlation; jobs matched by typed name | TV customers through recorded RF links; reports are evidence; pick list of real accounts and unique account names |
+| 3 | Auto-pole while drawing and the Bike Mode drop skipped "same pole?" | Same check as normal placement |
+| 2, 6 | Sync chip said "Sent to office" before reading the phone; map panel showed invented TV levels; sidebar counted old TV pins | Fixed |
+
+Still open: the new customer wizard uses drop fiber 1 when none is given (no fiber choice yet); office offline edits stay in localStorage (field captures use IndexedDB); the CSP allows inline styles (needed by the map library); dev-only `npm audit` findings in ESLint's minimatch.
+
 ## Not verified
 
 Behaviour on real phones, real GPS on a ride or a street, a real camera scanning a printed QR tag, https deployment, sunlight readability, PDF and CSV contents, and the backup restore screen were not run. The JSON backup does not include field photos (they are files beside the database). Parts of `OperationsHubView.tsx`, `BikerModePanel.tsx` and `AgentTrackingView.tsx` were not fully read.

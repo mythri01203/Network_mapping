@@ -23,6 +23,8 @@ export interface RequestAuth {
   mode: AuthMode;
   account: Account | null;
   session?: SessionInfo;
+  /** No account exists yet and this device is not the server computer: it must wait for the first admin. */
+  setupPending?: true;
 }
 
 declare module 'fastify' {
@@ -37,6 +39,25 @@ export const loginRequired = () =>
   new HttpError(401, 'login_required', 'Please log in. Anything saved on this device is kept and will be sent after you log in.');
 
 export const forbidden = (message: string, details?: Record<string, unknown>) => new HttpError(403, 'forbidden', message, details);
+
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * True only for the server computer itself: a loopback address, reached by a loopback name. The
+ * name check matters because a dev proxy on this computer forwards phones from loopback too, and
+ * because a page on another site can point its own name at 127.0.0.1 (DNS rebinding).
+ */
+export function isLocalRequest(request: FastifyRequest): boolean {
+  if (!LOOPBACK_IPS.has(request.ip)) return false;
+  const host = (request.host ?? '').toLowerCase();
+  const name = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0];
+  return LOOPBACK_HOSTS.has(name);
+}
+
+/** A temporary password must be changed first. Nothing was refused for good: change it and send again. */
+export const passwordChangeRequired = () =>
+  new HttpError(403, 'password_change_required', 'Choose your own password first. Anything saved on this device is kept and will be sent after that.');
 
 const SYSTEM_WORDS: Record<SystemAction, string> = {
   reset: 'reset the network',
@@ -114,16 +135,25 @@ export function writeOptionsFor(request: FastifyRequest, changes: ChangeSet): Wr
 
 const HIDDEN = 'Hidden for look-only accounts';
 
-/** Personal data a viewer does not need: phone numbers. Viewers never write, so nothing hidden is ever saved back. */
-export function redactForViewer<T extends { customers?: Customer[] }>(request: FastifyRequest, data: T): T {
+/**
+ * Personal data a viewer does not need: phone numbers, and the sync conflict records (they hold
+ * whole copies of other records, phone numbers included). Viewers never write, so nothing hidden is
+ * ever saved back.
+ */
+export function redactForViewer<T extends { customers?: Customer[]; syncConflicts?: unknown[] }>(request: FastifyRequest, data: T): T {
   if (request.auth.account?.role !== 'viewer') return data;
-  return { ...data, customers: data.customers?.map((c) => ({ ...c, mobile: c.mobile ? HIDDEN : c.mobile })) };
+  return {
+    ...data,
+    customers: data.customers?.map((c) => ({ ...c, mobile: c.mobile ? HIDDEN : c.mobile })),
+    ...(data.syncConflicts ? { syncConflicts: [] } : {}),
+  };
 }
 
-export const redactRecordForViewer = (request: FastifyRequest, collection: CollectionName, record: unknown): unknown =>
-  collection === 'customers' && request.auth.account?.role === 'viewer' && record && typeof record === 'object' && (record as Customer).mobile
-    ? { ...(record as Customer), mobile: HIDDEN }
-    : record;
+export const redactRecordForViewer = (request: FastifyRequest, collection: CollectionName, record: unknown): unknown => {
+  if (request.auth.account?.role !== 'viewer' || !record || typeof record !== 'object') return record;
+  if (collection === 'syncConflicts') return null;
+  return collection === 'customers' && (record as Customer).mobile ? { ...(record as Customer), mobile: HIDDEN } : record;
+};
 
 /** Writes the headers that keep personal answers out of shared caches. */
 export const noStore = (reply: FastifyReply) => reply.header('cache-control', 'no-store');

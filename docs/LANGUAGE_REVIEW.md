@@ -242,6 +242,8 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `login.back` | Back | వెనక్కి | ಹಿಂದೆ |
 | `login.next` | Next | తర్వాత | ಮುಂದೆ |
 | `login.checking` | Checking | పరిశీలిస్తోంది | ಪರಿಶೀಲಿಸುತ್ತಿದೆ |
+| `jobs.noPhotoHint` | Write why no photo is possible. The office will see it. | ఫోటో ఎందుకు తీయలేరో రాయండి. ఆఫీసు చూస్తుంది. | ಫೋಟೋ ಏಕೆ ತೆಗೆಯಲು ಆಗುವುದಿಲ್ಲ ಎಂದು ಬರೆಯಿರಿ. ಆಫೀಸ್ ನೋಡುತ್ತದೆ. |
+| `login.notSetUp` | Logins are not set up yet. The office must first make the administrator account on the server computer. Then log in here. | లాగిన్లు ఇంకా సిద్ధం కాలేదు. ముందుగా ఆఫీసు సర్వర్ కంప్యూటర్‌లో అడ్మినిస్ట్రేటర్ ఖాతా చేయాలి. తర్వాత ఇక్కడ లాగిన్ అవ్వండి. | ಲಾಗಿನ್‌ಗಳು ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಮೊದಲು ಆಫೀಸ್ ಸರ್ವರ್ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಆಡ್ಮಿನಿಸ್ಟ್ರೇಟರ್ ಖಾತೆ ಮಾಡಬೇಕು. ನಂತರ ಇಲ್ಲಿ ಲಾಗಿನ್ ಆಗಿ. |
 | `login.kept` | {count} saved on this phone. They are sent after you log in. | {count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి. | {count} ಈ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿದಿವೆ. ನೀವು ಲಾಗಿನ್ ಆದ ನಂತರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. |
 | `login.forgot` | Forgot the password? Ask the office for a new one. | పాస్‌వర్డ్ మర్చిపోయారా? కొత్తది ఆఫీస్‌ను అడగండి. | ಪಾಸ್‌ವರ್ಡ್ ಮರೆತಿರಾ? ಹೊಸದನ್ನು ಆಫೀಸ್‌ನಲ್ಲಿ ಕೇಳಿ. |
 | `login.newPassword` | Choose your own password | మీ సొంత పాస్‌వర్డ్ ఎంచుకోండి | ನಿಮ್ಮದೇ ಪಾಸ್‌ವರ್ಡ್ ಆರಿಸಿ |

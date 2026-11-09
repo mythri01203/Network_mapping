@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Cable as CableIcon, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { Cable, CableType, Equipment, RouteStatus } from '@fibergis/shared';
+import type { Cable, CableType, RouteStatus } from '@fibergis/shared';
 import { buildCoresWithCapacity, buildOltPonPorts, cableIdPrefix, defaultFiberCount, newRecordId, polylineLengthMeters } from '@fibergis/shared';
 
 import { requestConfirm } from '../../stores/confirmStore';
@@ -12,8 +12,8 @@ import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
-const firstFreePon = (equipment?: Equipment) =>
-  equipment?.type === 'OLT' ? (buildOltPonPorts(equipment).find((p) => !p.connectedFeederCableId)?.id ?? '') : '';
+/** The person said this cable is on no PON port. Never preselected: '' means "not chosen yet". */
+const NO_PON = '__none__';
 
 const CABLE_TYPES: Array<{ type: CableType; label: string; desc: string }> = [
   { type: 'Main Feeder Fiber', label: 'Main Feeder Fiber', desc: 'Leaves the OLT toward the distribution network' },
@@ -100,7 +100,8 @@ export const CableWizardModal: React.FC = () => {
     setFiberCount(defaults?.fiberCount ?? defaultFiberCount(cableTypeToDraw));
     setStartEquipmentId(start);
     setEndEquipmentId(end);
-    setStartPortName(defaults?.startPortName ?? firstFreePon(allEquipment.find((e) => e.id === start)));
+    // Only a port the person already picked (for example from the PON port panel). Never the first free one.
+    setStartPortName(defaults?.startPortName ?? '');
     setEndPortName(defaults?.endPortName);
     setColorHex(defaults?.colorHex);
   }, [isCableWizardOpen]);
@@ -110,6 +111,8 @@ export const CableWizardModal: React.FC = () => {
   const startEquipment = equipments.find((e) => e.id === startEquipmentId);
   const endEquipment = equipments.find((e) => e.id === endEquipmentId);
   const ponOptions = startEquipment?.type === 'OLT' ? buildOltPonPorts(startEquipment) : [];
+  // The PON port the person picked, if any. "None" and "not chosen yet" both write no port link.
+  const chosenPon = startPortName && startPortName !== NO_PON ? startPortName : undefined;
 
   const coords: [number, number][] =
     activeDrawingPoints.length >= 2
@@ -133,7 +136,8 @@ export const CableWizardModal: React.FC = () => {
   const confirmProposal = () => {
     if (proposedStart) {
       setStartEquipmentId(proposedStart);
-      setStartPortName(firstFreePon(equipments.find((eq) => eq.id === proposedStart)));
+      // Confirming the OLT is not choosing its port: the person picks the PON port below.
+      setStartPortName('');
     }
     if (proposedEnd) setEndEquipmentId(proposedEnd);
     setProposedStart('');
@@ -159,7 +163,7 @@ export const CableWizardModal: React.FC = () => {
     const problems = [
       !startEquipmentId && 'The start is not connected to any equipment.',
       !endEquipmentId && 'The end is not connected to any equipment.',
-      startEquipmentId && ponOptions.length > 0 && !startPortName && 'No OLT PON port is chosen.',
+      startEquipmentId && ponOptions.length > 0 && !chosenPon && 'No OLT PON port is chosen.',
     ].filter(Boolean) as string[];
     if (problems.length > 0) {
       const unconfirmed = hasProposal ? '\n\nThe line touches equipment you have not confirmed. Go back and tap "Yes, connect" to use it.' : '';
@@ -187,7 +191,7 @@ export const CableWizardModal: React.FC = () => {
       remarks: remarks.trim() || undefined,
       startEquipmentId: startEquipmentId || undefined,
       endEquipmentId: endEquipmentId || undefined,
-      startPortName: ponOptions.length > 0 ? startPortName || undefined : undefined,
+      startPortName: ponOptions.length > 0 ? chosenPon : undefined,
       endPortName,
       colorHex,
       coordinates: coords,
@@ -316,7 +320,7 @@ export const CableWizardModal: React.FC = () => {
                   onChange={(e) => {
                     setStartEquipmentId(e.target.value);
                     setProposedStart('');
-                    setStartPortName(firstFreePon(equipments.find((eq) => eq.id === e.target.value)));
+                    setStartPortName('');
                   }}
                   className={fieldClass}
                 >
@@ -340,6 +344,7 @@ export const CableWizardModal: React.FC = () => {
                     className={fieldClass}
                   >
                     <option value="">Choose PON port</option>
+                    <option value={NO_PON}>None: not on a PON port</option>
                     {ponOptions.map((pon) => (
                       <option key={pon.id} value={pon.id} disabled={!!pon.connectedFeederCableId}>
                         {pon.id}
@@ -373,11 +378,13 @@ export const CableWizardModal: React.FC = () => {
             </div>
           </div>
 
-          {(!startEquipmentId || !endEquipmentId || (ponOptions.length > 0 && !startPortName)) && (
+          {(!startEquipmentId || !endEquipmentId || (ponOptions.length > 0 && !chosenPon)) && (
             <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
               {!startEquipmentId || !endEquipmentId
                 ? 'Not connected yet: customers on this cable cannot be traced back to the OLT until both ends are chosen.'
-                : 'Choose a PON port, or customers on this cable cannot be traced to a port.'}
+                : startPortName === NO_PON
+                  ? 'No PON port: customers on this cable cannot be traced to a port.'
+                  : 'Choose the PON port this cable is plugged into (or None), or customers on this cable cannot be traced to a port.'}
             </p>
           )}
 

@@ -3,7 +3,18 @@ import { ALARM_KIND_LABELS, FAULT_STATUS_LABELS, WORK_ORDER_STATUS_LABELS } from
 import type { Alarm, Fault, HistoryEntry, JobEvent, NetworkElementRef, SuspectedCause, Verification, WorkOrder } from '../model/types';
 import { applyPatch, type AuditEntry, type CommandContext, type CommandResult, fail, networkAnchor, type NetworkData, type NetworkPatch, type Notice, notice, succeed } from './command';
 import { affectedByElement, buildImpactIndex, elementExists, elementKey, elementLabel, elementLocation, type ImpactData, type ImpactIndex } from './faultImpact';
-import { type FaultCheckData, faultVerificationOf, isFaultOpen, newFaultProblems, verificationProblem } from './faultRules';
+import {
+  type FaultCheckData,
+  faultPhotoProblem,
+  faultVerificationOf,
+  isFaultOpen,
+  jobPhotoProblem,
+  jobPhotoStage,
+  newFaultProblems,
+  NO_PHOTO_ACTION,
+  noPhotoReasonText,
+  verificationProblem,
+} from './faultRules';
 import { describeFiberProblems } from './fiberRules';
 import { photoUrl } from './fieldCapture';
 import { randomCode } from './fieldCapture';
@@ -44,6 +55,9 @@ const faultDataOf = (data: NetworkData): FaultCheckData => ({
   attachments: data.attachments ?? [],
   onts: data.onts ?? [],
   services: data.services ?? [],
+  // Cable TV customers are found through recorded RF links, not the PON path (Phase 6).
+  rfElements: data.rfElements ?? [],
+  rfLinks: data.rfLinks ?? [],
   faults: data.faults,
   workOrders: data.workOrders,
   alarms: data.alarms ?? [],
@@ -319,6 +333,9 @@ export function setFaultStatus(data: NetworkData, faultId: string, to: FaultStat
   if ((to === 'Verified' || to === 'Closed') && !verification) {
     return fail('Check needed', `${faultId} cannot be ${to === 'Closed' ? 'closed' : 'marked verified'} yet. Record a check first: a light reading measured in the field, a photo, or an office check.`);
   }
+  // Verified to Closed is the same step for photos, so an older verified fault still closes.
+  const photoWhy = (to === 'Verified' || to === 'Closed') && fault.status !== 'Verified' ? faultPhotoProblem(faultDataOf(data), fault) : null;
+  if (photoWhy) return fail('Photos needed', `${faultId} cannot be ${to === 'Closed' ? 'closed' : 'marked verified'} yet. ${photoWhy}`);
   if (to === 'Assigned' && !data.workOrders.some((w) => w.faultId === faultId && w.technicianName && w.technicianName !== 'Unassigned')) {
     return fail('Make a work order', 'Assign the fault by making a work order for a technician.');
   }
@@ -386,6 +403,8 @@ export function recordFaultVerification(data: NetworkData, faultId: string, inpu
   const verification: Verification = { ...input, at: nowIso(ctx), by: actorOf(ctx, input.by) };
   const why = verificationProblem(verification);
   if (why) return fail('Check not complete', why);
+  const photoWhy = fault.status === 'Verified' ? null : faultPhotoProblem(faultDataOf(data), fault);
+  if (photoWhy) return fail('Photos needed', `${faultId} cannot be marked verified yet. ${photoWhy}`);
   const updated: Fault = {
     ...fault,
     verification,
@@ -544,6 +563,12 @@ export function assignJob(data: NetworkData, workOrderId: string, technicianName
   });
 }
 
+/** True when a job moves into repair done, or into verified or closed: each step needs the photos (or a reason). */
+const needsPhotoCheck = (from: WorkOrderStatus, to: WorkOrderStatus): boolean => {
+  const next = jobPhotoStage(to);
+  return next !== null && next !== jobPhotoStage(from);
+};
+
 /** Keeps the job's fault in step when the office moves the job. Never moves a fault backwards. */
 function faultFollowsJob(data: NetworkData, order: WorkOrder, to: WorkOrderStatus, verification: Verification | undefined, ctx: CommandContext): Fault[] | undefined {
   const fault = order.faultId ? data.faults.find((f) => f.id === order.faultId) : undefined;
@@ -574,6 +599,8 @@ export function setJobStatus(data: NetworkData, workOrderId: string, to: WorkOrd
     return fail('Check needed', `${workOrderId} cannot be ${to === 'Closed' ? 'closed' : 'marked verified'} yet. It needs a check: a light reading measured in the field, a photo, or an office check.`);
   }
   if (to === 'Assigned' && (!order.technicianName || order.technicianName === 'Unassigned')) return fail('Name needed', 'Choose a technician first.');
+  const photoWhy = needsPhotoCheck(order.status, to) ? jobPhotoProblem(order) : null;
+  if (photoWhy) return fail('Photos needed', `${workOrderId} cannot be ${to === 'Completed' ? 'marked repair done' : to === 'Closed' ? 'closed' : 'marked verified'} yet. ${photoWhy}`);
   const at = nowIso(ctx);
   const note = opts.note?.trim();
   const updated: WorkOrder = {
@@ -602,6 +629,8 @@ export function recordJobVerification(data: NetworkData, workOrderId: string, in
   const verification: Verification = { ...input, at: nowIso(ctx), by: actorOf(ctx, input.by), workOrderId };
   const why = verificationProblem(verification);
   if (why) return fail('Check not complete', why);
+  const photoWhy = needsPhotoCheck(order.status, 'Verified') ? jobPhotoProblem(order) : null;
+  if (photoWhy) return fail('Photos needed', `${workOrderId} cannot be marked verified yet. ${photoWhy}`);
   const updated: WorkOrder = {
     ...order,
     verification,
@@ -614,6 +643,39 @@ export function recordJobVerification(data: NetworkData, workOrderId: string, in
   return checked(data, { workOrders: replace(data.workOrders, updated), ...(faults ? { faults } : {}) }, updated, {
     notice: notice('success', 'Check recorded', `${workOrderId} is verified.`),
     audit: [{ action: 'WORK_ORDER_VERIFIED', details: `${workOrderId}: ${describeVerification(verification)}`, assetId: workOrderId, assetType: 'WorkOrder' }],
+  });
+}
+
+/**
+ * Records why no photo of the repair was possible, so a job or a fault can be finished without the
+ * before and after photos. The reason stays in the record with who and when: a job note ("No photo
+ * possible: …") on a work order, a `NO_PHOTO` history line on a fault.
+ */
+export function recordNoPhotoReason(data: NetworkData, target: { workOrderId: string } | { faultId: string }, reason: string, ctx: CommandContext = {}): CommandResult<{ text: string }> {
+  const why = reason.trim();
+  if (why.length < 3) return fail('Reason needed', 'Write why no photo was possible.');
+  const text = noPhotoReasonText(why).slice(0, 500);
+  if ('workOrderId' in target) {
+    const order = data.workOrders.find((w) => w.id === target.workOrderId);
+    if (!order) return fail('Work order missing', `${target.workOrderId} was not found.`);
+    if (order.status === 'Closed' || order.status === 'Cancelled') return fail('Finished', `${order.id} is ${order.status.toLowerCase()}.`, 'info');
+    const updated: WorkOrder = {
+      ...order,
+      fieldNotes: [...(order.fieldNotes ?? []), { id: newJobPartId('NTE'), at: nowIso(ctx), by: actorOf(ctx), text }],
+      history: [...(order.history ?? []), line(NO_PHOTO_ACTION, text, ctx)],
+    };
+    return checked(data, { workOrders: replace(data.workOrders, updated) }, { text }, {
+      notice: notice('success', 'Reason recorded', `${order.id}: ${text}`),
+      audit: [{ action: 'NO_PHOTO_REASON', details: `${order.id}: ${text}`, assetId: order.id, assetType: 'WorkOrder' }],
+    });
+  }
+  const fault = data.faults.find((f) => f.id === target.faultId);
+  if (!fault) return fail('Fault missing', `Fault ${target.faultId} was not found.`);
+  if (!isFaultOpen(fault)) return fail('Closed', `${fault.id} is closed.`, 'info');
+  const updated: Fault = { ...fault, history: [...(fault.history ?? []), line(NO_PHOTO_ACTION, text, ctx)] };
+  return checked(data, { faults: replace(data.faults, updated) }, { text }, {
+    notice: notice('success', 'Reason recorded', `${fault.id}: ${text}`),
+    audit: [{ action: 'NO_PHOTO_REASON', details: `${fault.id}: ${text}`, assetId: fault.id, assetType: 'Fault' }],
   });
 }
 
@@ -698,6 +760,9 @@ export function applyJobEvent(data: NetworkData, workOrderId: string, event: Job
       details = `Stopped for now${event.text?.trim() ? `: ${event.text.trim()}` : ''}`;
       break;
     case 'repair_done':
+      if (needsPhotoCheck(order.status, 'Completed') && jobPhotoProblem(order)) {
+        return fail('Photos needed', 'Take a photo before and a photo after the repair. If no photo is possible, say why.');
+      }
       status = 'Completed';
       next.repairedAt = at;
       next.completedDate = at.slice(0, 10);
@@ -707,6 +772,9 @@ export function applyJobEvent(data: NetworkData, workOrderId: string, event: Job
       const verification: Verification = { ...event.verification, at, by, workOrderId };
       const why = verificationProblem(verification);
       if (why) return fail('Check not complete', why);
+      if (needsPhotoCheck(order.status, 'Verified') && jobPhotoProblem(order)) {
+        return fail('Photos needed', 'Take a photo before and a photo after the repair. If no photo is possible, say why.');
+      }
       status = 'Verified';
       next.verification = verification;
       next.verifiedAt = at;

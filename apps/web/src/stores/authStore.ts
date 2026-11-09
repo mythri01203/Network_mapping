@@ -45,6 +45,10 @@ export interface AuthState {
   people: RememberedPerson[];
   /** The "change my password" screen is open. */
   passwordChangeOpen: boolean;
+  /** No account exists yet and this device is not the server computer: it waits for the first admin. */
+  setupPending: boolean;
+  /** The first admin may be made here with the server's setup code. */
+  setupCodeAccepted: boolean;
 
   setPasswordChangeOpen: (open: boolean) => void;
   refresh: () => Promise<void>;
@@ -82,6 +86,8 @@ export const useAuthStore = create<AuthState>()((set, get) => {
       mustChangePassword: !!status.mustChangePassword,
       passwordMinLength: status.passwordMinLength,
       loginNeeded: status.mode === 'enforced' && !account,
+      setupPending: !!status.setupPending,
+      setupCodeAccepted: !!status.setupCodeAccepted,
     });
   };
 
@@ -97,6 +103,8 @@ export const useAuthStore = create<AuthState>()((set, get) => {
     loginNeeded: false,
     people: people(),
     passwordChangeOpen: false,
+    setupPending: false,
+    setupCodeAccepted: false,
 
     setPasswordChangeOpen: (passwordChangeOpen) => set({ passwordChangeOpen }),
 

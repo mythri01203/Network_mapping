@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { ClipboardCheck, UserPlus } from 'lucide-react';
 
-import { describeVerification, isWorkOrderOpen, WORK_ORDER_STATUS_LABELS, type WorkOrder, type WorkOrderStatus } from '@fibergis/shared';
+import { describeVerification, isWorkOrderOpen, jobPhotoProblem, recordNoPhotoReason, WORK_ORDER_STATUS_LABELS, type WorkOrder, type WorkOrderStatus } from '@fibergis/shared';
 
 import { assign, checkJob, moveJob } from '../../stores/faultActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { when } from './faultFormat';
 import { buttonClass, inputClass, JobPhoto, Section, TestBadge } from './faultUi';
+import { type TechnicianList, useTechnicianList } from './technicianList';
 
 const NEXT: Partial<Record<WorkOrderStatus, { to: WorkOrderStatus; label: string }[]>> = {
   Pending: [{ to: 'Cancelled', label: 'Cancel' }],
@@ -18,11 +19,48 @@ const NEXT: Partial<Record<WorkOrderStatus, { to: WorkOrderStatus; label: string
   Verified: [{ to: 'Closed', label: 'Close the work order' }],
 };
 
+/**
+ * Who does the job. With login on it is a pick list of real technician accounts; free text only in
+ * setup mode, with a note saying so. A name already on the job that has no account stays visible.
+ */
+export function TechnicianPicker({ list, value, onChange, testId }: { list: TechnicianList; value: string; onChange: (name: string) => void; testId?: string }) {
+  if (!list.loginOn) {
+    return (
+      <div className="space-y-0.5">
+        <input className={`${inputClass} max-w-48`} placeholder="Technician name" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Technician name" data-testid={testId} />
+        <p className="text-[10px] text-amber-800" data-testid="technician-setup-note">
+          Setup mode: there are no accounts yet, so type the name exactly as the technician will choose it on the phone.
+        </p>
+      </div>
+    );
+  }
+  const options = value && !list.names.includes(value) ? [value, ...list.names] : list.names;
+  return (
+    <div className="space-y-0.5">
+      <select className={`${inputClass} max-w-48`} value={value} onChange={(e) => onChange(e.target.value)} aria-label="Technician" data-testid={testId}>
+        <option value="">Choose a technician</option>
+        {options.map((n) => (
+          <option key={n} value={n}>
+            {list.names.includes(n) ? n : `${n} (no account with this name)`}
+          </option>
+        ))}
+      </select>
+      {list.state === 'loading' && <p className="text-[10px] text-slate-500">Loading the technician accounts…</p>}
+      {list.state === 'failed' && <p className="text-[10px] text-amber-800">Could not load the technician accounts. Check the connection and open this again.</p>}
+      {list.state === 'ready' && list.names.length === 0 && <p className="text-[10px] text-amber-800">No technician accounts yet. Make one in Administration first.</p>}
+    </div>
+  );
+}
+
 export function WorkOrderDetail({ order }: { order: WorkOrder }) {
+  const technicians = useTechnicianList();
   const [name, setName] = useState(order.technicianName === 'Unassigned' ? '' : order.technicianName);
   const [phone, setPhone] = useState(order.technicianPhone);
   const [checkNote, setCheckNote] = useState('');
+  const [noPhoto, setNoPhoto] = useState('');
   const photos = order.photoRefs ?? [];
+  // Repair done, verified and closed each need a photo before and after, or a recorded reason.
+  const photoWhy = jobPhotoProblem(order);
   const events = (order.fieldEvents ?? []).filter((e) => !e.undoneAt);
   return (
     <div className="space-y-2" data-testid="work-order-detail">
@@ -40,13 +78,17 @@ export function WorkOrderDetail({ order }: { order: WorkOrder }) {
       </div>
       {order.notes && <p className="text-[11px] text-slate-700">{order.notes}</p>}
       {!['Verified', 'Closed', 'Cancelled'].includes(order.status) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <input className={`${inputClass} max-w-40`} placeholder="Technician name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Technician name" />
+        <div className="flex flex-wrap items-start gap-1.5">
+          <TechnicianPicker list={technicians} value={name} onChange={setName} testId="job-assign-name" />
           <input className={`${inputClass} max-w-40`} placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Technician phone" data-testid="job-assign-phone" />
           <button
             type="button"
             data-testid="job-assign"
-            disabled={!name.trim() || (name.trim() === order.technicianName && phone.trim() === order.technicianPhone)}
+            disabled={
+              !name.trim() ||
+              (technicians.loginOn && !technicians.names.includes(name.trim())) ||
+              (name.trim() === order.technicianName && phone.trim() === order.technicianPhone)
+            }
             onClick={() => assign(order.id, name, phone)}
             className={`${buttonClass} border border-slate-300`}
           >
@@ -87,6 +129,25 @@ export function WorkOrderDetail({ order }: { order: WorkOrder }) {
           Note from {n.by ?? 'field'} ({when(n.at)}): {n.text}
         </div>
       ))}
+      {photoWhy && ['Accepted', 'In Progress', 'On Hold', 'Completed'].includes(order.status) && (
+        <div className="space-y-1 rounded border border-amber-300 bg-amber-50 p-2 text-[11px]" data-testid="job-photo-needed">
+          <div className="text-amber-900">Photos of the repair: {photoWhy}</div>
+          <div className="flex flex-wrap gap-1.5">
+            <input className={`${inputClass} max-w-72`} placeholder="Why no photo was possible" value={noPhoto} onChange={(e) => setNoPhoto(e.target.value)} aria-label="Why no photo was possible" />
+            <button
+              type="button"
+              disabled={noPhoto.trim().length < 3}
+              onClick={() => {
+                if (useNetworkStore.getState().runCommand((d, ctx) => recordNoPhotoReason(d, { workOrderId: order.id }, noPhoto, ctx))) setNoPhoto('');
+              }}
+              className={`${buttonClass} border border-slate-300`}
+              data-testid="job-no-photo-reason"
+            >
+              Record the reason
+            </button>
+          </div>
+        </div>
+      )}
       <div className="rounded border border-slate-200 bg-slate-50 p-2 text-[11px]" data-testid="job-verification">
         {order.verification ? (
           <>

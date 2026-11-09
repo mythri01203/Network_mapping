@@ -170,7 +170,9 @@ describe('API', () => {
         deletes: { cables: [sample.cables[0].id] },
       },
     });
-    const reset = await app.inject({ method: 'POST', url: api('/reset') });
+    // Without the confirm word nothing happens, even with login off.
+    expect((await app.inject({ method: 'POST', url: api('/reset') })).statusCode).toBe(400);
+    const reset = await app.inject({ method: 'POST', url: api('/reset'), payload: { confirm: 'reset' } });
     expect(reset.json()).toMatchObject({ revision: 4, safetyCopy: expect.stringMatching(/^fibergis-before-reset-/) });
 
     const { data } = await getNetwork();
@@ -775,7 +777,12 @@ describe('alarm, fault and work order checks (Phase 8)', () => {
     expect(closed.statusCode).toBe(409);
     expect(closed.json().message).toContain('cannot be closed without a check');
     const verification = { method: 'office_check', at: '2026-11-07T11:00:00.000Z', by: 'Office', note: 'Customer confirmed by phone' };
-    const checked = await send({ upserts: { alarms: [alarm()], faults: [fault({ status: 'Closed', verification })] } });
+    // A check alone is not enough: the repair needs its photos (from a job) or a recorded reason.
+    const noPhoto = await send({ upserts: { alarms: [alarm()], faults: [fault({ status: 'Closed', verification })] } });
+    expect(noPhoto.statusCode).toBe(409);
+    expect(noPhoto.json().message).toContain('why no photo was possible');
+    const history = [{ at: '2026-11-07T11:00:00.000Z', by: 'Office', action: 'NO_PHOTO', details: 'No photo possible: fixed from the office' }];
+    const checked = await send({ upserts: { alarms: [alarm()], faults: [fault({ status: 'Closed', verification, history })] } });
     expect(checked.statusCode).toBe(200);
   });
 

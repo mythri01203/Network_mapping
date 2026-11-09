@@ -5,7 +5,7 @@ import type { Equipment, LatLng } from '@fibergis/shared';
 
 import { isTypingTarget } from '../../../lib/browser';
 import { useMapStore } from '../../../stores/mapStore';
-import { addEquipment, setCustomerLocation } from '../../../stores/networkActions';
+import { setCustomerLocation } from '../../../stores/networkActions';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { placeEquipmentChecked } from '../../../stores/ospActions';
 import { showToast } from '../../../stores/toastStore';
@@ -21,8 +21,9 @@ const DRAW = { line: '#0284c7', vertex: '#2563eb', endpoint: '#3b82f6' };
 const MEASURE = { line: '#f59e0b', vertex: '#d97706' };
 const SNAP = { stroke: '#10b981', fill: '#34d399' };
 
-function placePole(lat: number, lng: number): Equipment | null {
-  return addEquipment({
+/** Auto-pole while drawing: asks "same one?" like every other placement, so no silent duplicate pole. */
+function placePole(lat: number, lng: number): Promise<Equipment | null> {
+  return placeEquipmentChecked({
     name: nextPoleName(useNetworkStore.getState().equipment),
     type: 'Telecom Pole',
     lat,
@@ -172,7 +173,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
 
       if (store.activeTool === 'draw_cable') {
         store.setDrawingPoints((prev) => [...prev, point]);
-        if (latest.current.autoPole && !target) placePole(point[0], point[1]);
+        if (latest.current.autoPole && !target) void placePole(point[0], point[1]);
       } else if (store.activeTool === 'measure') {
         store.setMeasuringPoints((prev) => [...prev, point]);
       } else if (store.activeTool === 'add_equipment' && store.equipmentTypeToAdd) {

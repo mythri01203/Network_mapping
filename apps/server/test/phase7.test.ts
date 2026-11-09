@@ -44,7 +44,10 @@ async function people() {
   const admin = cookieOf(await call('POST', '/auth/setup', { username: 'owner', displayName: 'Owner', password: 'owner-pass-1' }));
   const user = async (username: string, role: string) => {
     expect((await call('POST', '/users', { username, displayName: username, role, password: `${username}-pass-1` }, as(admin))).statusCode).toBe(201);
-    return cookieOf(await call('POST', '/auth/login', { username, password: `${username}-pass-1` }));
+    const cookie = cookieOf(await call('POST', '/auth/login', { username, password: `${username}-pass-1` }));
+    // A temporary password from the office is replaced first.
+    expect((await call('POST', '/auth/password', { currentPassword: `${username}-pass-1`, newPassword: `${username}-pass-2` }, as(cookie))).statusCode).toBe(200);
+    return cookie;
   };
   return { admin, engineer: await user('eng', 'engineer'), viewer: await user('view', 'viewer') };
 }

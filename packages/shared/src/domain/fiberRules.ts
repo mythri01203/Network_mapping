@@ -1,6 +1,7 @@
 import { type ColorScheme, coreIdentity, DEFAULT_COLOR_SCHEMES } from '../fiber/colors';
 import type { ChangeSet } from '../model/api';
 import type { SplitterRatio } from '../model/enums';
+import type { Splitter } from '../model/types';
 import {
   buildFiberIndex,
   coreKey,
@@ -73,6 +74,15 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
     }
     for (const core of cable.cores) {
       const active = (core.assignments ?? []).filter((a) => !a.releasedAt);
+      // Marked In Use, but nothing on record says for what: the next person cannot tell it is taken.
+      if (core.status === 'In Use' && active.length === 0) {
+        warning(
+          'core_in_use_unassigned',
+          coreKey(cable.id, core.coreNumber),
+          `${cap(describeCore(index, cable.id, core.coreNumber))} is marked In Use but has no assignment saying what uses it${core.customerId ? ` (the core names ${core.customerId})` : ''}. Record its use or mark it free.`,
+          [cable.id],
+        );
+      }
       if (active.length > 1) {
         error(
           'core_two_assignments',
@@ -268,15 +278,45 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
   }
 
   // --- Customers ------------------------------------------------------------------------------
+  const onOutput = new Map<string, typeof data.customers>();
   for (const customer of data.customers) {
     if (customer.dropCableId && index.cables.has(customer.dropCableId) && customer.fiberCore && !coreExists(customer.dropCableId, customer.fiberCore)) {
       error('customer_missing_core', customer.id, `${customer.name} is on fiber ${customer.fiberCore} of ${customer.dropCableId}, which does not exist.`, [customer.id]);
     }
+    if (customer.status !== 'Disconnected' && customer.splitterId && customer.splitterOutputPort) {
+      const key = `${customer.splitterId}#${customer.splitterOutputPort}`;
+      onOutput.set(key, [...(onOutput.get(key) ?? []), customer]);
+    }
+  }
+  // One splitter output feeds one ONT. Customers sharing one recorded ONT (an MDU unit) are that one ONT.
+  for (const [key, list] of onOutput) {
+    if (list.length < 2) continue;
+    const ontId = list[0].ontId;
+    if (ontId && list.every((c) => c.ontId === ontId)) continue;
+    const [splitterId, port] = splitKey(key);
+    const sp = index.splitters.get(splitterId);
+    error(
+      'splitter_output_two_customers',
+      key,
+      `Output ${port} of splitter ${sp?.name ?? splitterId} is recorded for ${list.length} active customers (${list.map((c) => c.name).join(', ')}). One output feeds one ONT.`,
+      [splitterId, ...list.map((c) => c.id)],
+    );
+  }
+
+  // --- Two OLT ports on one splitter tree (always: a cheap walk of recorded links only) ---------
+  for (const [spId, roots] of splitterRoots(data, index)) {
+    const sp = index.splitters.get(spId);
+    if (roots.length < 2 || sp?.dualInput) continue;
+    error(
+      'two_pon_one_tree',
+      spId,
+      `Splitter ${sp?.name ?? spId} is reached from both ${roots[0].label} and ${roots[1].label}. Two OLT ports cannot feed one splitter tree.`,
+      [spId, ...new Set(roots.map((r) => r.oltId))],
+    );
   }
 
   // --- Whole PON trees ------------------------------------------------------------------------
   if (options.trees) {
-    const rootOf = new Map<string, string>();
     for (const olt of data.equipment) {
       for (const pon of olt.ponPorts ?? []) {
         const tree = tracePonTree(olt.id, pon.id, data, { settings, index });
@@ -284,15 +324,6 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
         for (const p of tree.problems) warning('pon_tree', `${olt.id}/${pon.id}/${p}`, p, [olt.id]);
         if (tree.maxSplitProduct > settings.limits.splitProduct) {
           warning('split_product', `${olt.id}/${pon.id}`, `${olt.name} ${pon.id}: splits multiply to 1:${tree.maxSplitProduct}, above the ${settings.limits.splitProduct} limit in settings.`, [olt.id]);
-        }
-        for (const spId of tree.splitterIds) {
-          const other = rootOf.get(spId);
-          const here = `${olt.name} ${pon.id}`;
-          const sp = index.splitters.get(spId);
-          if (other && other !== here && !sp?.dualInput) {
-            error('two_pon_one_tree', spId, `Splitter ${sp?.name ?? spId} is reached from both ${other} and ${here}. Two OLT ports cannot feed one splitter tree.`, [spId, olt.id]);
-          }
-          rootOf.set(spId, here);
         }
         for (const leaf of tree.leaves) {
           const v = leaf.path.verdict;
@@ -315,6 +346,46 @@ const splitKey = (key: string): [string, number] => {
   const i = key.lastIndexOf('#');
   return [key.slice(0, i), Number(key.slice(i + 1))];
 };
+
+/**
+ * For each splitter, the OLT PON ports whose recorded fibers reach it (patches, splices, splitter
+ * outputs and cascades only). Linear in the links walked: no loss or budget is worked out here.
+ */
+function splitterRoots(data: FiberData, index: FiberIndex): Map<string, { oltId: string; label: string }[]> {
+  const roots = new Map<string, { oltId: string; label: string }[]>();
+  for (const olt of data.equipment) {
+    for (const pon of olt.ponPorts ?? []) {
+      const label = `${olt.name} ${pon.id}`;
+      const queue: { cableId: string; core: number }[] = [];
+      for (const ref of index.ponPatches.get(`${olt.id}/${pon.id}`) ?? []) {
+        if (ref.port.feederCableId && ref.port.feederCore) queue.push({ cableId: ref.port.feederCableId, core: ref.port.feederCore });
+      }
+      if (pon.connectedFeederCableId && pon.feederCore) queue.push({ cableId: pon.connectedFeederCableId, core: pon.feederCore });
+      const seenCores = new Set<string>();
+      const seenSplitters = new Set<string>();
+      const visit = (sp: Splitter) => {
+        if (seenSplitters.has(sp.id)) return;
+        seenSplitters.add(sp.id);
+        roots.set(sp.id, [...(roots.get(sp.id) ?? []), { oltId: olt.id, label }]);
+        for (const port of sp.outputPorts) {
+          if (port.connectedDropCableId && port.connectedCore) queue.push({ cableId: port.connectedDropCableId, core: port.connectedCore });
+          for (const child of index.cascadeChildren.get(`${sp.id}#${port.portNumber}`) ?? []) visit(child);
+        }
+      };
+      for (let guard = 0; queue.length && guard < 5000; guard += 1) {
+        const next = queue.shift()!;
+        const key = coreKey(next.cableId, next.core);
+        if (seenCores.has(key)) continue;
+        seenCores.add(key);
+        for (const sink of index.sinks.get(key) ?? []) {
+          if (sink.kind === 'splice' && isSpliceActive(sink.splice)) queue.push({ cableId: sink.splice.outputCableId, core: sink.splice.outputCore });
+          else if (sink.kind === 'splitter') visit(sink.splitter);
+        }
+      }
+    }
+  }
+  return roots;
+}
 
 export interface FiberChangeCheck {
   errors: FiberProblem[];

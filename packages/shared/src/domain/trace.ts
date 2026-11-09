@@ -104,30 +104,47 @@ const cableLength = (c: Cable) =>
 export const upstreamCandidates = (equipmentId: string, data: Pick<TraceData, 'cables'>) =>
   data.cables.filter((c) => isTrunkCable(c) && c.endEquipmentId === equipmentId);
 
+export interface UpstreamWalk {
+  /** OLT first. */
+  hops: UpstreamHop[];
+  /** Where several cables end at one box and no record says which one serves this path. */
+  ambiguousAt?: { equipmentId: string; cableIds: string[] };
+}
+
+/** The gap for a box fed by several cables when nothing on record picks one. */
+export const ambiguousFeedGap = (a: NonNullable<UpstreamWalk['ambiguousAt']>) =>
+  `${a.equipmentId} is fed by ${a.cableIds.length} cables (${a.cableIds.join(', ')}). No record says which one serves this path, so none was followed. Record the fiber link (splitter input or splice) to show the path.`;
+
 /**
  * Walks trunk cables (end → start) from an equipment back to its serving OLT.
  * Hops are returned OLT-first. An OLT is always treated as the signal source,
- * so inter-OLT backhaul links are never followed.
+ * so inter-OLT backhaul links are never followed. Where several cables end at a box and none of
+ * them is a preferred (recorded) cable, the walk stops there and says so: it never picks one.
  */
-export function findUpstreamChain(
+export function walkUpstreamCables(
   startEquipmentId: string,
   data: TraceData,
   preferredCableIds: string[] = [],
-): UpstreamHop[] {
+): UpstreamWalk {
   const hops: UpstreamHop[] = [];
   const start = data.equipment.find((e) => e.id === startEquipmentId);
-  if (!start || start.type === 'OLT') return hops;
+  if (!start || start.type === 'OLT') return { hops };
 
   const visitedCables = new Set<string>();
   const visitedEquipment = new Set<string>([startEquipmentId]);
   let currentId: string | undefined = startEquipmentId;
 
   for (let guard = 0; guard < 16 && currentId; guard++) {
+    const atId: string = currentId;
     const candidates = data.cables.filter(
-      (c) => isTrunkCable(c) && c.endEquipmentId === currentId && !visitedCables.has(c.id),
+      (c) => isTrunkCable(c) && c.endEquipmentId === atId && !visitedCables.has(c.id),
     );
     if (candidates.length === 0) break;
-    const cable = candidates.find((c) => preferredCableIds.includes(c.id)) || candidates[0];
+    const preferred = candidates.find((c) => preferredCableIds.includes(c.id));
+    if (!preferred && candidates.length > 1) {
+      return { hops, ambiguousAt: { equipmentId: atId, cableIds: candidates.map((c) => c.id) } };
+    }
+    const cable = preferred ?? candidates[0];
     visitedCables.add(cable.id);
     const from = cable.startEquipmentId ? data.equipment.find((e) => e.id === cable.startEquipmentId) : undefined;
     hops.unshift({ cable, from });
@@ -135,7 +152,16 @@ export function findUpstreamChain(
     visitedEquipment.add(from.id);
     currentId = from.id;
   }
-  return hops;
+  return { hops };
+}
+
+/** The hops of `walkUpstreamCables`. Stops at a box fed by several cables with none recorded. */
+export function findUpstreamChain(
+  startEquipmentId: string,
+  data: TraceData,
+  preferredCableIds: string[] = [],
+): UpstreamHop[] {
+  return walkUpstreamCables(startEquipmentId, data, preferredCableIds).hops;
 }
 
 /** Returns the OLT that ultimately feeds an equipment (or the equipment itself if it is an OLT). */
@@ -301,7 +327,8 @@ class PathBuilder {
       status = core.status === 'Damaged' ? 'Faulty' : 'Warning';
       this.warnings.push(`Core ${coreNumber} on ${cable.id} is ${core.status}.`);
     }
-    const coreText = core ? ` | Core ${core.coreNumber} (${core.colorName})` : '';
+    // The colour only when one is on record: a new cable with no scheme has none.
+    const coreText = core ? ` | Core ${core.coreNumber}${core.colorName ? ` (${core.colorName})` : ''}` : '';
     if (length <= 0) this.gap(`${cable.id} has no length recorded, so its loss is not counted.`);
     const coords = cable.coordinates || [];
     const mid = coords[Math.floor(coords.length / 2)];
@@ -380,7 +407,9 @@ class PathBuilder {
     extraEquipmentIds: string[] = [],
   ): TraceResult {
     const totalLossDb = this.totalLossDb();
-    const estimatedRxDbm = summary.txPowerDbm !== undefined ? round1(summary.txPowerDbm - totalLossDb) : undefined;
+    // No estimate on a broken path: the loss covers only the linked part, so a number would mislead.
+    const estimatedRxDbm =
+      !this.incomplete && summary.txPowerDbm !== undefined ? round1(summary.txPowerDbm - totalLossDb) : undefined;
     return {
       nodes: this.nodes,
       cableIds: [...new Set([...this.cableIds, ...extraCableIds])],
@@ -410,14 +439,15 @@ function buildTrunk(
   hops: UpstreamHop[],
   endEquipment: Equipment,
   data: TraceData,
-  opts: { ponPortId?: string; firstCableId?: string; lastCore?: number } = {},
+  opts: { ponPortId?: string; firstCableId?: string; lastCore?: number; ambiguousAt?: UpstreamWalk['ambiguousAt'] } = {},
 ): number | undefined {
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : endEquipment.type === 'OLT' ? endEquipment : undefined;
   builder.planCables(hops.map((h) => h.cable.id));
   let txPowerDbm: number | undefined;
 
   if (!olt) {
-    if (!isCatv(endEquipment)) {
+    if (opts.ambiguousAt) builder.gap(ambiguousFeedGap(opts.ambiguousAt));
+    else if (!isCatv(endEquipment)) {
       builder.gap(`No cable links ${endEquipment.id} back to an OLT, so the route is incomplete.`);
     }
   } else {
@@ -478,11 +508,12 @@ export function traceCustomer(
       customer.distributionCableId,
       splitter?.inputPort.connectedCableId || '',
     ];
-    const hops = findUpstreamChain(fat.id, data, preferred);
+    const { hops, ambiguousAt } = walkUpstreamCables(fat.id, data, preferred);
     builder.planCables([customer.dropCableId]);
     txPowerDbm = buildTrunk(builder, hops, fat, data, {
       ponPortId: customer.ponPort,
       lastCore: splitter?.inputPort.connectedCore,
+      ambiguousAt,
     });
     builder.addEquipment(
       fat,
@@ -584,8 +615,8 @@ export function traceEquipment(
       });
     });
   } else {
-    const hops = findUpstreamChain(eq.id, data);
-    txPowerDbm = buildTrunk(builder, hops, eq, data);
+    const { hops, ambiguousAt } = walkUpstreamCables(eq.id, data);
+    txPowerDbm = buildTrunk(builder, hops, eq, data, { ambiguousAt });
     builder.addEquipment(
       eq,
       `${eq.type} | ${downstream.equipmentIds.length - 1} downstream node(s) | ${downstream.customers.length} customer(s) served`,
@@ -622,9 +653,9 @@ export function traceCable(
   } else if (isCoax || isCatv(start)) {
     builder.addEquipment(start, `${start.type} | cable origin`, false);
   } else {
-    const hops = findUpstreamChain(start.id, data);
+    const { hops, ambiguousAt } = walkUpstreamCables(start.id, data);
     builder.planCables([cable.id]);
-    txPowerDbm = buildTrunk(builder, hops, start, data, { firstCableId: cable.id });
+    txPowerDbm = buildTrunk(builder, hops, start, data, { firstCableId: cable.id, ambiguousAt });
     if (start.type !== 'OLT') builder.addEquipment(start, `${start.type} | cable origin`);
   }
   const role = cableRole(cable, start?.type === 'OLT');
@@ -688,6 +719,9 @@ export function estimateRxForSplitter(
         cableIds: [...up.cableIds].reverse(),
         lossDb,
         launchDbm: tx,
+        /** 'core': every fiber from the PON port to this splitter is on record. */
+        level: 'core' as const,
+        gaps: [] as string[],
         pathComplete: true,
         rxDbm: tx !== undefined ? round1(tx - lossDb) : undefined,
         rxRangeDbm:
@@ -697,31 +731,35 @@ export function estimateRxForSplitter(
       };
     }
   }
+  // The fibers are not on record end to end. The cable route below is only a picture of where the
+  // light may come from: it is never stored as the customer's path and gives no Rx estimate.
+  const coreGap = !input.connectedCableId || !input.connectedCore
+    ? `the input of splitter ${splitter.id} is not linked to a fiber (open ${fat.id} on the map, Splitters and ports, Link input to this fiber)`
+    : (traceCoreUpstream(input.connectedCableId, input.connectedCore, data, { settings }).gaps[0] ??
+      `the fiber feeding splitter ${splitter.id} is not recorded back to an OLT PON port`);
   const builder = new PathBuilder(data, settings);
-  const hops = findUpstreamChain(fat.id, data, [splitter.inputPort.connectedCableId || '']);
-  const tx = buildTrunk(builder, hops, fat, data, { lastCore: splitter.inputPort.connectedCore });
+  const { hops, ambiguousAt } = walkUpstreamCables(fat.id, data, [input.connectedCableId || '']);
+  const tx = buildTrunk(builder, hops, fat, data, { lastCore: input.connectedCore, ambiguousAt });
   builder.addEquipment(fat, fat.type);
   builder.addSplitter(splitter, 'provisioning', fat);
   builder.addDistance(dropLengthMeters);
   builder.connector();
   const olt = hops[0]?.from?.type === 'OLT' ? hops[0].from : undefined;
   const pon = olt ? findPon(olt, hops[0]?.cable.id) : undefined;
-  const lossDb = builder.totalLossDb();
-  const opticsClass = opticsClassForTechnology(pon?.technology ?? olt?.technology);
-  const { launchMinDbm, launchMaxDbm } = settings.classes[opticsClass];
   return {
     olt,
     pon,
     hops,
     cableIds: hops.map((h) => h.cable.id),
-    lossDb,
+    lossDb: builder.totalLossDb(),
     launchDbm: tx,
-    pathComplete: !builder.incomplete,
-    rxDbm: tx !== undefined ? round1(tx - lossDb) : undefined,
-    rxRangeDbm:
-      olt && launchMinDbm !== undefined && launchMaxDbm !== undefined
-        ? { min: round1(launchMinDbm - lossDb), max: round1(launchMaxDbm - lossDb) }
-        : undefined,
+    /** 'cable': only cables were followed, so OLT, PON and cables here are not a recorded path. */
+    level: 'cable' as const,
+    /** What is missing, first the fiber link, in plain words. */
+    gaps: [coreGap, ...builder.warnings],
+    pathComplete: false,
+    rxDbm: undefined as number | undefined,
+    rxRangeDbm: undefined as { min: number; max: number } | undefined,
   };
 }
 

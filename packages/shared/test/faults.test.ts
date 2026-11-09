@@ -11,13 +11,14 @@ import {
   raiseAlarm,
   raiseTestEvent,
   recordFaultVerification,
+  recordNoPhotoReason,
   setFaultStatus,
   setJobStatus,
   undoJobEvent,
 } from '../src/domain/faultCommands';
 import { correlateAlarms } from '../src/domain/faultCorrelation';
 import { affectedByElement, buildImpactIndex } from '../src/domain/faultImpact';
-import { checkChangeSetFaults, findFaultProblems, verificationProblem } from '../src/domain/faultRules';
+import { checkChangeSetFaults, findFaultProblems, jobPhotoProblem, noPhotoReasonText, verificationProblem } from '../src/domain/faultRules';
 import { resolveFaultSettings } from '../src/domain/faultSettings';
 import { addOdfPanel, createClosure, patchOdfPort, recordSplice, setOdfPortFeeder } from '../src/domain/fiberCommands';
 import { buildOltPonPorts } from '../src/domain/oltConfig';
@@ -204,7 +205,10 @@ describe('fault rules (browser and server)', () => {
     expect(verificationProblem({ method: 'field_reading', at: '', by: 'Ravi', readingDbm: -19, readingOrigin: 'field_measured' })).toContain('photo of the meter');
     expect(verificationProblem({ method: 'office_check', at: '', by: 'Office' })).toContain('note');
     const good = { ...base, verification: { method: 'office_check' as const, at: '', by: 'Office', note: 'Customer confirmed by phone' } };
-    expect(checkChangeSetFaults(data, { upserts: { faults: [good] } })).toEqual([]);
+    // A check alone is not enough: the repair needs its photos, or a recorded reason why not.
+    expect(checkChangeSetFaults(data, { upserts: { faults: [good] } }).map((p) => p.code)).toEqual(['fault_closed_no_photo']);
+    const withReason = { ...good, history: [{ at: '', by: 'Office', action: 'NO_PHOTO', details: 'No photo possible: fixed from the office' }] };
+    expect(checkChangeSetFaults(data, { upserts: { faults: [withReason] } })).toEqual([]);
     expect(checkChangeSetFaults(data, { upserts: { faults: [{ ...base, status: 'Resolved' }] } }).map((p) => p.code)).toContain('fault_resolved_without_check');
     // Problems already stored are not blamed on an unrelated change.
     expect(checkChangeSetFaults({ ...data, faults: [base] }, { upserts: { alarms: [] } })).toEqual([]);
@@ -295,6 +299,8 @@ describe('alarm, fault and job lifecycle', () => {
     let d = applyPatch(data, ok(createJob(data, { title: 'Inspect', technicianName: 'Ravi' }, ctx)).patch);
     const id = d.workOrders[0].id;
     d = applyPatch(d, ok(applyJobEvent(d, id, { id: 'E1', kind: 'start', at: at(1).toISOString(), by: 'Ravi' }, ctx)).patch);
+    d = applyPatch(d, ok(applyJobEvent(d, id, { id: 'E1B', kind: 'photo', photoId: 'PH-B', photoKind: 'before', at: at(1).toISOString(), by: 'Ravi' }, ctx)).patch);
+    d = applyPatch(d, ok(applyJobEvent(d, id, { id: 'E1A', kind: 'photo', photoId: 'PH-A', photoKind: 'after', at: at(2).toISOString(), by: 'Ravi' }, ctx)).patch);
     d = applyPatch(d, ok(applyJobEvent(d, id, { id: 'E2', kind: 'repair_done', at: at(2).toISOString(), by: 'Ravi' }, ctx)).patch);
     expect(d.workOrders[0].status).toBe('Completed');
     d = applyPatch(d, ok(undoJobEvent(d, id, 'E2', ctx)).patch);
@@ -315,10 +321,43 @@ describe('alarm, fault and job lifecycle', () => {
     d = applyPatch(d, f.patch);
     expect(f.value.isTest).toBe(false);
     expect(recordFaultVerification(d, f.value.id, { method: 'office_check' }, ctx).ok).toBe(false);
+    // No job and no photos: the office records why no photo was possible first.
+    expect(recordFaultVerification(d, f.value.id, { method: 'office_check', note: 'Customer says it works' }, ctx)).toMatchObject({ ok: false, error: { title: 'Photos needed' } });
+    d = applyPatch(d, ok(recordNoPhotoReason(d, { faultId: f.value.id }, 'ONT restarted by phone call, nobody went', ctx)).patch);
     d = applyPatch(d, ok(recordFaultVerification(d, f.value.id, { method: 'office_check', note: 'Customer says it works' }, ctx)).patch);
     expect(d.faults[0].status).toBe('Verified');
     d = applyPatch(d, ok(setFaultStatus(d, f.value.id, 'Closed', {}, ctx)).patch);
     expect(d.faults[0].status).toBe('Closed');
+  });
+
+  it('repair done needs a photo before and after, or a recorded reason; the server runs the same rule', () => {
+    const { data } = network(1);
+    let d = applyPatch(data, ok(createJob(data, { title: 'Inspect', technicianName: 'Ravi' }, ctx)).patch);
+    const id = d.workOrders[0].id;
+    const ev = (e: Record<string, unknown>, minutes: number) => applyJobEvent(d, id, { ...e, at: at(minutes).toISOString(), by: 'Ravi' } as never, ctx);
+    d = applyPatch(d, ok(ev({ id: 'E1', kind: 'start' }, 1)).patch);
+    expect(ev({ id: 'E2', kind: 'repair_done' }, 2)).toMatchObject({ ok: false, error: { title: 'Photos needed' } });
+    d = applyPatch(d, ok(ev({ id: 'E3', kind: 'photo', photoId: 'PH-B', photoKind: 'before' }, 3)).patch);
+    expect(ev({ id: 'E4', kind: 'repair_done' }, 4).ok).toBe(false);
+    expect(setJobStatus(d, id, 'Completed', {}, ctx)).toMatchObject({ ok: false, error: { title: 'Photos needed' } });
+    // The phone's reason path: a note that starts "No photo possible: ".
+    d = applyPatch(d, ok(ev({ id: 'E5', kind: 'note', text: noPhotoReasonText('Inside the customer flat, not allowed') }, 5)).patch);
+    expect(jobPhotoProblem(d.workOrders[0])).toBeNull();
+    d = applyPatch(d, ok(ev({ id: 'E6', kind: 'repair_done' }, 6)).patch);
+    expect(d.workOrders[0].status).toBe('Completed');
+
+    // Server: a job written as Completed with no photos and no reason is refused.
+    const bare = { ...d.workOrders[0], id: 'WO-BARE', fieldNotes: [], photoRefs: [] };
+    expect(checkChangeSetFaults(d, { upserts: { workOrders: [bare] } }).map((p) => p.code)).toContain('wo_done_no_photo');
+    // An older job already done without photos still saves an unrelated change...
+    const old = { ...d, workOrders: [bare, ...d.workOrders] };
+    expect(checkChangeSetFaults(old, { upserts: { workOrders: [{ ...bare, notes: 'called the customer' }] } })).toEqual([]);
+    // ...but moving it on to verified is a new step and needs the photos or a reason.
+    const verified = { ...bare, status: 'Verified' as const, verification: { method: 'office_check' as const, at: '', by: 'Office', note: 'Customer confirmed' } };
+    expect(checkChangeSetFaults(old, { upserts: { workOrders: [verified] } }).map((p) => p.code)).toContain('wo_done_no_photo');
+    const office = ok(recordNoPhotoReason(old, { workOrderId: 'WO-BARE' }, 'Phone camera broken', ctx));
+    expect(office.patch.workOrders!.find((w) => w.id === 'WO-BARE')!.fieldNotes!.at(-1)!.text).toBe('No photo possible: Phone camera broken');
+    expect(recordNoPhotoReason(old, { workOrderId: 'WO-BARE' }, '  ', ctx).ok).toBe(false);
   });
 
   it('settings keep medium at or below high and ignore impossible values', () => {

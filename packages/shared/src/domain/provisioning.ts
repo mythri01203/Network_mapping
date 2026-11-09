@@ -14,6 +14,11 @@ import { estimateRxForSplitter } from './trace';
 
 export type CustomerDraft = Partial<Customer>;
 
+/** A drop made by `provisionCustomer` has two fibers. */
+const NEW_DROP_FIBER_COUNT = 2;
+/** The fiber of a new drop that carries the service when the draft names none (the spare is fiber 2). */
+const NEW_DROP_FIBER = 1;
+
 /** Equipment a subscriber's drop cable can terminate on. */
 export const isCustomerTerminal = (type: string) =>
   type === 'FAT' || type.includes('Terminal Box') || type === 'Distribution Point';
@@ -121,6 +126,9 @@ export function createSplitter(
   );
 }
 
+/** A gap sentence ready to sit inside another sentence. */
+const plain = (gap: string | undefined) => (gap ?? 'the fiber path is not recorded').trim().replace(/\.$/, '');
+
 /** A given reading keeps its stated origin. An estimate is stored as calculated. No estimate stores nothing. */
 const readingFor = (
   draft: CustomerDraft,
@@ -143,8 +151,9 @@ const readingFor = (
 
 /**
  * Activates a subscriber on a splitter output port: creates the customer and a 2-core drop cable,
- * occupies the splitter and FAT ports, increments the serving PON and resolves the logical path
- * (OLT, PON, feeder/distribution cables, estimated Rx) from the physical topology. Facts nobody gave
+ * occupies the splitter and FAT ports. The logical path (OLT, PON, feeder/distribution cables,
+ * estimated Rx) and the PON count are filled only from a fiber path recorded end to end, or from what
+ * the draft names; otherwise they stay empty and the notice names the missing link. Facts nobody gave
  * stay blank: no generated serial or IP, and no made-up house position. A blank position leaves the
  * drop cable with no route or length until `setCustomerLocation` records one.
  */
@@ -215,12 +224,18 @@ export function provisionCustomer(
       ]
     : [];
   const dropLength = hasLocation ? Math.max(1, Math.round(polylineLengthMeters(dropRoute))) : 0;
+  // This command makes the drop, so it names the drop's working fiber: the one the person gave, else
+  // NEW_DROP_FIBER. That one number goes on the drop core, the customer and the splitter output.
+  if (draft.fiberCore !== undefined && (!Number.isInteger(draft.fiberCore) || draft.fiberCore < 1 || draft.fiberCore > NEW_DROP_FIBER_COUNT)) {
+    return fail('Invalid Drop Fiber', `The new drop has ${NEW_DROP_FIBER_COUNT} fibers, so fiber ${draft.fiberCore} does not exist.`);
+  }
+  const dropCore = draft.fiberCore ?? NEW_DROP_FIBER;
   const dropId = newRecordId('DROP-');
   const dropCable: Cable = {
     id: dropId,
     name: `Drop ${fat.id} → ${id}`,
     type: 'Drop Fiber',
-    fiberCount: 2,
+    fiberCount: NEW_DROP_FIBER_COUNT,
     lengthMeters: dropLength,
     owner: '',
     installationDate: isoDate(ctx.now),
@@ -228,8 +243,8 @@ export function provisionCustomer(
     remarks: `Auto-created during provisioning of ${id}`,
     coordinates: dropRoute,
     startEquipmentId: fat.id,
-    cores: buildCores(2).map((core) =>
-      core.coreNumber === 1
+    cores: buildCores(NEW_DROP_FIBER_COUNT).map((core) =>
+      core.coreNumber === dropCore
         ? {
             ...core,
             status: 'In Use' as const,
@@ -259,8 +274,10 @@ export function provisionCustomer(
 
   const optical = ctx.optical ?? DEFAULT_OPTICAL_SETTINGS;
   const estimate = estimateRxForSplitter(fat, splitter, data, dropLength, optical);
-  const feederId = estimate.cableIds[0];
-  const distributionId = estimate.cableIds.length > 1 ? estimate.cableIds[estimate.cableIds.length - 1] : undefined;
+  // Only a path recorded fiber by fiber is stored. A cable-level walk is a guess and stays out.
+  const recorded = estimate.level === 'core' ? estimate : undefined;
+  const feederId = recorded?.cableIds[0];
+  const distributionId = recorded && recorded.cableIds.length > 1 ? recorded.cableIds[recorded.cableIds.length - 1] : undefined;
 
   const customer: Customer = {
     id,
@@ -280,23 +297,25 @@ export function provisionCustomer(
     plan: draft.plan || '',
     status: draft.status || 'Active',
     installationDate: isoDate(ctx.now),
-    oltId: draft.oltId || estimate.olt?.id || '',
-    ponPort: draft.ponPort || estimate.pon?.id || '',
+    oltId: draft.oltId || recorded?.olt?.id || '',
+    ponPort: draft.ponPort || recorded?.pon?.id || '',
     feederCableId: draft.feederCableId || feederId || '',
     distributionCableId: draft.distributionCableId || distributionId || feederId || '',
     terminalBoxId: fat.id,
     splitterId: splitter.id,
     splitterOutputPort: port.portNumber,
     dropCableId: dropId,
-    // The drop's core 1 is the one marked In Use above.
-    fiberCore: draft.fiberCore || 1,
+    // The same fiber that is marked In Use on the drop and on the splitter output.
+    fiberCore: dropCore,
     ontSerialNumber: ontSerial,
     routerModel: draft.routerModel || '',
     ipAddress: draft.ipAddress?.trim() || '',
-    ...readingFor(draft, estimate),
+    // An Rx estimate is stored only for a recorded path; a partial total would look better than it is.
+    ...readingFor(draft, recorded ?? {}),
   };
 
-  const servingPon = estimate.olt && estimate.pon ? { oltId: estimate.olt.id, ponId: estimate.pon.id } : undefined;
+  // The PON count follows only a recorded path or the person's own choice, never a cable-level walk.
+  const servingPon = customer.oltId && customer.ponPort ? { oltId: customer.oltId, ponId: customer.ponPort } : undefined;
   const equipment = data.equipment.map((e): Equipment => {
     if (e.id === fat.id) return setPortUsage(e, port.portNumber, true, id, isoDate(ctx.now));
     if (servingPon && e.id === servingPon.oltId) {
@@ -325,7 +344,7 @@ export function provisionCustomer(
                   connectedCustomerId: id,
                   connectedCustomerName: name,
                   connectedDropCableId: dropId,
-                  connectedCore: 1,
+                  connectedCore: dropCore,
                   connectedAt: (ctx.now ?? new Date()).toISOString(),
                 },
           ),
@@ -333,14 +352,19 @@ export function provisionCustomer(
   );
 
   const warnings: string[] = [];
-  if (!estimate.olt) warnings.push('not linked to any OLT, so this customer cannot be traced');
+  if (!recorded) {
+    warnings.push(
+      `the fiber path to the OLT is not complete (missing: ${estimate.gaps.slice(0, 2).map(plain).join('; ')}). ` +
+        `${customer.oltId ? 'Only the OLT you chose was saved' : 'OLT, PON port and cables were left empty'} and no Rx was estimated, so this customer cannot be traced yet`,
+    );
+  }
   if (!hasLocation) warnings.push('the house location is not recorded, so the drop has no length');
-  if (estimate.rxDbm !== undefined && estimate.rxDbm < optical.rx.goodFloorDbm) {
-    warnings.push(`estimated Rx ${estimate.rxDbm} dBm is weak`);
+  if (recorded?.rxDbm !== undefined && recorded.rxDbm < optical.rx.goodFloorDbm) {
+    warnings.push(`estimated Rx ${recorded.rxDbm} dBm is weak`);
   }
   const basePatch = { cables: [...data.cables, dropCable], splitters, equipment, customers: [...data.customers, customer] };
   const marked = markServingCores(applyPatch(data, basePatch), splitter.id, ctx);
-  const rxNote = estimate.rxDbm !== undefined ? ` (estimated Rx ${estimate.rxDbm} dBm)` : '';
+  const rxNote = recorded?.rxDbm !== undefined ? ` (estimated Rx ${recorded.rxDbm} dBm)` : '';
   const warningNote = warnings.length ? `. Check: ${warnings.join('; ')}` : '';
   const coreNote = `${marked.marked.length ? `. Fibers marked in use: ${marked.marked.join(', ')}` : ''}${marked.note ? `. Note: ${marked.note}` : ''}`;
 
@@ -350,7 +374,7 @@ export function provisionCustomer(
     {
       notice: notice(
         warnings.length ? 'warning' : 'success',
-        estimate.olt ? 'Customer Connected' : 'Customer Saved, Not Linked',
+        recorded ? 'Customer Connected' : 'Customer Saved, Path Not Complete',
         `Activated ${name} on ${fat.id} port ${port.portNumber} via ${dropId}${rxNote}${coreNote}${warningNote}`,
       ),
       audit: [
@@ -419,7 +443,9 @@ export function setCustomerLocation(
 
 /**
  * Links a customer to the path that now reaches their terminal box, for a customer added before the
- * cable existed. Runs only when a person asks. Reports why when the box still reaches no OLT.
+ * path was recorded. Runs only when a person asks. Uses only the fibers on record from the splitter
+ * input to a PON port; it never sets a splitter input or a PON count from a cable-level walk, and
+ * says which link to record when the path is not complete.
  */
 export function relinkCustomer(
   data: NetworkData,
@@ -437,8 +463,16 @@ export function relinkCustomer(
   const drop = data.cables.find((c) => c.id === customer.dropCableId);
   const optical = ctx.optical ?? DEFAULT_OPTICAL_SETTINGS;
   const estimate = estimateRxForSplitter(fat, splitter, data, drop?.lengthMeters ?? 0, optical);
-  if (!estimate.olt) {
-    return fail('Cannot Link Yet', `No cable connects ${fat.name} to an OLT. Draw that cable first, ending on the box.`, 'warning');
+  // Linked only from fibers on record. A cable that ends at the box is not proof of the path.
+  if (estimate.level !== 'core' || !estimate.olt) {
+    const anyCable = estimate.hops.length > 0;
+    return fail(
+      'Cannot Link Yet',
+      `${customer.name} was not linked: the fiber path from ${fat.name} to an OLT PON port is not recorded, and nothing is linked from a guess. ` +
+        `Record this first: ${plain(estimate.gaps[0])}.` +
+        (anyCable ? '' : ` If no cable reaches ${fat.name} yet, draw it first, ending on the box.`),
+      'warning',
+    );
   }
 
   const feederId = estimate.cableIds[0];
@@ -474,20 +508,13 @@ export function relinkCustomer(
               },
         )
       : undefined;
-  const splitters = splitter.inputPort.connectedCableId
-    ? undefined
-    : data.splitters.map((s) =>
-        s.id === splitter.id
-          ? { ...s, inputPort: { ...s.inputPort, connectedCableId: estimate.hops.at(-1)?.cable.id } }
-          : s,
-      );
+  // The splitter input is already on record (the path above starts from it); it is never set here.
 
   return succeed(
     updated,
     {
       customers: data.customers.map((c) => (c.id === customerId ? updated : c)),
       ...(equipment ? { equipment } : {}),
-      ...(splitters ? { splitters } : {}),
     },
     {
       notice: notice(

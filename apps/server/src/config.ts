@@ -28,6 +28,12 @@ const envSchema = z.object({
   /** When set, creating the first admin account also needs this code. */
   SETUP_TOKEN: z.string().min(8).optional(),
   SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  /** A login ends this many days after it began, however much it is used. */
+  SESSION_MAX_DAYS: z.coerce.number().int().min(1).max(365).default(90),
+  /** Phase 7: device readings and status changes older than this are removed (newest per ONT kept). */
+  MONITORING_KEEP_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  /** Phase 7: most device readings kept in all; the oldest go first. */
+  MONITORING_MAX_ROWS: z.coerce.number().int().min(1000).max(5_000_000).default(200_000),
   PASSWORD_MIN_LENGTH: z.coerce.number().int().min(6).max(64).default(8),
   /** `auto`: secure cookies when the request came over https (directly or through a trusted proxy). */
   COOKIE_SECURE: z.enum(['auto', 'true', 'false']).default('auto'),
@@ -68,6 +74,9 @@ export interface AppConfig {
   authRequired: boolean;
   setupToken?: string;
   sessionDays: number;
+  sessionMaxDays: number;
+  monitoringKeepDays: number;
+  monitoringMaxRows: number;
   passwordMinLength: number;
   cookieSecure: 'auto' | 'true' | 'false';
   /** Passed to Fastify's `trustProxy`. */
@@ -121,7 +130,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     databasePath: value.DATABASE_PATH,
     photosDir: value.PHOTOS_DIR ?? defaultPhotosDir(value.DATABASE_PATH),
     staticDir: value.STATIC_DIR,
-    corsOrigins: value.CORS_ORIGINS ? list(value.CORS_ORIGINS) : DEFAULT_CORS_ORIGINS,
+    // The dev-server addresses are allowed only while developing, never on a production server.
+    corsOrigins: value.CORS_ORIGINS ? list(value.CORS_ORIGINS) : env.NODE_ENV === 'production' ? [] : DEFAULT_CORS_ORIGINS,
     osrmUrl: value.OSRM_URL.replace(/\/+$/, ''),
     routingTimeoutMs: value.ROUTING_TIMEOUT_MS,
     seedSampleData: value.SEED_SAMPLE_DATA,
@@ -129,6 +139,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     authRequired: value.AUTH_REQUIRED,
     ...(value.SETUP_TOKEN ? { setupToken: value.SETUP_TOKEN } : {}),
     sessionDays: value.SESSION_DAYS,
+    sessionMaxDays: Math.max(value.SESSION_DAYS, value.SESSION_MAX_DAYS),
+    monitoringKeepDays: value.MONITORING_KEEP_DAYS,
+    monitoringMaxRows: value.MONITORING_MAX_ROWS,
     passwordMinLength: value.PASSWORD_MIN_LENGTH,
     cookieSecure: value.COOKIE_SECURE,
     trustProxy: parseTrustProxy(value.TRUST_PROXY),

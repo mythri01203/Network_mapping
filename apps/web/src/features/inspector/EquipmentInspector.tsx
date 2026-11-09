@@ -16,9 +16,19 @@ import {
   Trash2,
   Wrench,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
-import { type Equipment, isOdfType, isPoleType, LOCATION_METHOD_LABELS, RX_BAND_LABELS, rxBandFor } from '@fibergis/shared';
+import {
+  type Equipment,
+  isOdfType,
+  isPoleType,
+  LOCATION_METHOD_LABELS,
+  type RfLevel,
+  RX_BAND_LABELS,
+  rxBandFor,
+} from '@fibergis/shared';
 
+import { useOpenView } from '../../app/views';
 import { Badge, Button, KeyValueList } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteEquipment } from '../../stores/networkActions';
@@ -170,14 +180,34 @@ function OntPowerLevelSection({ equipment }: { equipment: Equipment }) {
 
         <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-500">
           <span>No live connection</span>
-          {hasReading && <Badge tone="neutral">Sample data</Badge>}
+          {/* The equipment record says nothing about where these values came from. */}
+          {hasReading && <Badge tone="neutral">Origin not recorded</Badge>}
         </div>
       </div>
     </InspectorSection>
   );
 }
 
+const RF_UNIT_LABELS: Record<RfLevel['unit'], string> = { dBuV: 'dBµV', dBmV: 'dBmV', dBm: 'dBm' };
+const RF_ORIGIN_LABELS: Record<RfLevel['origin'], string> = {
+  designed: 'Designed',
+  calculated: 'Estimated',
+  field_measured: 'Measured on site',
+  device_reported: 'Reported by the device',
+};
+
+/**
+ * A node's levels come only from the Cable TV records (levels on items sited at this pin), each with
+ * its unit and origin. No example or typical value is shown as if it were this node's.
+ */
 function NodeOpticalPowerSection({ equipment }: { equipment: Equipment }) {
+  const openView = useOpenView();
+  const levels = useNetworkStore(
+    useShallow((s) => {
+      const here = new Set(s.rfElements.filter((el) => el.siteEquipmentId === equipment.id).map((el) => el.id));
+      return s.rfLevels.filter((l) => here.has(l.elementId));
+    }),
+  );
   return (
     <InspectorSection title="Node Optical Power" icon={Gauge} defaultOpen>
       <div className="space-y-2.5">
@@ -191,30 +221,43 @@ function NodeOpticalPowerSection({ equipment }: { equipment: Equipment }) {
           </span>
         </div>
 
+        {equipment.rfLevelDbf !== undefined && (
+          <div className="text-xs">
+            <span className="text-slate-500">Old RF output field: </span>
+            <span className="font-semibold text-slate-800">{equipment.rfLevelDbf}</span>
+            <span className="text-slate-500"> (unit and origin not recorded)</span>
+          </div>
+        )}
+
         <div className="text-xs">
-          <span className="text-slate-500">RF output on record: </span>
-          <span className="font-semibold text-slate-800">
-            {equipment.rfLevelDbf !== undefined ? `${equipment.rfLevelDbf} (sample data)` : 'Not recorded'}
-          </span>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Levels on record here</div>
+          {levels.length === 0 ? (
+            <div className="font-semibold text-slate-800">Not recorded</div>
+          ) : (
+            <ul className="space-y-1">
+              {levels.map((l) => (
+                <li key={l.id} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1">
+                  <span className="font-mono font-semibold text-slate-800">
+                    {l.value} {RF_UNIT_LABELS[l.unit]}
+                  </span>
+                  <span className="text-slate-600">
+                    {' · '}
+                    {joinPresent([
+                      RF_ORIGIN_LABELS[l.origin],
+                      l.frequencyMhz !== undefined ? `${l.frequencyMhz} MHz` : undefined,
+                      l.testPointOffsetDb !== undefined ? `test point −${l.testPointOffsetDb} dB` : undefined,
+                      l.measuredAt ? formatDate(l.measuredAt) : undefined,
+                    ], ' · ')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <ExampleValuesLabel />
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-            <div className="text-[10px] uppercase text-slate-400">Input Range</div>
-            <div className="font-semibold text-slate-800">+2 to -8 dBm</div>
-          </div>
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-            <div className="text-[10px] uppercase text-slate-400">RF Output Level</div>
-            <div className="font-semibold text-slate-800">96 dBµV</div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-[11px] text-slate-500">
-          <span>Forward Band: 45 - 1000 MHz</span>
-          <span className="font-medium text-slate-600">CNR ≥ 51 dB</span>
-        </div>
+        <Button size="sm" onClick={() => openView('cable_tv')}>
+          Record and check levels on the Cable TV page
+        </Button>
       </div>
     </InspectorSection>
   );

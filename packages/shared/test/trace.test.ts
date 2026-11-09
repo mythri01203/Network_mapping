@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   budgetStatusFor,
   collectDownstream,
+  estimateRxForSplitter,
   findServingOlt,
   resolveTraceTarget,
   traceCable,
+  traceCustomer,
   type TraceData,
   traceEquipment,
+  walkUpstreamCables,
 } from '../src/domain/trace';
 import { cable, closure, equipment, fault, smallNetwork } from './fixtures';
 
@@ -54,6 +57,56 @@ describe('findServingOlt', () => {
 
   it('never follows inter-OLT backhaul', () => {
     expect(findServingOlt('OLT-01', data).hops).toEqual([]);
+  });
+
+  it('picks no cable when two end at a box and none is on record for the path', () => {
+    const two = { ...data, cables: [...data.cables, cable({ id: 'DIST-2', startEquipmentId: 'FDT-01', endEquipmentId: 'FAT-01' })] };
+    const walk = walkUpstreamCables('FAT-01', two);
+    expect(walk.hops).toEqual([]);
+    expect(walk.ambiguousAt).toEqual({ equipmentId: 'FAT-01', cableIds: ['DIST-1', 'DIST-2'] });
+    expect(findServingOlt('FAT-01', two).olt).toBeUndefined();
+    // A recorded cable (for example the splitter input) still decides it.
+    expect(findServingOlt('FAT-01', two, ['DIST-2']).hops.map((h) => h.cable.id)).toEqual(['FEED-1', 'DIST-2']);
+
+    const trace = traceEquipment(two.equipment.find((e) => e.id === 'FAT-01')!, two);
+    expect(trace.summary.pathComplete).toBe(false);
+    expect(trace.summary.warnings.join(' ')).toContain('fed by 2 cables');
+    expect(trace.cableIds).not.toContain('DIST-1');
+  });
+});
+
+describe('estimateRxForSplitter', () => {
+  it('gives no Rx and no stored path when the fibers are not recorded, and names the gap', () => {
+    const base = smallNetwork();
+    const withTx = { ...base, equipment: base.equipment.map((e) => (e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, txPowerDbm: 3 })) } : e)) };
+    const fat = withTx.equipment.find((e) => e.id === 'FAT-01')!;
+    const estimate = estimateRxForSplitter(fat, withTx.splitters[0], withTx, 50);
+    expect(estimate.level).toBe('cable');
+    expect(estimate.pathComplete).toBe(false);
+    expect(estimate.rxDbm).toBeUndefined();
+    expect(estimate.rxRangeDbm).toBeUndefined();
+    expect(estimate.gaps[0]).toContain('DIST-01');
+  });
+
+  it('gives no estimated Rx on an incomplete customer trace, even with a recorded launch', () => {
+    const base = smallNetwork();
+    const withTx = { ...base, equipment: base.equipment.map((e) => (e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, txPowerDbm: 3 })) } : e)) };
+    const result = traceCustomer(withTx.customers[0], withTx);
+    expect(result.summary.pathComplete).toBe(false);
+    expect(result.summary.txPowerDbm).toBe(3);
+    expect(result.summary.estimatedRxDbm).toBeUndefined();
+  });
+
+  it('shows no colour for a core whose colour is not recorded', () => {
+    const base = smallNetwork();
+    const plain = {
+      ...base,
+      cables: base.cables.map((c) => (c.id === 'DIST-01' ? { ...c, cores: c.cores.map((k) => ({ ...k, colorName: undefined })) } : c)),
+    };
+    const result = traceCustomer(plain.customers[0], plain);
+    const dist = result.nodes.find((n) => n.id === 'DIST-01')!;
+    expect(dist.details).toContain('Core 1');
+    expect(dist.details).not.toContain('undefined');
   });
 });
 

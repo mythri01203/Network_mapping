@@ -15,6 +15,15 @@ export function showValue(value: unknown): string {
 /** Bookkeeping a person does not need to compare first. */
 const LATER = new Set(['history', 'fieldEvents', 'photos', 'photoRefs', 'images', 'updatedAt', 'assignedAt', 'startedAt', 'createdAt']);
 
+/**
+ * Every field the phone version would change on the record as it is now. Worked out here from the
+ * two copies, never taken from the conflict's own list, so no change can hide behind a short list.
+ */
+export function fieldsThatWouldChange(mine: Record<string, unknown> | null, current: Record<string, unknown> | undefined): string[] {
+  if (!mine || !current) return [];
+  return [...new Set([...Object.keys(mine), ...Object.keys(current)])].filter((key) => JSON.stringify(mine[key]) !== JSON.stringify(current[key]));
+}
+
 /** Changed fields in the order a person should read them: plain values first, bookkeeping last. */
 export function fieldsToCompare(fields: readonly string[], a: Record<string, unknown> | null, b: Record<string, unknown> | null): string[] {
   const rank = (f: string) => {

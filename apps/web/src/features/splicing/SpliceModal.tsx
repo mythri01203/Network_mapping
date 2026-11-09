@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GitMerge, PlugZap } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { type Customer, type Equipment, polylineLengthMeters } from '@fibergis/shared';
+import { type Customer, defaultFiberCount, type Equipment, polylineLengthMeters } from '@fibergis/shared';
 
 import { Button, Field, Modal, Select } from '../../components/ui';
 import { setSplitterOutput } from '../../stores/fiberActions';
@@ -37,9 +37,12 @@ export const SpliceModal: React.FC = () => {
   const { equipment, splitters } = useNetworkStore(useShallow((s) => ({ equipment: s.equipment, splitters: s.splitters })));
   const [key, setKey] = useState('');
   const [portId, setPortId] = useState('');
+  // Which fiber of the new drop goes to the customer. Never fiber 1 by default: the person picks it.
+  const [fiber, setFiber] = useState('');
   if (!open || !target) return null;
 
   const isCustomer = 'ontSerialNumber' in target;
+  const dropFiberCount = defaultFiberCount('Drop Fiber');
   const here: [number, number] = [target.lat, target.lng];
   const distance = (lat: number, lng: number) => Math.round(polylineLengthMeters([here, [lat, lng]]));
   const candidates: Candidate[] = [
@@ -76,10 +79,13 @@ export const SpliceModal: React.FC = () => {
     }),
   ].sort((a, b) => a.label.localeCompare(b.label));
   const chosen = candidates.find((c) => c.key === key);
+  /** A customer on a splitter output: the output and the drop fiber are both linked, so both are chosen. */
+  const linksOutput = isCustomer && chosen?.kind === 'splitter';
   const close = () => {
     setModalOpen('spliceModal', false);
     setKey('');
     setPortId('');
+    setFiber('');
   };
 
   const save = async () => {
@@ -88,6 +94,7 @@ export const SpliceModal: React.FC = () => {
     const created = addCable({
       name: `${isCustomer ? 'Drop' : 'Link'} ${chosen.label.split(' (')[0]} → ${name}`,
       type: isCustomer ? 'Drop Fiber' : 'Distribution Fiber',
+      ...(isCustomer ? { fiberCount: dropFiberCount } : {}),
       startEquipmentId: chosen.hostId,
       startPortName: chosen.kind === 'olt' && portId ? portId : undefined,
       endEquipmentId: isCustomer ? undefined : target.id,
@@ -98,15 +105,16 @@ export const SpliceModal: React.FC = () => {
       remarks: 'Drawn straight from the connect screen. Draw the real route when known.',
     });
     if (!created) return;
-    if (isCustomer && chosen.splitterId && portId) {
-      const linked = await setSplitterOutput(chosen.splitterId, Number(portId), { cableId: created.id, core: 1 });
+    const core = Number(fiber);
+    if (isCustomer && chosen.splitterId && portId && core >= 1) {
+      const linked = await setSplitterOutput(chosen.splitterId, Number(portId), { cableId: created.id, core });
       if (linked) {
         updateCustomer(target.id, {
           terminalBoxId: chosen.hostId,
           splitterId: chosen.splitterId,
           splitterOutputPort: Number(portId),
           dropCableId: created.id,
-          fiberCore: 1,
+          fiberCore: core,
         });
       }
     }
@@ -117,7 +125,7 @@ export const SpliceModal: React.FC = () => {
     <Modal open onClose={close} title="Connect what feeds this" description={`A new cable to ${target.name}, drawn straight.`} icon={GitMerge} size="md">
       <div className="space-y-3 text-[13px]" data-testid="connect-modal">
         <Field label="Comes from" hint="Choose it yourself. Being nearest does not make it the feed.">
-          <Select data-testid="connect-from" value={key} onChange={(e) => { setKey(e.target.value); setPortId(''); }}>
+          <Select data-testid="connect-from" value={key} onChange={(e) => { setKey(e.target.value); setPortId(''); setFiber(''); }}>
             <option value="">Choose what feeds it…</option>
             {candidates.map((c) => (
               <option key={c.key} value={c.key}>
@@ -138,6 +146,32 @@ export const SpliceModal: React.FC = () => {
             </Select>
           </Field>
         )}
+        {linksOutput && (
+          <Field label="Which drop fiber goes to the customer" hint="Look at the drop. Choose the fiber that is joined to this output.">
+            <div>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Drop fiber">
+                {Array.from({ length: dropFiberCount }, (_, i) => String(i + 1)).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    role="radio"
+                    aria-checked={fiber === n}
+                    data-testid={`connect-fiber-${n}`}
+                    onClick={() => setFiber(n)}
+                    className={`min-h-12 rounded-lg border text-base font-bold ${fiber === n ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'}`}
+                  >
+                    Fiber {n}
+                  </button>
+                ))}
+              </div>
+              {!fiber && (
+                <p role="status" className="mt-1.5 text-xs font-semibold text-amber-800">
+                  Fiber not chosen. Choose one to save.
+                </p>
+              )}
+            </div>
+          </Field>
+        )}
         <p className="text-xs text-slate-600">
           The cable is saved with a straight line and its length from the map. Its fibers, colours and splices are recorded on the cable and closure screens.
         </p>
@@ -145,7 +179,7 @@ export const SpliceModal: React.FC = () => {
           <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
-          <Button variant="primary" icon={PlugZap} data-testid="connect-save" disabled={!chosen || (chosen.kind === 'splitter' && !portId)} onClick={() => void save()}>
+          <Button variant="primary" icon={PlugZap} data-testid="connect-save" disabled={!chosen || (chosen.kind === 'splitter' && !portId) || (linksOutput && !fiber)} onClick={() => void save()}>
             Save connection
           </Button>
         </div>

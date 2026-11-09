@@ -56,7 +56,11 @@ async function makeUser(admin: string, username: string, displayName: string, ro
   expect(created.statusCode).toBe(201);
   const login = await post('/auth/login', { username, password: `${username}-pass-1` });
   expect(login.statusCode).toBe(200);
-  return cookieOf(login);
+  const cookie = cookieOf(login);
+  // The office gave a temporary password: nothing else works until the person chooses their own.
+  expect((await get('/network', cookie)).json()).toMatchObject({ error: 'password_change_required' });
+  expect((await post('/auth/password', { currentPassword: `${username}-pass-1`, newPassword: `${username}-pass-2` }, cookie)).statusCode).toBe(200);
+  return cookie;
 }
 
 beforeEach(() => start());

@@ -64,7 +64,8 @@ export const CustomerWizardModal: React.FC = () => {
 
   // A terminal without a splitter is still listed: its splitter can be added right here.
   const availableTerminals = useMemo(() => equipments.filter((e) => isCustomerTerminal(e.type)), [equipments]);
-  const [newSplitterRatio, setNewSplitterRatio] = useState<SplitterRatio>('1:8');
+  // A new splitter's ratio is what is installed in the box: the person chooses it, nothing is assumed.
+  const [newSplitterRatio, setNewSplitterRatio] = useState<SplitterRatio | ''>('');
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
   const [selectedPortNumber, setSelectedPortNumber] = useState<number | null>(null);
@@ -76,16 +77,13 @@ export const CustomerWizardModal: React.FC = () => {
   const terminalSplitters = splitters.filter((s) => s.terminalBoxId === selectedTerminalId);
   const activeSplitter = terminalSplitters.find((s) => s.id === selectedSplitterId);
 
-  const firstFreePort = (splitterId: string) =>
-    splitters.find((s) => s.id === splitterId)?.outputPorts.find((p) => p.status === 'Available')?.portNumber ?? null;
-
+  // Choosing a box chooses nothing else: the person picks the splitter and the output port.
   const selectTerminal = (termId: string) => {
     setSelectedTerminalId(termId);
     const term = equipments.find((e) => e.id === termId);
-    const termSplitters = splitters.filter((s) => s.terminalBoxId === termId);
-    const sp = termSplitters.find((s) => s.outputPorts.some((p) => p.status === 'Available')) || termSplitters[0];
-    setSelectedSplitterId(sp?.id || '');
-    setSelectedPortNumber(sp ? firstFreePort(sp.id) : null);
+    setSelectedSplitterId('');
+    setSelectedPortNumber(null);
+    setNewSplitterRatio('');
     // The house is not next to the box by default: its position is left for the person to record.
     if (term) setArea(term.area || '');
   };
@@ -142,18 +140,15 @@ export const CustomerWizardModal: React.FC = () => {
     setLng('');
     setLocationMethod(undefined);
     setLocationAccuracy(undefined);
+    // Only the box the person opened this from on the map. Never the first box or the first with a free port.
     const selectedId = selectedObject?.type === 'equipment' ? selectedObject.data?.id : undefined;
-    const preferred =
-      availableTerminals.find((t) => t.id === selectedId) ||
-      availableTerminals.find((t) =>
-        splitters.some((s) => s.terminalBoxId === t.id && s.outputPorts.some((p) => p.status === 'Available')),
-      ) ||
-      availableTerminals[0];
+    const preferred = availableTerminals.find((t) => t.id === selectedId);
     if (preferred) selectTerminal(preferred.id);
     else {
       setSelectedTerminalId('');
       setSelectedSplitterId('');
       setSelectedPortNumber(null);
+      setNewSplitterRatio('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCustomerWizardOpen]);
@@ -192,7 +187,7 @@ export const CustomerWizardModal: React.FC = () => {
       return;
     }
     if (!selectedTerminalId || !activeSplitter || selectedPortNumber === null) {
-      showToast('error', 'Validation Error', 'Select a terminal, splitter and a free output port.');
+      showToast('error', 'Choose the connection', 'Choose the box, the splitter and a free output port.');
       return;
     }
     const noLocation = lat.trim() === '' && lng.trim() === '';
@@ -211,8 +206,8 @@ export const CustomerWizardModal: React.FC = () => {
 
     // Warn, do not block: name what the gaps mean and let the person decide.
     const problems = [
-      !estimate?.olt &&
-        'No OLT is reachable from this box. The customer will be saved as not linked and cannot be traced until a cable connects the box.',
+      estimate?.level !== 'core' &&
+        `The fiber path from this box to the OLT is not recorded${estimate?.gaps[0] ? ` (missing: ${estimate.gaps[0]})` : ''}. The customer will be saved without OLT, PON port and Rx, and cannot be traced until that link is recorded.`,
       noLocation && 'The house location is not recorded, so the drop cable will have no route or length.',
     ].filter(Boolean) as string[];
     if (problems.length > 0) {
@@ -356,7 +351,9 @@ export const CustomerWizardModal: React.FC = () => {
                   onChange={(e) => selectTerminal(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
-                  {availableTerminals.length === 0 && <option value="">Place a terminal box on the map first</option>}
+                  <option value="">
+                    {availableTerminals.length === 0 ? 'Place a terminal box on the map first' : 'Choose the box'}
+                  </option>
                   {availableTerminals.map((term) => (
                     <option key={term.id} value={term.id}>
                       {term.name} ({term.id})
@@ -371,10 +368,14 @@ export const CustomerWizardModal: React.FC = () => {
                   value={selectedSplitterId}
                   onChange={(e) => {
                     setSelectedSplitterId(e.target.value);
-                    setSelectedPortNumber(firstFreePort(e.target.value));
+                    // The person taps the output port below; none is picked for them.
+                    setSelectedPortNumber(null);
                   }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500"
                 >
+                  <option value="">
+                    {!selectedTerminal ? 'Choose the box first' : terminalSplitters.length === 0 ? 'No splitter in this box yet' : 'Choose the splitter'}
+                  </option>
                   {terminalSplitters.map((sp) => (
                     <option key={sp.id} value={sp.id}>
                       {sp.name} ({sp.ratio})
@@ -387,31 +388,41 @@ export const CustomerWizardModal: React.FC = () => {
             {selectedTerminal && terminalSplitters.length === 0 && (
               <div className="flex items-end gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <div className="flex-1">
-                  <label className="block text-[11px] font-semibold text-amber-900 mb-1">
-                    {selectedTerminal.id} has no splitter yet. Choose a split ratio:
-                  </label>
-                  <select
-                    value={newSplitterRatio}
-                    onChange={(e) => setNewSplitterRatio(e.target.value as SplitterRatio)}
-                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg outline-none focus:border-blue-500"
-                  >
+                  <div className="block text-[11px] font-semibold text-amber-900 mb-1" id="new-splitter-ratio">
+                    {selectedTerminal.id} has no splitter yet. Which splitter is in the box? Read the label on it.
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-labelledby="new-splitter-ratio">
                     {SPLITTER_RATIOS.map((ratio) => (
-                      <option key={ratio} value={ratio}>
+                      <button
+                        key={ratio}
+                        type="button"
+                        role="radio"
+                        aria-checked={newSplitterRatio === ratio}
+                        onClick={() => setNewSplitterRatio(ratio)}
+                        className={`min-h-10 rounded-lg border text-sm font-bold ${
+                          newSplitterRatio === ratio
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-amber-200 bg-white text-slate-800 hover:bg-amber-100'
+                        }`}
+                      >
                         {ratio}
-                      </option>
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                  {!newSplitterRatio && <p className="mt-1 text-[11px] text-amber-900">Ratio not chosen yet.</p>}
                 </div>
                 <button
                   type="button"
+                  disabled={!newSplitterRatio}
                   onClick={() => {
+                    if (!newSplitterRatio) return;
                     const created = addSplitter({ terminalBoxId: selectedTerminal.id, ratio: newSplitterRatio });
                     if (created) {
                       setSelectedSplitterId(created.id);
-                      setSelectedPortNumber(1);
+                      setSelectedPortNumber(null);
                     }
                   }}
-                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold"
                 >
                   Add splitter
                 </button>
@@ -495,21 +506,29 @@ export const CustomerWizardModal: React.FC = () => {
                 }`}
               >
                 <div className="font-bold">Upstream path</div>
-                <div>
-                  {estimate.olt
-                    ? `${estimate.olt.id}${estimate.pon ? ` / ${estimate.pon.id}` : ' / no PON port linked'}`
-                    : 'No OLT reachable: this customer will be saved as not linked'}
-                  {estimate.hops.length > 0 && ` → ${estimate.hops.map((h) => h.cable.id).join(' → ')}`}
-                  {` → ${selectedTerminalId} / ${activeSplitter?.id}`}
-                </div>
+                {estimate.level === 'core' ? (
+                  <div>
+                    {`${estimate.olt?.id ?? ''}${estimate.pon ? ` / ${estimate.pon.id}` : ''}`}
+                    {estimate.cableIds.length > 0 && ` → ${estimate.cableIds.join(' → ')}`}
+                    {` → ${selectedTerminalId} / ${activeSplitter?.id}`}
+                    {' · fibers recorded end to end'}
+                  </div>
+                ) : (
+                  <div className="font-semibold">
+                    Not complete: the fibers from this splitter to the OLT are not recorded.
+                    {estimate.gaps[0] && <span className="block font-normal">Missing: {estimate.gaps[0]}</span>}
+                  </div>
+                )}
                 <div>
                   Estimated Rx:{' '}
                   <span className="font-mono font-bold">
-                    {estimate.rxDbm !== undefined
-                      ? `${estimate.rxDbm} dBm`
-                      : estimate.rxRangeDbm
-                        ? `${estimate.rxRangeDbm.min} to ${estimate.rxRangeDbm.max} dBm`
-                        : 'Not known'}
+                    {estimate.level !== 'core'
+                      ? 'Not known: path not complete'
+                      : estimate.rxDbm !== undefined
+                        ? `${estimate.rxDbm} dBm`
+                        : estimate.rxRangeDbm
+                          ? `${estimate.rxRangeDbm.min} to ${estimate.rxRangeDbm.max} dBm`
+                          : 'Not known'}
                   </span>
                   {estimate.rxDbm !== undefined
                     ? ` (${rxStatus})`
@@ -651,7 +670,15 @@ export const CustomerWizardModal: React.FC = () => {
                   {selectedTerminalId}
                 </>
               ) : (
-                <span className="text-red-600 font-semibold">No free port on the selected splitter</span>
+                <span className="text-red-600 font-semibold">
+                  {!selectedTerminalId
+                    ? 'Choose the box'
+                    : !activeSplitter
+                      ? 'Choose the splitter'
+                      : activeSplitter.outputPorts.some((p) => p.status === 'Available' || p.status === 'Reserved')
+                        ? 'Tap a free output port'
+                        : 'No free port on the selected splitter'}
+                </span>
               )}
             </div>
             <button

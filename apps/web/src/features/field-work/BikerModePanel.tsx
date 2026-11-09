@@ -32,8 +32,8 @@ import { type CableType, DEFAULT_OPTICAL_SETTINGS, type Equipment, type Equipmen
 import { currentGpsPosition, gpsFailureMessage } from '../../lib/browser';
 import { useBikerStore } from '../../stores/bikerStore';
 import { useMapStore } from '../../stores/mapStore';
-import { addEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
+import { placeEquipmentChecked } from '../../stores/ospActions';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 import { newEquipmentName, nextPoleName } from '../map/sketch/poleNaming';
@@ -179,7 +179,8 @@ export const BikerModePanel: React.FC = () => {
       return;
     }
     const isPole = type.includes('Pole');
-    const created = addEquipment({
+    // "Same one?" first, like every other way of placing: a GPS drop next to an existing pole asks.
+    const created = await placeEquipmentChecked({
       type,
       category:
         template.category ||

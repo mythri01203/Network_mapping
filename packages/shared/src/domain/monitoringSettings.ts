@@ -25,8 +25,9 @@ export interface MonitoringSettingDef {
   apply: (settings: MonitoringSettings, value: number) => void;
 }
 
-const wholeAtLeast = (min: number) => (value: number | string) =>
-  typeof value === 'number' && Number.isInteger(value) && value >= min ? null : `Enter a whole number of ${min} or more.`;
+/** With an upper end, so old data can never be made to look "Live" by a very long stale time. */
+const wholeBetween = (min: number, max: number) => (value: number | string) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? null : `Enter a whole number from ${min} to ${max}.`;
 
 export const MONITORING_SETTING_DEFS: readonly MonitoringSettingDef[] = [
   {
@@ -36,7 +37,8 @@ export const MONITORING_SETTING_DEFS: readonly MonitoringSettingDef[] = [
     defaultValue: 15,
     source:
       'Proposed. Set it to a little more than twice the interval at which your OLT or NMS sends status, so one missed send does not show as stale. "Live" is shown only for a real source inside this time.',
-    check: wholeAtLeast(1),
+    // At most one day: a status older than that is never "Live".
+    check: wholeBetween(1, 1440),
     apply: (s, v) => {
       s.statusStaleMinutes = v;
     },
@@ -47,7 +49,8 @@ export const MONITORING_SETTING_DEFS: readonly MonitoringSettingDef[] = [
     unit: 'min',
     defaultValue: 60,
     source: 'Proposed. Optical levels change slowly and are often polled less often than status. Match it to your export or polling interval.',
-    check: wholeAtLeast(1),
+    // At most one week.
+    check: wholeBetween(1, 10_080),
     apply: (s, v) => {
       s.readingStaleMinutes = v;
     },
@@ -58,7 +61,7 @@ export const MONITORING_SETTING_DEFS: readonly MonitoringSettingDef[] = [
     unit: 'min',
     defaultValue: 5,
     source: 'Proposed. A time in the future means the device or script clock is wrong; such a row is skipped with that reason instead of being shown as current.',
-    check: wholeAtLeast(0),
+    check: wholeBetween(0, 1440),
     apply: (s, v) => {
       s.maxFutureMinutes = v;
     },

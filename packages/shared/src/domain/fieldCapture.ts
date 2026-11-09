@@ -539,7 +539,10 @@ export interface HazardInput {
   capturedBy: string;
 }
 
-/** A danger report: a Safety Hazard fault marked unsafe, with the photo and an honest position. */
+/**
+ * A danger report: a Safety Hazard fault marked unsafe, with the photo and an honest position. It is
+ * marked `source: 'field_report'`, so the alarm grouping (`correlateAlarms`) lists it as evidence.
+ */
 export function buildHazardFault(input: HazardInput): Fault {
   const { lat, lng, ...rest } = locationFields(input.location);
   return {
@@ -548,6 +551,7 @@ export function buildHazardFault(input: HazardInput): Fault {
     type: 'Safety Hazard',
     severity: 'Critical',
     status: 'Reported',
+    source: 'field_report',
     affectedLocation: { lat, lng },
     affectedCustomerIds: [],
     affectedCores: [],

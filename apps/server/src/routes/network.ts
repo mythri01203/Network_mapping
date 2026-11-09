@@ -135,16 +135,20 @@ export const networkRoutes =
       }
 
       const copy = await safetyCopy('before-restore');
-      const revision = await repository.replaceCollections(collections);
-      const photosAdded = photos?.ok ? await restorePhotos(photos.photos, options.photosDir) : 0;
       const restored = Object.keys(collections);
+      const photosAdded = photos?.ok ? await restorePhotos(photos.photos, options.photosDir) : 0;
       const details = `Restored ${restored.length} dataset(s) from a backup${photos ? ' with photos' : ''}. Safety copy first: ${copy}.${
         photosAdded ? ` ${photosAdded} photo(s) added.` : ''
       }${check.problems.length > 0 ? ` Restored with ${check.problems.length} problem(s) the administrator accepted.` : ''}`;
-      const audit = await repository.applyChanges({ upserts: { auditLogs: [auditEntry(request, 'BACKUP_RESTORED', details)] } });
+      // The audit trail is never rewound by a restore: entries already stored are kept as they are,
+      // older ones from the backup are added, and the restore itself is written in the same step.
+      const kept = new Map(current.auditLogs.map((entry) => [entry.id, entry]));
+      for (const entry of collections.auditLogs ?? []) if (!kept.has(entry.id)) kept.set(entry.id, entry);
+      const auditLogs = [...kept.values(), auditEntry(request, 'BACKUP_RESTORED', details)].sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+      const revision = await repository.replaceCollections({ ...collections, auditLogs });
       request.log.info({ restored: restored.length, problems: check.problems.length, photosAdded }, 'Backup restored');
       return {
-        revision: audit.revision ?? revision,
+        revision,
         restored,
         projectStartPoint,
         safetyCopy: copy,
@@ -157,7 +161,8 @@ export const networkRoutes =
     /** Reloads the demo network over everything except the custom catalog. Needs `{ "confirm": "reset" }`. */
     app.post<{ Body: { confirm?: string } | undefined }>('/reset', async (request) => {
       requireSystem(request, 'reset');
-      if (request.auth.mode === 'enforced' && request.body?.confirm !== 'reset') {
+      // Always, login on or off: a page on another site must never be able to wipe the network.
+      if (request.body?.confirm !== 'reset') {
         throw badRequest('Send { "confirm": "reset" } to replace the whole network with the sample. Nothing was changed.');
       }
       const before = await repository.counts();

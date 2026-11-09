@@ -196,6 +196,15 @@ const pickData = (state: NetworkData): NetworkData =>
 
 const freshHistory = (state: NetworkData): History => ({ stack: [pickData(state)], index: 0 });
 
+/**
+ * After a logout on a shared device: removes the stored copy of the network, so the next person
+ * does not find the customer list in this browser. The server copy is loaded again at the next
+ * login. Only the sync engine's bookkeeping stays. Call it only when nothing is waiting to be sent.
+ */
+export function forgetCachedNetwork(): void {
+  removeKeys([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY]);
+}
+
 /** Discards browser data written by an incompatible earlier release. */
 function ensureStorageVersion(): void {
   const storage = browserStorage();

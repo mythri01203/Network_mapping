@@ -199,10 +199,13 @@ export class SqliteNetworkRepository implements NetworkRepository {
       guard?.((collection) => this.readCollection(collection));
       const now = new Date().toISOString();
       const version = this.readRevision() + 1;
+      const owners = this.db.prepare('SELECT id, created_by FROM records WHERE collection = ? AND created_by IS NOT NULL');
       for (const [collection, records] of this.entries(collections)) {
+        // Who made a record survives a restore, so a technician can still undo their own capture.
+        const createdBy = new Map((owners.all(collection) as Row[]).map((row) => [String(row.id), String(row.created_by)]));
         this.statements.clear.run(collection);
         for (const record of records as { id: string }[]) {
-          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version, null);
+          this.statements.upsert.run(collection, record.id, collection, JSON.stringify(record), now, version, createdBy.get(record.id) ?? null);
         }
       }
       return this.bumpRevision();

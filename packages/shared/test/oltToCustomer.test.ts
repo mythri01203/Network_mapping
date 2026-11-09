@@ -41,7 +41,7 @@ const unwrap = <T extends { ok: boolean }>(result: T) => {
 };
 
 describe('OLT to customer workflow', () => {
-  it('connects a new customer from newly placed equipment and traces back to the PON', () => {
+  it('adds a customer on newly placed equipment without guessing the OLT path from the cable', () => {
     let data = newNetwork();
     const cable = unwrap(feeder(data));
     data = applyPatch(data, cable.patch);
@@ -60,15 +60,20 @@ describe('OLT to customer workflow', () => {
         ctx,
       ),
     );
-    expect(provisioned.value.customer).toMatchObject({ oltId: 'OLT-01', ponPort: 'PON-02', feederCableId: cable.value.id });
+    // The splitter input is not linked to a fiber, so the path is not recorded: nothing is guessed
+    // from the one cable that reaches the box, and the notice says what is missing.
+    expect(provisioned.value.customer).toMatchObject({ oltId: '', ponPort: '', feederCableId: '' });
+    expect(provisioned.notice?.message).toContain('not linked to a fiber');
 
     data = applyPatch(data, provisioned.patch);
     const pon = data.equipment[0].ponPorts?.find((p) => p.id === 'PON-02');
-    expect(pon).toMatchObject({ status: 'Active', connectedCustomersCount: 1 });
+    expect(pon?.connectedCustomersCount ?? 0).toBe(0);
 
+    // The cable-level picture still shows the port the feeder is plugged into, as an incomplete trace.
     const trace = traceCustomer(provisioned.value.customer, data);
     expect(trace.nodes.some((n) => n.id === 'OLT-01/PON-02')).toBe(true);
-    expect(trace.summary.warnings.filter((w) => w.includes('PON'))).toEqual([]);
+    expect(trace.summary.pathComplete).toBe(false);
+    expect(trace.summary.warnings.join(' ')).toContain('Fiber by fiber');
   });
 
   it('allows one feeder per PON port and frees the port when the cable is deleted', () => {

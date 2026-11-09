@@ -13,7 +13,7 @@ import {
   type WavelengthNm,
 } from './opticalSettings';
 import { type RxReading, rxReadingOf } from './rxReading';
-import { findPon, findUpstreamChain, type TraceData, upstreamCandidates, type UpstreamHop } from './trace';
+import { ambiguousFeedGap, findPon, type TraceData, type UpstreamHop, walkUpstreamCables } from './trace';
 
 export interface OpticalTraceOptions {
   wavelengthNm?: WavelengthNm;
@@ -225,7 +225,8 @@ export function traceOpticalPath(
     const length = cableLengthMeters(c);
     if (length <= 0) addGap(`${cableLabel(c)} has no length recorded, so its loss is not counted.`);
     const core = coreNumber !== undefined ? c.cores.find((k) => k.coreNumber === coreNumber) : undefined;
-    const coreText = core ? `Core ${core.coreNumber} (${core.colorName})` : 'Core not recorded';
+    // The colour only when one is on record: a new cable with no scheme has none.
+    const coreText = core ? `Core ${core.coreNumber}${core.colorName ? ` (${core.colorName})` : ''}` : 'Core not recorded';
     if (!core && c.type !== 'Coaxial Cable') notes.push(`${cableLabel(c)}: which core carries this path is not recorded.`);
     appendHop({
       id: c.id,
@@ -364,19 +365,10 @@ export function traceOpticalPath(
     customer?.distributionCableId ?? '',
     splitterForCustomer?.inputPort.connectedCableId ?? '',
   ];
-  const chain = startEquipment ? findUpstreamChain(startEquipment.id, data, preferred) : [];
-
-  // Two cables into one box: nothing on record says which one serves this path.
-  for (const link of chain) {
-    const atId = link.cable.endEquipmentId;
-    if (!atId) continue;
-    const incoming = upstreamCandidates(atId, data);
-    if (incoming.length > 1 && !preferred.includes(link.cable.id)) {
-      warnings.push(
-        `${atId} is fed by ${incoming.length} cables (${incoming.map((c) => c.id).join(', ')}). No record says which one serves this path; ${link.cable.id} was followed.`,
-      );
-    }
-  }
+  // Two cables into one box with nothing on record saying which one serves this path: the walk
+  // stops there and the gap is named below. No cable is picked.
+  const walk = startEquipment ? walkUpstreamCables(startEquipment.id, data, preferred) : { hops: [] as UpstreamHop[] };
+  const chain = walk.hops;
 
   const chainOlt = chain[0]?.from?.type === 'OLT' ? chain[0].from : undefined;
   const servingOlt =
@@ -423,7 +415,10 @@ export function traceOpticalPath(
   // --- Where the chain to the OLT breaks ---------------------------------------------------------
 
   if (startEquipment && startEquipment.type !== 'OLT' && !chainOlt) {
-    if (chain.length === 0) {
+    if (walk.ambiguousAt) {
+      addGap(ambiguousFeedGap(walk.ambiguousAt));
+      if (chain[0]?.from) addThroughEquipment(chain[0].from);
+    } else if (chain.length === 0) {
       addGap(`No cable is linked into ${eqLabel(startEquipment)}, so nothing connects it to an OLT.`);
     } else if (!chain[0].from) {
       addGap(`${cableLabel(chain[0].cable)} has no start equipment, so the path to an OLT stops there.`);

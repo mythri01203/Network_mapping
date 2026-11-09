@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 import { API_PREFIX, type ApiErrorBody } from '@fibergis/shared';
 
-import { forbidden, loginRequired, SESSION_COOKIE } from './auth/access';
+import { forbidden, isLocalRequest, loginRequired, passwordChangeRequired, SESSION_COOKIE } from './auth/access';
 import type { SqliteAuthStore } from './auth/authStore';
 import type { AppConfig } from './config';
 import type { NetworkRepository } from './db/repository';
@@ -36,6 +36,8 @@ export interface AppOptions {
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const MAX_REPORTED_ISSUES = 20;
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+/** What a session with a temporary password may still do. */
+const PASSWORD_CHANGE_PATHS = new Set(['/health', '/auth/status', '/auth/logout', '/auth/password', '/auth/login']);
 
 /**
  * Content-Security-Policy for the web app. Scripts only from this server (plus WebAssembly for the
@@ -122,17 +124,24 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
       api.decorateRequest('auth', null as never);
 
       // Who is asking: the session cookie, if any. Login is on once an account exists (or AUTH_REQUIRED).
+      // Before that ("setup"), only the server computer itself may use the app: any other device is
+      // treated as logged out, so it cannot read, change, reset or restore anything, and its unsent
+      // work waits on the device until someone logs in.
       api.addHook('onRequest', async (request, reply) => {
-        const mode = auth.hasAccounts() || config.authRequired ? 'enforced' : 'setup';
+        const setup = !(auth.hasAccounts() || config.authRequired);
+        const local = isLocalRequest(request);
+        const mode = setup && local ? 'setup' : 'enforced';
         const token = request.cookies[SESSION_COOKIE];
-        const session = token ? auth.session(token, config.sessionDays) : undefined;
+        const session = token ? auth.session(token, config.sessionDays, config.sessionMaxDays) : undefined;
         if (token && !session) reply.clearCookie(SESSION_COOKIE, { path: '/' });
-        request.auth = { mode, account: session?.account ?? null, ...(session ? { session } : {}) };
+        request.auth = { mode, account: session?.account ?? null, ...(session ? { session } : {}), ...(setup && !local ? { setupPending: true } : {}) };
 
         // A change must come from this app's own pages (or a configured origin), never another site.
+        // A sandboxed page sends the origin "null": that is another site too.
         if (UNSAFE_METHODS.has(request.method)) {
           const origin = request.headers.origin;
-          if (origin && origin !== 'null' && !config.corsOrigins.includes(origin)) {
+          if (origin === 'null') throw forbidden('This request came from another website, so it was refused.');
+          if (origin && !config.corsOrigins.includes(origin)) {
             const host = (() => {
               try {
                 return new URL(origin).host;
@@ -146,6 +155,8 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
 
         const path = request.url.split('?')[0].slice(API_PREFIX.length) || '/';
         if (mode === 'enforced' && !session && !PUBLIC_API_PATHS.has(path)) throw loginRequired();
+        // A temporary password from the office must be replaced before anything else is done.
+        if (session?.mustChangePassword && !PASSWORD_CHANGE_PATHS.has(path)) throw passwordChangeRequired();
       });
 
       await api.register(rateLimit, {
@@ -162,7 +173,14 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
         networkRoutes(repository, { photosDir: config.photosDir, backupsDir: config.backupsDir, backupKeep: config.backupKeep, restoreMaxBytes: config.restoreMaxBytes }),
       );
       await api.register(reportRoutes(repository));
-      await api.register(monitoringRoutes({ repository, tokens: repository.monitoringTokens, ingestPerMinute: config.ingestPerMinute }));
+      await api.register(
+        monitoringRoutes({
+          repository,
+          tokens: repository.monitoringTokens,
+          ingestPerMinute: config.ingestPerMinute,
+          retention: { keepDays: config.monitoringKeepDays, maxRows: config.monitoringMaxRows },
+        }),
+      );
       await api.register(routingRoutes({ baseUrl: config.osrmUrl, timeoutMs: config.routingTimeoutMs, fetch }));
       await api.register(photoRoutes({ dir: config.photosDir }));
       await api.register(collectionRoutes(repository));

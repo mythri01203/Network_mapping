@@ -7,6 +7,7 @@ import { LANGUAGES } from '../../i18n/format';
 import { LANGUAGE_NAMES, useFieldLanguage, useT } from '../../i18n/useT';
 import { type RememberedPerson, useAuthStore } from '../../stores/authStore';
 import { useSyncStore } from '../../stores/syncStore';
+import { FirstAdminForm } from '../admin/UsersPanel';
 
 /**
  * The login screen (Phase 9), built to `fibergis-easy-field-ux`: one question per screen, big
@@ -80,6 +81,8 @@ export function LoginScreen() {
   const people = useAuthStore((s) => s.people);
   const login = useAuthStore((s) => s.login);
   const pending = useSyncStore((s) => s.pendingCount);
+  const setupPending = useAuthStore((s) => s.setupPending);
+  const setupCodeAccepted = useAuthStore((s) => s.setupCodeAccepted);
   const [step, setStep] = useState<'who' | 'name' | 'password'>(people.length > 0 ? 'who' : 'name');
   const [username, setUsername] = useState('');
   const [chosen, setChosen] = useState<RememberedPerson | null>(null);
@@ -120,6 +123,12 @@ export function LoginScreen() {
             {t('login.kept', { count: pending })}
           </p>
         )}
+        {setupPending && (
+          <p role="status" data-testid="login-not-set-up" className="rounded-2xl border-2 border-amber-800 bg-amber-50 p-3 text-[1.125rem] font-semibold text-amber-950">
+            {t('login.notSetUp')}
+          </p>
+        )}
+        {setupPending && setupCodeAccepted && <FirstAdminForm />}
 
         {step === 'who' && (
           <>

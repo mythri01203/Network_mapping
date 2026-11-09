@@ -6,7 +6,7 @@ import { isCollectionName, SYNC_CONFLICT_STATUS_LABELS, type SyncConflict } from
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
-import { fieldsToCompare, showValue } from './conflictFormat';
+import { fieldsThatWouldChange, fieldsToCompare, showValue } from './conflictFormat';
 
 function decide(conflict: SyncConflict, choice: 'field' | 'office') {
   const store = useNetworkStore.getState();
@@ -51,6 +51,8 @@ export function SyncConflictsPanel() {
         const current = isCollectionName(c.collection)
           ? ((useNetworkStore.getState()[c.collection] as readonly { id: string }[]).find((r) => r.id === c.recordId) as Record<string, unknown> | undefined)
           : undefined;
+        const wouldChange = fieldsThatWouldChange(c.mine, current);
+        const fields = fieldsToCompare([...new Set([...c.changedFields, ...wouldChange])], c.mine, c.theirs);
         return (
           <div key={c.id} className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs" data-testid="sync-conflict">
             <div className="flex flex-wrap items-center gap-2">
@@ -74,7 +76,7 @@ export function SyncConflictsPanel() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(c.changedFields.length ? fieldsToCompare(c.changedFields, c.mine, c.theirs) : ['(whole record)']).slice(0, 20).map((field) => (
+                  {(fields.length ? fields : ['(whole record)']).map((field) => (
                     <tr key={field}>
                       <td className="py-1 pr-2 font-mono text-slate-600">{field}</td>
                       <td className="py-1 pr-2">{c.mine ? showValue(c.mine[field]) : 'Deleted on the phone'}</td>
@@ -85,6 +87,16 @@ export function SyncConflictsPanel() {
                 </tbody>
               </table>
             </div>
+            {c.status === 'office_decides' && (
+              <p className="font-semibold text-slate-700" data-testid="sync-conflict-effect">
+                {!c.mine
+                  ? `"Use the phone version" deletes ${c.recordId}.`
+                  : current
+                    ? `"Use the phone version" changes ${wouldChange.length} field(s) of ${c.recordId}, all listed above.`
+                    : `"Use the phone version" adds ${c.recordId} again.`}{' '}
+                Sent by {c.detectedBy}.
+              </p>
+            )}
             {c.status === 'office_decides' && (
               <div className="flex flex-wrap gap-2">
                 <button type="button" data-testid="office-use-field" onClick={() => decide(c, 'field')} className="rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white">

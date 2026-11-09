@@ -25,7 +25,7 @@ import { traceOpticalPath } from '../src/domain/opticalPathTrace';
 import { createSplitter, provisionCustomer } from '../src/domain/provisioning';
 import { coreIdentity, parseColorSchemeSetting, resolveColorSchemes } from '../src/fiber/colors';
 import type { Cable } from '../src/model/types';
-import { cable, emptyNetwork, equipment, NOW } from './fixtures';
+import { cable, customer, emptyNetwork, equipment, NOW } from './fixtures';
 
 const ctx = { now: NOW, actor: 'Test Engineer' };
 
@@ -303,6 +303,47 @@ describe('splitters', () => {
     const { data, splitter, customer } = exampleA();
     const unlinked = applyPatch(data, ok(linkSplitterInput(data, splitter.id, null, ctx)).patch);
     expect(traceCustomerCores(customer, unlinked).gaps[0]).toContain(`input of splitter ${splitter.name} is not linked to a cable fiber`);
+  });
+});
+
+describe('server rules for outputs, unassigned fibers and PON trees', () => {
+  it('refuses a second active customer on one splitter output, but not a shared ONT or a disconnected one', () => {
+    const { data, splitter, customer: asha } = exampleA();
+    const ravi = customer({ id: 'CUST-RAVI', name: 'Ravi', terminalBoxId: 'FAT-1', splitterId: splitter.id, splitterOutputPort: asha.splitterOutputPort });
+    expect(checkChangeSetFiber(data, { upserts: { customers: [ravi] } }).map((p) => p.code)).toContain('splitter_output_two_customers');
+    expect(checkChangeSetFiber(data, { upserts: { customers: [{ ...ravi, status: 'Disconnected' }] } })).toEqual([]);
+    const shared = { customers: data.customers.map((c) => (c.id === asha.id ? { ...c, ontId: 'ONT-MDU' } : c)) };
+    const withShared = { ...data, ...shared };
+    expect(checkChangeSetFiber(withShared, { upserts: { customers: [{ ...ravi, ontId: 'ONT-MDU' }] } }).map((p) => p.code)).not.toContain('splitter_output_two_customers');
+  });
+
+  it('does not blame a stored double booking on an unrelated change', () => {
+    const { data, splitter, customer: asha } = exampleA();
+    const ravi = customer({ id: 'CUST-RAVI', name: 'Ravi', splitterId: splitter.id, splitterOutputPort: asha.splitterOutputPort });
+    const stored = { ...data, customers: [...data.customers, ravi] };
+    expect(checkChangeSetFiber(stored, { upserts: { customers: [{ ...ravi, mobile: '98450 12345' }] } })).toEqual([]);
+  });
+
+  it('warns, without refusing, about a fiber marked In Use with no assignment', () => {
+    const { data } = exampleA();
+    const dst = data.cables.find((c) => c.id === 'DST-1')!;
+    const marked = { ...dst, cores: [...dst.cores.filter((k) => k.coreNumber !== 9), { coreNumber: 9, status: 'In Use' as const }] };
+    const after = { ...data, cables: data.cables.map((c) => (c.id === 'DST-1' ? marked : c)) };
+    expect(findFiberProblems(after).find((p) => p.code === 'core_in_use_unassigned')?.severity).toBe('warning');
+    expect(checkChangeSetFiber(data, { upserts: { cables: [marked] } })).toEqual([]);
+  });
+
+  it('refuses two OLT ports reaching one splitter tree without the slow tree walk', () => {
+    const { data } = exampleA();
+    const twoPon = {
+      ...data,
+      equipment: data.equipment.map((e) =>
+        e.id === 'OLT-1' ? { ...e, ponPorts: e.ponPorts!.map((p) => (p.id === 'PON-02' ? { ...p, connectedFeederCableId: 'FDR-1', feederCore: 3 } : p)) } : e,
+      ),
+    };
+    expect(findFiberProblems(twoPon).map((p) => p.code)).toContain('two_pon_one_tree');
+    expect(checkChangeSetFiber(data, { upserts: { equipment: twoPon.equipment } }).map((p) => p.code)).toContain('two_pon_one_tree');
+    expect(findFiberProblems(data).map((p) => p.code)).not.toContain('two_pon_one_tree');
   });
 });
 

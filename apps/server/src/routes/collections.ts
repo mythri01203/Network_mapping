@@ -51,7 +51,7 @@ export const collectionRoutes =
     app.get<{ Params: CollectionParams }>('/:collection', async (request, reply) => {
       const collection = resolveCollection(request.params.collection);
       noStore(reply);
-      return (await repository.list(collection)).map((record) => redactRecordForViewer(request, collection, record));
+      return (await repository.list(collection)).map((record) => redactRecordForViewer(request, collection, record)).filter((record) => record !== null);
     });
 
     app.get<{ Params: RecordParams }>('/:collection/:id', async (request, reply) => {

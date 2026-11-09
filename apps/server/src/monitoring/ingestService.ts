@@ -13,6 +13,10 @@ import {
 } from '@fibergis/shared';
 
 import type { NetworkRepository } from '../db/repository';
+import { HttpError } from '../lib/errors';
+import { readingKey, type RetentionLimits, rowsToPrune, statusKey } from './retention';
+
+const DEFAULT_RETENTION: RetentionLimits = { keepDays: 90, maxRows: 200_000 };
 
 /**
  * The one path that stores monitoring rows (Phase 7): file import, the push endpoint and the TEST
@@ -57,12 +61,14 @@ async function ingestNow(
   source: MonitoringSource,
   rows: readonly IngestRow[],
   actor: IngestActor,
-  options: { dryRun?: boolean; via: string; sourcePatch?: Partial<MonitoringSource>; now?: Date } = { via: 'push' },
+  options: { dryRun?: boolean; via: string; sourcePatch?: Partial<MonitoringSource>; now?: Date; retention?: RetentionLimits } = { via: 'push' },
 ): Promise<IngestOutcome> {
   const now = options.now ?? new Date();
   const { data } = await repository.getNetwork();
   // The stored source as it is now, so a change made meanwhile (such as Switch off) is kept.
   const current = data.monitoringSources.find((s) => s.id === source.id) ?? source;
+  // Switched off while this waited its turn: store nothing.
+  if (!options.dryRun && !current.enabled) throw new HttpError(409, 'source_off', `${current.name} is switched off. Nothing was stored.`);
   const settings = resolveMonitoringSettings(data.settings);
   const existingIds = new Set([...data.onuReadings.map((r) => r.id), ...data.onuStatuses.map((s) => s.id)]);
   const plan = planIngest(rows, { source, onts: data.onts, existingIds, now, settings });
@@ -85,13 +91,17 @@ async function ingestNow(
   );
   const made = plan.readings.length + plan.statuses.length;
   const changedAlarms = alarms.alarms.filter((a) => alarms.raised.some((r) => r.id === a.id));
+  const limits = options.retention ?? DEFAULT_RETENTION;
+  const oldReadings = rowsToPrune([...data.onuReadings, ...plan.readings], readingKey, limits, now);
+  const oldStatuses = rowsToPrune([...data.onuStatuses, ...plan.statuses], statusKey, limits, now);
+  const removed = oldReadings.length + oldStatuses.length;
   const audit: AuditLog = {
     id: `LOG-${randomCode(10)}`,
     timestamp: formatLogTimestamp(now),
     user: actor.user,
     role: actor.role,
     action: source.isTest ? 'TEST_MONITORING_ROWS' : 'MONITORING_ROWS',
-    details: `${source.isTest ? 'TEST · not real. ' : ''}${source.name} (${source.id}) via ${options.via}: ${plan.readings.length} reading(s), ${plan.statuses.length} status(es), ${plan.matched} matched, ${plan.unmatched.length} not matched, ${plan.skipped.length} skipped, ${plan.duplicates} already stored, ${alarms.raised.length} alarm(s).`.slice(0, 1000),
+    details: `${source.isTest ? 'TEST · not real. ' : ''}${source.name} (${source.id}) via ${options.via}: ${plan.readings.length} reading(s), ${plan.statuses.length} status(es), ${plan.matched} matched, ${plan.unmatched.length} not matched, ${plan.skipped.length} skipped, ${plan.duplicates} already stored, ${alarms.raised.length} alarm(s).${removed ? ` ${removed} old row(s) removed (kept ${limits.keepDays} days; newest per ONT always kept).` : ''}`.slice(0, 1000),
     assetId: source.id,
     assetType: 'System',
   };
@@ -105,6 +115,7 @@ async function ingestNow(
         monitoringSources: [nextSource],
         auditLogs: [audit],
       },
+      ...(removed ? { deletes: { onuReadings: oldReadings, onuStatuses: oldStatuses } } : {}),
     },
     undefined,
     actor.actorId ? { actorId: actor.actorId } : {},

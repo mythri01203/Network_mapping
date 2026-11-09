@@ -57,7 +57,7 @@ Phase 4 fixed: the splice form that preselected the nearest parent and invented 
 
 | Location | Problem |
 |---|---|
-| `packages/shared/src/domain/trace.ts` `findUpstreamChain` | Follows the first cable that ends at a box. Since Phase 4 it is only the fallback picture when a customer's fibers are not recorded end to end, and such a trace is marked incomplete with the fiber gap; `estimateRxForSplitter` and provisioning still use it to fill the customer's cable fields |
+| `packages/shared/src/domain/trace.ts` `findUpstreamChain` / `walkUpstreamCables` | Fixed November 2026 (audit): when several cables end at a box and none is on record the walk stops and names the gap instead of taking the first. It is only the fallback picture for a path whose fibers are not recorded; provisioning and "Link to OLT" no longer store anything from it, and no Rx is given for it. Keep it that way |
 | `opticalPathTrace.ts`, `trace.ts` (equipment and cable targets) | Still cable level: only customer traces follow fibers (`traceCustomerCores`). Connector pairs on the cable-level picture are counted one per equipment; on the fiber path they are counted from its ports. Both are labelled estimated |
 | `packages/shared/src/domain/opticalSettings.ts` `opticsClassForTechnology` | Used only when a PON port has no optics class recorded (Phase 4 stores it per port); the trace says which class it assumed |
 | `apps/web/src/features/cable-tv/CableTVView.tsx`, `EquipmentInspector.tsx` node, splice and slack sections, `TerminalBoxModal.tsx` maintenance tab | Fixed example values. Labelled "Example values, not your network"; replace with records in the Cable TV phase |

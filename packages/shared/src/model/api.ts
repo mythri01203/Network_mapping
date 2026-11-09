@@ -71,8 +71,9 @@ export interface HealthResponse {
   status: 'ok';
   version: string;
   uptimeSeconds: number;
-  revision: number;
-  counts: Record<CollectionName, number>;
+  /** Only for a logged-in session (or the server computer in setup mode): they describe the network. */
+  revision?: number;
+  counts?: Record<CollectionName, number>;
 }
 
 export interface RouteRequest {

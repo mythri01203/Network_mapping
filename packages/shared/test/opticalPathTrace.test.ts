@@ -207,6 +207,11 @@ describe('traceOpticalPath', () => {
     };
     const trace = traceOpticalPath('CUST-001', data)!;
     expect(trace.warnings.join(' ')).toContain('fed by 2 cables');
+    // Neither cable is followed: picking the first would show a path nobody recorded.
+    expect(trace.warnings.join(' ')).toContain('none was followed');
+    expect(trace.cableIds).not.toContain('DIST-01');
+    expect(trace.cableIds).not.toContain('DIST-02');
+    expect(trace.complete).toBe(false);
   });
 
   it('uses the operator overrides passed in', () => {

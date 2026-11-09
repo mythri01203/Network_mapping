@@ -13,7 +13,7 @@ import { createSampleNetwork } from '@fibergis/shared/sample';
 
 import { readJson, writeJson } from '../lib/storage';
 import { currentAccount, useAuthStore } from '../stores/authStore';
-import { getNetworkSnapshot, MAX_AUDIT_LOGS, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
+import { forgetCachedNetwork, getNetworkSnapshot, MAX_AUDIT_LOGS, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
 import { useRestoreStore } from '../stores/restoreStore';
 import { initialSyncState, type RefusedRecord, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
@@ -69,6 +69,11 @@ interface SyncMeta {
   bases?: Record<string, number>;
   /** Records someone else changed at the same time. Kept here and not sent until a person chooses. */
   held?: PendingIds;
+  /**
+   * Who made the unsent changes (Phase 9), so they are sent only under that person's login. If
+   * someone else logs in on this device, the changes wait for the person who made them.
+   */
+  owner?: { id: string; name: string };
 }
 
 const isPendingIds = (value: unknown): boolean =>
@@ -78,8 +83,9 @@ const isPendingIds = (value: unknown): boolean =>
 
 const isSyncMeta = (value: unknown): boolean => {
   if (typeof value !== 'object' || value === null) return false;
-  const { revision, pending, bases, held } = value as Partial<SyncMeta>;
+  const { revision, pending, bases, held, owner } = value as Partial<SyncMeta>;
   return (
+    (owner === undefined || (typeof owner === 'object' && owner !== null && typeof owner.id === 'string' && typeof owner.name === 'string')) &&
     (revision === null || typeof revision === 'number') &&
     isPendingIds(pending) &&
     (bases === undefined || (typeof bases === 'object' && bases !== null && Object.values(bases).every((v) => typeof v === 'number'))) &&
@@ -220,7 +226,14 @@ export function createSyncEngine({
       pending: mergePending(meta.pending, refusedIds(), sending ?? {}),
       ...(Object.keys(bases).length > 0 ? { bases } : {}),
       ...(!isEmptyPending(held()) ? { held: held() } : {}),
+      ...(meta.owner && !isEmptyPending(unsent()) ? { owner: meta.owner } : {}),
     });
+  };
+
+  /** The unsent changes were made by someone other than the person logged in now. */
+  const otherOwner = (): SyncMeta['owner'] | null => {
+    const account = useAuthStore.getState().account;
+    return meta.owner && account && meta.owner.id !== account.id && !isEmptyPending(unsent()) ? meta.owner : null;
   };
 
   const updateStatus = () => {
@@ -238,7 +251,9 @@ export function createSyncEngine({
       lastSyncedAt,
       error: refused[0]
         ? describeRefusal(refused)
-        : link === 'offline'
+        : otherOwner()
+          ? `${pendingCount} change(s) on this device were made by ${otherOwner()!.name}. They are kept and are sent only when ${otherOwner()!.name} logs in here.`
+          : link === 'offline'
           ? linkError
           : link === 'signin'
             ? `Log in to send. ${pendingCount > 0 ? `${pendingCount} change(s) are kept on this device until then.` : 'Nothing is lost.'}`
@@ -372,10 +387,18 @@ export function createSyncEngine({
     clearTimeout(reconnectTimer);
     stopPolling();
     updateStatus();
-    useAuthStore.getState().markLoginNeeded();
+    // A temporary password: stay logged in and show the "choose your password" screen instead.
+    if (passwordChangePending) useAuthStore.setState({ mustChangePassword: true });
+    else useAuthStore.getState().markLoginNeeded();
+    passwordChangePending = false;
   };
 
-  const isLoginError = (error: unknown) => error instanceof ApiError && error.isLoginRequired;
+  let passwordChangePending = false;
+  const isLoginError = (error: unknown) => {
+    if (!(error instanceof ApiError)) return false;
+    passwordChangePending = error.isPasswordChangeRequired;
+    return error.isLoginRequired || error.isPasswordChangeRequired;
+  };
 
   const goOffline = (error: unknown) => {
     link = 'offline';
@@ -490,6 +513,11 @@ export function createSyncEngine({
   async function send(): Promise<void> {
     clearFlushTimers();
     if (link !== 'online' || isEmptyPending(meta.pending)) return;
+    // Never send one person's work under another person's login.
+    if (otherOwner()) {
+      updateStatus();
+      return;
+    }
     const batch = meta.pending;
     sending = batch;
     meta.pending = {};
@@ -560,7 +588,8 @@ export function createSyncEngine({
     await exclusive(async () => {
       try {
         const health = await client.health();
-        if (health.revision !== meta.revision) await connect();
+        // No revision: the server no longer sees a login here, and loading will ask for one.
+        if (health.revision === undefined || health.revision !== meta.revision) await connect();
       } catch (error) {
         if (isLoginError(error)) needLogin();
         if (isTransientError(error)) goOffline(error);
@@ -588,6 +617,11 @@ export function createSyncEngine({
       if (bases[k] === undefined && serverVersions.has(k)) bases[k] = serverVersions.get(k)!;
     }
     meta.bases = bases;
+    // The first unsent change says whose work this is; nobody logged in (login off) leaves it open.
+    if (isEmptyPending(unsent())) {
+      const account = currentAccount();
+      meta.owner = account ? { id: account.id, name: account.displayName } : undefined;
+    }
     meta.pending = mergePending(meta.pending, changed);
     // An edit may fix what the server refused, so that record gets another try.
     const edited = new Set(flatten(changed).map((key) => `${key.collection}/${key.id}`));
@@ -664,7 +698,12 @@ export function createSyncEngine({
 
   // After a login, send what waited and load what changed meanwhile.
   useAuthStore.subscribe((state, prev) => {
-    if (started && state.account && state.account !== prev.account && link === 'signin') {
+    // A real logout (not an expired session) on a shared device, with nothing waiting to be sent:
+    // the stored copy of the network goes too, so the next person does not find the customer list.
+    if (prev.lastAccount && !state.lastAccount && !state.account && state.mode === 'enforced' && isEmptyPending(unsent())) forgetCachedNetwork();
+    const ready = state.account && !state.mustChangePassword;
+    const nowReady = state.account !== prev.account || (prev.mustChangePassword && !state.mustChangePassword);
+    if (started && ready && nowReady && link === 'signin') {
       retryAttempt = 0;
       void exclusive(connect);
     }

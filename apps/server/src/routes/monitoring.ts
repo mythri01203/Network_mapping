@@ -18,6 +18,7 @@ import { hashToken } from '../auth/passwords';
 import type { NetworkRepository } from '../db/repository';
 import { badRequest, HttpError, notFound } from '../lib/errors';
 import { type IngestActor, ingestRows } from '../monitoring/ingestService';
+import type { RetentionLimits } from '../monitoring/retention';
 import type { MonitoringTokenStore } from '../monitoring/tokenStore';
 
 /**
@@ -30,6 +31,7 @@ export interface MonitoringRouteOptions {
   repository: NetworkRepository;
   tokens: MonitoringTokenStore;
   ingestPerMinute: number;
+  retention?: RetentionLimits;
 }
 
 /** A push carries at most `MAX_INGEST_ROWS` small rows. */
@@ -64,8 +66,9 @@ const bearer = (request: FastifyRequest): string | undefined => {
 };
 
 export const monitoringRoutes =
-  ({ repository, tokens, ingestPerMinute }: MonitoringRouteOptions): FastifyPluginAsync =>
+  ({ repository, tokens, ingestPerMinute, retention }: MonitoringRouteOptions): FastifyPluginAsync =>
   async (app) => {
+    const keep = retention ? { retention } : {};
     const sourceById = async (id: string): Promise<MonitoringSource> => {
       const source = await repository.get('monitoringSources', id);
       if (!source) throw notFound(`Monitoring source ${id} is not on record.`);
@@ -140,7 +143,7 @@ export const monitoringRoutes =
       const source = await sourceById(body.sourceId);
       if (source.kind !== 'file_import') throw badRequest(`${source.name} is not a file import source.`);
       if (!source.enabled) throw new HttpError(409, 'source_off', `${source.name} is switched off. Nothing was imported.`);
-      return ingestRows(repository, source, body.rows, actorOf(request), { dryRun: body.dryRun, via: 'file import', ...(body.columnMapping ? { sourcePatch: { columnMapping: body.columnMapping } } : {}) });
+      return ingestRows(repository, source, body.rows, actorOf(request), { dryRun: body.dryRun, via: 'file import', ...keep, ...(body.columnMapping ? { sourcePatch: { columnMapping: body.columnMapping } } : {}) });
     });
 
     app.post('/monitoring/simulate', async (request) => {
@@ -149,7 +152,7 @@ export const monitoringRoutes =
       const source = await sourceById(body.sourceId);
       if (source.kind !== 'test_simulator' || !source.isTest) throw badRequest('Only the TEST simulator source can make simulated rows.');
       if (!source.enabled) throw new HttpError(409, 'source_off', 'The TEST simulator is switched off. Switch it on first (administrator).');
-      return ingestRows(repository, source, body.rows, actorOf(request), { dryRun: body.dryRun, via: 'TEST simulator' });
+      return ingestRows(repository, source, body.rows, actorOf(request), { dryRun: body.dryRun, via: 'TEST simulator', ...keep });
     });
 
     /** For a script or NMS on the owner's network: `Authorization: Bearer <token>`. Can do nothing else. */
@@ -157,7 +160,18 @@ export const monitoringRoutes =
       '/monitoring/ingest',
       {
         bodyLimit: INGEST_BODY_LIMIT,
-        config: { rateLimit: { max: ingestPerMinute, timeWindow: 60_000, keyGenerator: (request: FastifyRequest) => hashToken(bearer(request) ?? request.ip) } },
+        // Per source for a known token; per address otherwise, so guessing with made-up tokens is limited too.
+        config: {
+          rateLimit: {
+            max: ingestPerMinute,
+            timeWindow: 60_000,
+            keyGenerator: (request: FastifyRequest) => {
+              const token = bearer(request);
+              const sourceId = token ? tokens.sourceFor(token) : undefined;
+              return sourceId ? `source:${sourceId}` : `address:${hashToken(request.ip)}`;
+            },
+          },
+        },
       },
       async (request) => {
         const token = bearer(request);
@@ -167,7 +181,7 @@ export const monitoringRoutes =
         if (!source || source.kind !== 'push' || source.isTest) throw new HttpError(401, 'bad_token', 'This token is not for a push source. Nothing was stored.');
         if (!source.enabled) throw new HttpError(409, 'source_off', `${source.name} is switched off. Nothing was stored.`);
         const body = ingestBodySchema.parse(request.body ?? {});
-        return ingestRows(repository, source, body.rows, { user: `Monitoring source ${source.name}`, role: 'Administrator' }, { via: 'push' });
+        return ingestRows(repository, source, body.rows, { user: `Monitoring source ${source.name}`, role: 'Administrator' }, { via: 'push', ...keep });
       },
     );
   };

@@ -81,6 +81,7 @@ describe('Cable TV checks on the server (Phase 6)', () => {
     await send({ upserts: { rfElements: [tap] } }, admin);
     expect((await post('/users', { username: 'tech', displayName: 'Tech', role: 'technician', password: 'tech-pass-1' }, admin)).statusCode).toBe(201);
     const tech = cookieOf(await post('/auth/login', { username: 'tech', password: 'tech-pass-1' }));
+    expect((await post('/auth/password', { currentPassword: 'tech-pass-1', newPassword: 'tech-pass-2' }, tech)).statusCode).toBe(200);
     const level = { id: 'V2', elementId: 'RF-TAP', portId: 'DROP1', value: 70, unit: 'dBuV', origin: 'field_measured', frequencyMhz: 600, technician: 'Tech', createdAt: '2026-11-08T10:00:00.000Z' };
     expect((await send({ upserts: { rfLevels: [level] } }, tech)).statusCode).toBe(403);
     expect((await send({ upserts: { rfLevels: [{ ...level, photoId: 'PHOTO-1' }] } }, tech)).statusCode).toBe(200);

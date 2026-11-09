@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 import {
@@ -12,7 +13,7 @@ import {
   usernameSchema,
 } from '@fibergis/shared';
 
-import { forbidden, loginRequired, SESSION_COOKIE } from '../auth/access';
+import { forbidden, isLocalRequest, loginRequired, SESSION_COOKIE } from '../auth/access';
 import { type SqliteAuthStore, summaryOf } from '../auth/authStore';
 import { LoginLimiter } from '../auth/loginLimiter';
 import { decoyHash, hashPassword, newSessionToken, temporaryPassword, verifyPassword } from '../auth/passwords';
@@ -37,6 +38,9 @@ const tooManyTries = (seconds: number) =>
     'too_many_tries',
     `Too many wrong tries. Wait ${Math.max(1, Math.ceil(seconds / 60))} minute(s) and try again, or ask the administrator to set a new password.`,
   );
+
+/** Compares two secrets in constant time. */
+const sameSecret = (given: string, expected: string) => timingSafeEqual(createHash('sha256').update(given).digest(), createHash('sha256').update(expected).digest());
 
 const wrongLogin = () => new HttpError(401, 'wrong_login', 'That name and password do not match. Try again, or ask the administrator.');
 
@@ -94,6 +98,7 @@ export const authRoutes =
       account: request.auth.account,
       ...(request.auth.session?.mustChangePassword ? { mustChangePassword: true } : {}),
       passwordMinLength: min,
+      ...(request.auth.setupPending && store.isEmpty() ? { setupPending: true, ...(config.setupToken ? { setupCodeAccepted: true } : {}) } : {}),
     });
 
     const startSession = (request: FastifyRequest, reply: FastifyReply, userId: string) => {
@@ -113,6 +118,14 @@ export const authRoutes =
 
     const small = { bodyLimit: AUTH_BODY_LIMIT };
 
+    /** Jobs are given to a technician by the name shown, so two accounts may not share one. */
+    const refuseTakenName = (displayName: string, exceptId?: string) => {
+      const wanted = displayName.trim().toLowerCase();
+      if (store.list().some((u) => u.id !== exceptId && u.displayName.trim().toLowerCase() === wanted)) {
+        throw new HttpError(409, 'name_taken', `Another account is already called "${displayName.trim()}". Add a surname or number so people and jobs are not mixed up.`);
+      }
+    };
+
     app.get('/auth/status', async (request, reply) => {
       reply.header('cache-control', 'no-store');
       return status(request);
@@ -120,9 +133,16 @@ export const authRoutes =
 
     app.post('/auth/setup', small, async (request, reply) => {
       if (!store.isEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
+      // From another device only with the server's setup code; otherwise on the server computer itself.
+      if (!isLocalRequest(request) && !config.setupToken) {
+        throw forbidden('Create the first administrator on the server computer: open FiberGIS there (http://localhost). Then log in here.');
+      }
       const body = setupSchema(min).parse(request.body ?? {});
-      if (config.setupToken && body.setupToken !== config.setupToken) throw forbidden('The setup code is not right. It is the SETUP_TOKEN set on the server.');
-      const user = store.create({ username: body.username, displayName: body.displayName, role: 'admin', passwordHash: await hashPassword(body.password), mustChangePassword: false });
+      if (config.setupToken && !sameSecret(body.setupToken ?? '', config.setupToken)) throw forbidden('The setup code is not right. It is the SETUP_TOKEN set on the server.');
+      const passwordHash = await hashPassword(body.password);
+      // Checked again after the slow hash, so two requests at once cannot both make an administrator.
+      if (!store.isEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
+      const user = store.create({ username: body.username, displayName: body.displayName, role: 'admin', passwordHash, mustChangePassword: false });
       request.log.info({ userId: user.id }, 'First administrator account created; login is now on');
       startSession(request, reply, user.id);
       reply.header('cache-control', 'no-store');
@@ -136,10 +156,11 @@ export const authRoutes =
         reply.header('retry-after', wait);
         throw tooManyTries(wait);
       }
+      // Counted before the slow check, so tries sent all at once are limited too (taken back if right).
+      limiter.failed(request.ip, username);
       const user = store.byUsername(username);
       const ok = user && user.active ? await verifyPassword(password, user.passwordHash) : (await verifyPassword(password, await decoyHash()), false);
       if (!ok || !user) {
-        limiter.failed(request.ip, username);
         request.log.info('Login refused: wrong name or password');
         throw wrongLogin();
       }
@@ -199,6 +220,7 @@ export const authRoutes =
       requireAdmin(request);
       const body = newUserSchema(min).parse(request.body ?? {});
       if (store.byUsername(body.username)) throw new HttpError(409, 'username_taken', `The login name "${body.username}" is already used. Choose another.`);
+      refuseTakenName(body.displayName);
       const password = body.password ?? temporaryPassword();
       const user = store.create({ username: body.username, displayName: body.displayName, role: body.role, passwordHash: await hashPassword(password), mustChangePassword: true });
       request.log.info({ userId: user.id, role: user.role }, 'Account created');
@@ -212,6 +234,7 @@ export const authRoutes =
       const body = updateUserSchema.parse(request.body ?? {});
       const user = store.byId(request.params.id);
       if (!user) throw notFound('That account does not exist.');
+      if (body.displayName !== undefined) refuseTakenName(body.displayName, user.id);
       const role: AccountRole = body.role ?? user.role;
       const active = body.active ?? user.active;
       const losesAdmin = user.role === 'admin' && user.active && (role !== 'admin' || !active);

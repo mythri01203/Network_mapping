@@ -6,14 +6,34 @@ import { resolveOpticalSettings } from '../src/domain/opticalSettings';
 import { provisionCustomer, relinkCustomer, setCustomerLocation } from '../src/domain/provisioning';
 import { rxReadingOf } from '../src/domain/rxReading';
 import { customerSchema } from '../src/model/schemas';
-import { cable, NOW, smallNetwork } from './fixtures';
+import { cable, closure, NOW, smallNetwork, splice } from './fixtures';
 
 const ctx = { now: NOW };
 const target = { terminalBoxId: 'FAT-01', splitterId: 'SPL-01', splitterOutputPort: 2 };
 
-/** The small network with a real launch power recorded on its PON port. */
+/**
+ * The small network with its fibers recorded end to end: PON-01 drives FEED-01 fiber 1, which is
+ * spliced at FDT-01 to DIST-01 fiber 1, the fiber the splitter input is linked to.
+ */
+const recorded = (data: NetworkData = smallNetwork()): NetworkData => ({
+  ...data,
+  equipment: data.equipment.map((e) =>
+    e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, feederCore: 1 })) } : e,
+  ),
+  closures: [
+    closure({
+      id: 'JC-FDT',
+      equipmentId: 'FDT-01',
+      cableAId: 'FEED-01',
+      cableBId: 'DIST-01',
+      splices: [splice({ id: 'S-1', inputCableId: 'FEED-01', inputCore: 1, outputCableId: 'DIST-01', outputCore: 1 })],
+    }),
+  ],
+});
+
+/** The recorded network with a real launch power on its PON port. */
 const withLaunch = (txPowerDbm = 3): NetworkData => {
-  const data = smallNetwork();
+  const data = recorded();
   return {
     ...data,
     equipment: data.equipment.map((e) =>
@@ -23,8 +43,8 @@ const withLaunch = (txPowerDbm = 3): NetworkData => {
 };
 
 describe('provisionCustomer', () => {
-  it('connects a subscriber end to end', () => {
-    const data = smallNetwork();
+  it('connects a subscriber end to end when the fibers are recorded', () => {
+    const data = recorded();
     const result = provisionCustomer(data, { ...target, name: 'Asha', lat: 17.421, lng: 78.421 }, ctx);
     if (!result.ok) throw new Error(result.error.message);
     const { customer: created, dropCable } = result.value;
@@ -59,6 +79,61 @@ describe('provisionCustomer', () => {
     expect(next.customers).toHaveLength(2);
     expect(next.cables.map((c) => c.id)).toContain(dropCable.id);
     expect(result.notice?.tone).toBe('success');
+    expect(result.notice?.title).toBe('Customer Connected');
+  });
+
+  it('stores no OLT, PON, cables, PON count or Rx from a cable-level guess', () => {
+    // Cables run OLT → FDT → FAT, but no splice joins FEED-01 to DIST-01: the fiber path is not recorded.
+    const base = smallNetwork();
+    const data = {
+      ...base,
+      equipment: base.equipment.map((e) => (e.id === 'OLT-01' ? { ...e, ponPorts: e.ponPorts?.map((p) => ({ ...p, txPowerDbm: 3 })) } : e)),
+    };
+    const result = provisionCustomer(data, { ...target, name: 'Asha', lat: 17.421, lng: 78.421 }, ctx);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.customer).toMatchObject({ oltId: '', ponPort: '', feederCableId: '', distributionCableId: '' });
+    expect(result.value.customer.rxOpticalPowerDbm).toBeUndefined();
+    expect(result.value.customer.rxSource).toBeUndefined();
+    const next = applyPatch(data, result.patch);
+    expect(next.equipment.find((e) => e.id === 'OLT-01')!.ponPorts![0].connectedCustomersCount).toBe(1);
+    expect(result.notice?.tone).toBe('warning');
+    expect(result.notice?.title).toBe('Customer Saved, Path Not Complete');
+    expect(result.notice?.message).toContain('not complete');
+    expect(result.notice?.message).toContain('DIST-01');
+  });
+
+  it('keeps an OLT and PON port the person chose, and counts the customer there', () => {
+    const result = provisionCustomer(smallNetwork(), { ...target, oltId: 'OLT-01', ponPort: 'PON-01' }, ctx);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.customer).toMatchObject({ oltId: 'OLT-01', ponPort: 'PON-01', feederCableId: '' });
+    const next = applyPatch(smallNetwork(), result.patch);
+    expect(next.equipment.find((e) => e.id === 'OLT-01')!.ponPorts![0].connectedCustomersCount).toBe(2);
+  });
+
+  it('names the missing splitter input link when the input is not linked', () => {
+    const base = smallNetwork();
+    const data = { ...base, splitters: base.splitters.map((s) => ({ ...s, inputPort: { id: s.inputPort.id } })) };
+    const result = provisionCustomer(data, target, ctx);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.customer.oltId).toBe('');
+    expect(result.notice?.message).toContain('input of splitter SPL-01 is not linked to a fiber');
+  });
+
+  it('uses one drop fiber everywhere: the one given, else fiber 1 of the new drop', () => {
+    const data = smallNetwork();
+    const given = provisionCustomer(data, { ...target, fiberCore: 2 }, ctx);
+    if (!given.ok) throw new Error(given.error.message);
+    expect(given.value.customer.fiberCore).toBe(2);
+    expect(given.value.dropCable.cores.find((c) => c.status === 'In Use')?.coreNumber).toBe(2);
+    expect(applyPatch(data, given.patch).splitters[0].outputPorts.find((p) => p.portNumber === 2)?.connectedCore).toBe(2);
+
+    const plain = provisionCustomer(data, target, ctx);
+    if (!plain.ok) throw new Error(plain.error.message);
+    expect(plain.value.customer.fiberCore).toBe(1);
+    expect(plain.value.dropCable.cores.find((c) => c.status === 'In Use')?.coreNumber).toBe(1);
+    expect(applyPatch(data, plain.patch).splitters[0].outputPorts.find((p) => p.portNumber === 2)?.connectedCore).toBe(1);
+
+    expect(provisionCustomer(data, { ...target, fiberCore: 3 }, ctx)).toMatchObject({ ok: false, error: { title: 'Invalid Drop Fiber' } });
   });
 
   it('saves no made-up house position when none is given', () => {
@@ -77,7 +152,7 @@ describe('provisionCustomer', () => {
     const result = provisionCustomer(data, { ...target, lat: 17.421, lng: 78.421 }, ctx);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.notice?.tone).toBe('warning');
-    expect(result.notice?.title).toBe('Customer Saved, Not Linked');
+    expect(result.notice?.title).toBe('Customer Saved, Path Not Complete');
     expect(result.notice?.message).toContain('cannot be traced');
     expect(result.value.customer.oltId).toBe('');
   });
@@ -228,6 +303,26 @@ describe('relinkCustomer', () => {
     expect(result.value).toMatchObject({ oltId: 'OLT-01', ponPort: 'PON-01', feederCableId: 'FEED-01', rxSource: 'calculated' });
     const next = applyPatch(withCable, result.patch);
     expect(next.equipment.find((e) => e.id === 'OLT-01')!.ponPorts![0].connectedCustomersCount).toBe(before + 1);
+  });
+
+  it('links nothing from a cable that merely reaches the box, and says which link to record', () => {
+    // Cables reach the box, but no splice joins the feeder to the distribution fiber.
+    const data = smallNetwork();
+    const added = provisionCustomer(data, target, ctx);
+    if (!added.ok) throw new Error(added.error.message);
+    const next = applyPatch(data, added.patch);
+    const result = relinkCustomer(next, added.value.customer.id, ctx);
+    expect(result).toMatchObject({ ok: false, error: { title: 'Cannot Link Yet', tone: 'warning' } });
+    if (result.ok) return;
+    expect(result.error.message).toContain('nothing is linked from a guess');
+    expect(result.error.message).toContain('Record this first');
+    expect(result.error.message).toContain('DIST-01');
+
+    // With the splitter input not linked either, it says where to link it.
+    const noInput = { ...next, splitters: next.splitters.map((s) => ({ ...s, inputPort: { id: s.inputPort.id } })) };
+    const unlinked = relinkCustomer(noInput, added.value.customer.id, ctx);
+    expect(unlinked.ok).toBe(false);
+    if (!unlinked.ok) expect(unlinked.error.message).toContain('Link input to this fiber');
   });
 
   it('keeps a real meter reading', () => {

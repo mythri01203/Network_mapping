@@ -44,13 +44,18 @@ export class ApiError extends Error {
     return this.status === 401 && this.code === 'login_required';
   }
 
+  /** Logged in with a temporary password: nothing was refused; choose a password and send again. */
+  get isPasswordChangeRequired(): boolean {
+    return this.status === 403 && this.code === 'password_change_required';
+  }
+
   get isVersionConflict(): boolean {
     return this.status === 409 && this.code === 'version_conflict';
   }
 
   /** The request itself was refused, so sending it again unchanged will fail again. */
   get isRejection(): boolean {
-    return this.status >= 400 && this.status < 500 && this.status !== 408 && this.status !== 429 && !this.isLoginRequired;
+    return this.status >= 400 && this.status < 500 && this.status !== 408 && this.status !== 429 && !this.isLoginRequired && !this.isPasswordChangeRequired;
   }
 }
 

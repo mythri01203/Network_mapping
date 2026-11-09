@@ -14,7 +14,8 @@ import { useShallow } from 'zustand/react/shallow';
 
 import {
   type Customer,
-  findServingOlt,
+  estimateRxForSplitter,
+  findUpstreamChain,
   hasRecordedLocation,
   LOCATION_METHOD_LABELS,
   RX_ORIGIN_LABELS,
@@ -134,12 +135,24 @@ function ServicePath({ steps }: { steps: PathStep[] }) {
   );
 }
 
-/** Says plainly when a customer is not linked to an OLT, and offers the link once a cable reaches the box. */
+/**
+ * Says plainly when a customer is not linked to an OLT. Offers the link only once the fibers from the
+ * box's splitter to a PON port are recorded; until then it names the link to record, never a guess.
+ */
 function NotLinkedNotice({ customer }: { customer: Customer }) {
-  const cableReady = useNetworkStore(
-    (s) => !!customer.terminalBoxId && !!findServingOlt(customer.terminalBoxId, s).olt,
+  // '' when the fiber path is recorded; otherwise the first missing link, in plain words.
+  const missing = useNetworkStore((s) => {
+    const fat = s.equipment.find((e) => e.id === customer.terminalBoxId);
+    const splitter = s.splitters.find((sp) => sp.id === customer.splitterId);
+    if (!fat || !splitter) return 'this customer has no terminal box and splitter on record';
+    const estimate = estimateRxForSplitter(fat, splitter, s);
+    return estimate.level === 'core' && estimate.olt ? '' : (estimate.gaps[0] ?? 'the fiber path is not recorded');
+  });
+  const cableReaches = useNetworkStore(
+    (s) => !!customer.terminalBoxId && findUpstreamChain(customer.terminalBoxId, s).length > 0,
   );
   if (customer.oltId || customer.status === 'Disconnected') return null;
+  const pathReady = missing === '';
   return (
     <div role="status" className="mx-4 mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
       <p className="flex items-center gap-1.5 text-[13px] font-semibold">
@@ -147,11 +160,13 @@ function NotLinkedNotice({ customer }: { customer: Customer }) {
         Not linked
       </p>
       <p className="mt-1">
-        {cableReady
-          ? 'A cable now reaches this box. Link this customer so they can be traced to the OLT.'
-          : 'No cable connects this customer’s box to an OLT, so they cannot be traced. Draw that cable first, ending on the box.'}
+        {pathReady
+          ? 'The fibers from this box to the OLT are now recorded. Link this customer so they can be traced to the OLT.'
+          : cableReaches
+            ? `The fiber path to the OLT is not recorded yet, so this customer cannot be traced. Record this link first: ${missing}`
+            : 'No cable connects this customer’s box to an OLT, so they cannot be traced. Draw that cable first, ending on the box.'}
       </p>
-      {cableReady && (
+      {pathReady && (
         <Button size="sm" variant="primary" icon={Link2} className="mt-2" onClick={() => relinkCustomer(customer.id)}>
           Link to OLT
         </Button>

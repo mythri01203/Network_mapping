@@ -92,7 +92,7 @@ export class SqliteAuthStore {
       adminsActive: db.prepare("SELECT COUNT(*) AS n FROM users WHERE active = 1 AND role = 'admin'"),
       createSession: db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?)'),
       session: db.prepare(
-        `SELECT s.token_hash, s.expires_at, s.last_seen_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id
+        `SELECT s.token_hash, s.expires_at, s.last_seen_at, s.created_at AS session_created_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.token_hash = ?`,
       ),
       touch: db.prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?'),
@@ -165,25 +165,27 @@ export class SqliteAuthStore {
     this.q.expired.run(at);
     this.q.createSession.run(hashToken(token), userId, at, expires, at);
     this.q.loggedIn.run(at, userId);
-    return this.session(token, days, now)!;
+    return this.session(token, days, undefined, now)!;
   }
 
   /**
    * The session behind a cookie, or undefined when it does not exist, has expired, or its account
-   * is switched off. A session in use is kept alive: its end moves forward at most once an hour.
+   * is switched off. A session in use is kept alive: its end moves forward at most once an hour,
+   * but never past `maxDays` after the login, so a stolen cookie cannot last for ever.
    */
-  session(token: string, days: number, now = new Date()): SessionInfo | undefined {
+  session(token: string, days: number, maxDays = Math.max(days, 90), now = new Date()): SessionInfo | undefined {
     const tokenHash = hashToken(token);
     const row = this.q.session.get(tokenHash) as Row | undefined;
     if (!row) return undefined;
-    if (String(row.expires_at) < now.toISOString() || Number(row.active) !== 1) {
+    const hardEnd = Date.parse(String(row.session_created_at)) + Math.max(days, maxDays) * 86_400_000;
+    if (String(row.expires_at) < now.toISOString() || Number(row.active) !== 1 || !(hardEnd > now.getTime())) {
       this.q.removeSession.run(tokenHash);
       return undefined;
     }
     const user = toUser(row);
     let expiresAt = String(row.expires_at);
     if (now.getTime() - Date.parse(String(row.last_seen_at)) > 3_600_000) {
-      expiresAt = new Date(now.getTime() + days * 86_400_000).toISOString();
+      expiresAt = new Date(Math.min(now.getTime() + days * 86_400_000, hardEnd)).toISOString();
       this.q.touch.run(now.toISOString(), expiresAt, tokenHash);
     }
     return { tokenHash, account: accountOf(user), mustChangePassword: user.mustChangePassword, expiresAt };

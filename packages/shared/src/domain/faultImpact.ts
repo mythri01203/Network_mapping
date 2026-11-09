@@ -1,4 +1,5 @@
 import type { NetworkElementType } from '../model/enums';
+import type { RfElement, RfLink } from '../model/rfSchemas';
 import type { Attachment, Customer, NetworkElementRef, Ont, Service, Span } from '../model/types';
 import type { NetworkData } from './command';
 import { isActiveCustomer, isLiveService } from './connectionRules';
@@ -6,6 +7,7 @@ import { buildFiberIndex, coreKey, describeCore, type FiberData, type FiberIndex
 import { type CorePathResult, traceCustomerCores } from './fiberPath';
 import { DEFAULT_OPTICAL_SETTINGS, type OpticalSettings } from './opticalSettings';
 import { cablesOnSpan, cablesOnStructure } from './outsidePlant';
+import { customerRfPath, indexRf, type RfIndex } from './rfTree';
 
 /**
  * Who is affected when one element fails (Phase 8). Built only from recorded links: each active
@@ -13,6 +15,8 @@ import { cablesOnSpan, cablesOnStructure } from './outsidePlant';
  * affected only when that recorded path passes through the element. A customer whose path breaks
  * before reaching it is never assumed to be on it: if their own record names the element, they are
  * listed apart as "may be affected, path not fully recorded". Nothing is worked out from distance.
+ * Cable TV customers (Phase 6) are not on a PON path at all: they are followed up the recorded RF
+ * links from their set top box or modem (`customerRfPath`), never counted as a broken PON path.
  */
 
 export type ImpactData = FiberData & {
@@ -20,7 +24,33 @@ export type ImpactData = FiberData & {
   attachments?: readonly Attachment[];
   onts?: readonly Ont[];
   services?: readonly Service[];
+  /** Phase 6 Cable TV records. Absent: Cable TV customers are kept apart with "RF links not given". */
+  rfElements?: readonly RfElement[];
+  rfLinks?: readonly RfLink[];
 };
+
+/**
+ * A Cable TV customer: on a coax tap (`accessNetwork: 'hfc'`), or with no fiber drop and either a
+ * Cable TV service or a set top box or modem recorded for them. Never traced as a PON customer.
+ */
+export function isTvCustomer(c: Customer, rfCustomerIds: ReadonlySet<string> = new Set()): boolean {
+  if (c.accessNetwork === 'hfc') return true;
+  if (c.accessNetwork === 'pon' || c.dropCableId) return false;
+  return c.serviceType === 'Cable TV' || rfCustomerIds.has(c.id);
+}
+
+/** A Cable TV customer's recorded RF path, from the top down to their device. */
+export interface TvPathInfo {
+  customer: Customer;
+  rfElementIds: string[];
+  /** Map pins the RF items on the path sit at (a pole box with a tap or an amplifier). */
+  siteIds: string[];
+  /** Drawn cables the recorded RF links run in, and the fibers of fiber links. */
+  cableIds: string[];
+  coreKeys: string[];
+  complete: boolean;
+  gap?: string;
+}
 
 export interface CustomerPathInfo {
   customer: Customer;
@@ -32,21 +62,47 @@ export interface CustomerPathInfo {
 export interface ImpactIndex {
   data: ImpactData;
   fiber: FiberIndex;
-  /** Active customers only, by id. */
+  /** Active fiber (PON) customers only, by id. */
   paths: Map<string, CustomerPathInfo>;
+  /** Active Cable TV customers, by id, with their recorded RF path. Never in `paths`. */
+  tv: Map<string, TvPathInfo>;
+}
+
+function tvPathOf(data: ImpactData, rf: RfIndex, customer: Customer): TvPathInfo {
+  const rfData = { rfElements: data.rfElements ?? [], rfLinks: data.rfLinks ?? [], cables: data.cables };
+  const { trace, gap } = customerRfPath(rfData, customer.id, rf);
+  const steps = trace?.steps ?? [];
+  const links = steps.map((s) => s.link).filter((l): l is RfLink => !!l);
+  const why = data.rfElements ? gap : 'The Cable TV records (RF items and links) were not given to this check.';
+  return {
+    customer,
+    rfElementIds: steps.map((s) => s.element.id),
+    siteIds: [...new Set(steps.map((s) => s.element.siteEquipmentId).filter((x): x is string => !!x))],
+    cableIds: [...new Set(links.map((l) => l.cableId).filter((x): x is string => !!x))],
+    coreKeys: [...new Set(links.filter((l) => l.cableId && l.fiberNumber).map((l) => coreKey(l.cableId!, l.fiberNumber!)))],
+    complete: !!trace?.complete,
+    ...(why ? { gap: why } : {}),
+  };
 }
 
 /** Traces every active customer once, so many questions can be answered from one pass. */
 export function buildImpactIndex(data: ImpactData, settings: OpticalSettings = DEFAULT_OPTICAL_SETTINGS): ImpactIndex {
   const fiber = buildFiberIndex(data);
+  const rf = indexRf({ rfElements: data.rfElements ?? [], rfLinks: data.rfLinks ?? [], cables: data.cables });
+  const rfCustomerIds = new Set((data.rfElements ?? []).filter((e) => (e.kind === 'stb' || e.kind === 'cable_modem') && e.customerId).map((e) => e.customerId!));
   const paths = new Map<string, CustomerPathInfo>();
+  const tv = new Map<string, TvPathInfo>();
   for (const customer of data.customers) {
     if (!isActiveCustomer(customer)) continue;
+    if (isTvCustomer(customer, rfCustomerIds)) {
+      tv.set(customer.id, tvPathOf(data, rf, customer));
+      continue;
+    }
     const path = traceCustomerCores(customer, data, { settings, index: fiber });
     const closureIds = [...new Set(path.steps.filter((s) => s.kind === 'splice').map((s) => s.id))];
     paths.set(customer.id, { customer, path, closureIds });
   }
-  return { data, fiber, paths };
+  return { data, fiber, paths, tv };
 }
 
 const STRUCTURE = /pole|manhole|handhole|chamber/i;
@@ -217,6 +273,31 @@ export function pathPassesThrough(ix: ImpactIndex, info: CustomerPathInfo, el: N
   }
 }
 
+/**
+ * True when a Cable TV customer's recorded RF path passes through the element: an RF item sitting
+ * at that pin, a drawn cable (or fiber) one of its RF links runs in, or a pole or span carrying such
+ * a cable. PON-only elements (splitter, PON port, OLT, closure) never carry an RF path.
+ */
+export function tvPathPassesThrough(ix: ImpactIndex, info: TvPathInfo, el: NetworkElementRef, structureCables?: readonly string[]): boolean {
+  switch (el.type) {
+    case 'customer':
+      return info.customer.id === el.id;
+    case 'cable':
+      return info.cableIds.includes(el.id);
+    case 'core':
+      return !!el.fiberNumber && info.coreKeys.includes(coreKey(el.id, el.fiberNumber));
+    case 'span':
+      return (structureCables ?? cablesRecordedOn(ix.data, el)).some((id) => info.cableIds.includes(id));
+    case 'equipment': {
+      if (info.siteIds.includes(el.id)) return true;
+      if (!isStructurePin(ix.fiber.equipment.get(el.id)?.type)) return false;
+      return (structureCables ?? cablesRecordedOn(ix.data, el)).some((id) => info.cableIds.includes(id));
+    }
+    default:
+      return false;
+  }
+}
+
 const customerCables = (c: Customer) => [c.feederCableId, c.distributionCableId, c.dropCableId].filter(Boolean);
 
 /**
@@ -259,6 +340,8 @@ export interface AffectedCustomer {
   name: string;
   /** False when the path breaks further up: the element is on its recorded part, the rest is not. */
   pathComplete: boolean;
+  /** `hfc`: a Cable TV customer, found through recorded RF links rather than a fiber path. */
+  network?: 'hfc';
   services: { id: string; kind: Service['kind']; status: Service['status'] }[];
 }
 
@@ -317,6 +400,22 @@ export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): Impac
       if (!customer.dropCableId) noPath += 1;
       const reason = recordNamesElement(ix, customer, el, structureCables);
       if (reason) mayBeAffected.push({ customerId: customer.id, name: customer.name, reason, firstGap: path.gaps[0] ?? 'path not recorded' });
+    }
+    let tvGaps = 0;
+    for (const info of ix.tv.values()) {
+      if (tvPathPassesThrough(ix, info, el, structureCables)) {
+        affected.push({
+          customerId: info.customer.id,
+          name: info.customer.name,
+          pathComplete: info.complete,
+          network: 'hfc',
+          services: services.filter((s) => s.customerId === info.customer.id && isLiveService(s)).map(SERVICE_FIELDS),
+        });
+      } else if (!info.complete) tvGaps += 1;
+    }
+    const carriesRf = el.type === 'equipment' || el.type === 'cable' || el.type === 'core' || el.type === 'span';
+    if (carriesRf && tvGaps > 0) {
+      notes.push(`${tvGaps} Cable TV customer(s) have no complete RF path recorded, so they cannot be placed on this item. They are not counted as a broken fiber path.`);
     }
   }
   if (noPath > 0) notes.push(`${noPath} active customer(s) have no drop fiber recorded at all, so they cannot be placed on any element.`);

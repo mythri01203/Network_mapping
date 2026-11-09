@@ -71,7 +71,7 @@ export const LeftSidebar: React.FC = () => {
       setPanelOpen: s.setPanelOpen,
     })),
   );
-  const { equipments, cables, customers, faults, workOrders, zones, documents, closures, splitters } = useNetworkStore(
+  const { equipments, cables, customers, faults, workOrders, zones, documents, closures, splitters, rfElements } = useNetworkStore(
     useShallow((s) => ({
       equipments: s.equipment,
       cables: s.cables,
@@ -82,6 +82,7 @@ export const LeftSidebar: React.FC = () => {
       documents: s.documents,
       closures: s.closures,
       splitters: s.splitters,
+      rfElements: s.rfElements,
     })),
   );
   const setIsBikerMode = useBikerStore((s) => s.setBikerMode);
@@ -100,7 +101,8 @@ export const LeftSidebar: React.FC = () => {
   const openFaults = faults.filter((f) => isFaultOpen(f) && !f.isTest).length;
   const openWorkOrders = workOrders.filter((w) => isWorkOrderOpen(w) && !w.isTest).length;
   const fatCount = equipments.filter((e) => /FAT|Terminal Box/i.test(String(e.type))).length;
-  const catvCount = equipments.filter((e) => e.category === 'Cable TV Infrastructure').length;
+  // Cable TV items are the Phase 6 records, not old map pins in the Cable TV category.
+  const catvCount = rfElements.length;
 
   const view = (id: MainView, extra?: Partial<NavEntry>): NavEntry => ({
     key: id,

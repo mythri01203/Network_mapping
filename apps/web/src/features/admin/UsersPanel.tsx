@@ -26,7 +26,7 @@ function RoleTable() {
 }
 
 /** The first administrator account. Creating it switches login on for everyone. */
-function FirstAdminForm() {
+export function FirstAdminForm() {
   const setup = useAuthStore((s) => s.setup);
   const min = useAuthStore((s) => s.passwordMinLength);
   const [form, setForm] = useState({ displayName: '', username: '', password: '', repeat: '', setupToken: '' });

@@ -57,7 +57,7 @@ Field photos are compressed on the phone (longest side 1280 px, JPEG quality abo
 
 - **Where:** a `photos` folder beside the database file (`apps/server/data/photos/` by default), or `PHOTOS_DIR` if set.
 - **API:** `PUT /api/v1/photos/<id>` (JPEG, PNG or WebP, at most 5 MB, bytes checked against the type; repeating an upload stores nothing new) and `GET /api/v1/photos/<id>`.
-- **Backup:** the JSON backup in Administration does **not** include photos. Back up the `photos` folder with the database file.
+- **Backup:** the backup with photos (a zip, see "Backups and restore") includes them; the plain JSON backup does not. Back up the `photos` folder with the database file as well.
 - Records point at photos by id; a stored photo is never replaced.
 - Job photos from **My jobs** (`/jobs`, Phase 8) use the same queue and folder.
 
@@ -71,13 +71,16 @@ Administration, **Field capture settings**: GPS accept and warn limits, readings
 
 ## Login (Phase 9)
 
-**Setup mode.** A server with no user accounts runs with login off, as before, and every screen shows "Login is off — create the first admin account; keep this server on a trusted network". This is so an existing server is not locked out when it is upgraded. In setup mode anyone who can reach the server can change or reset data, and can create the first administrator, so do this straight away:
+**Setup mode.** A server with no user accounts runs with login off, and the screen shows "Login is off — create the first admin account". Login being off works **only on the server computer itself** (opened as `http://localhost`): every other phone or computer sees "Logins are not set up yet" and can neither read nor change anything, and whatever it has saved stays on it until someone logs in. The server log says so at start. Do this straight away:
 
-1. Open the app, go to Administration, **Users and roles**, and create the first administrator account. Login is on from that moment.
+1. On the server computer, open the app, go to Administration, **Users and roles**, and create the first administrator account. Login is on from that moment, for every device.
 2. Add an account for each person with the right role: **admin** (everything, including users, reset and restore), **engineer** (network design), **office** (customers, faults, work orders), **technician** (their own jobs and field capture; cannot delete network records), **viewer** (look only; phone numbers hidden).
-3. New accounts get a temporary password, shown once. The person must set their own at first login.
+3. New accounts get a temporary password, shown once. The person must set their own at first login; the server allows nothing else until then.
+4. Each account needs its own shown name (two "Ravi"s are refused): jobs are given to technicians by that name.
 
-To be safe before anyone else can reach the server, set `SETUP_TOKEN` (the first administrator then also needs that code) or `AUTH_REQUIRED=true` (no setup mode at all).
+If the server computer has no screen, set `SETUP_TOKEN`: the first administrator can then be made from another device's login screen with that code. `AUTH_REQUIRED=true` turns setup mode off altogether.
+
+**What else the server enforces:** a reset always needs its confirm word; changes from another website (including a sandboxed page) are refused; a light reading marked "reported by the device" can come only from the monitoring connection; trips, routes and conflict records belong to the person who made them (an engineer or the administrator may change anyone's; the office may record its decision on a conflict); unsent changes on a shared phone are sent only under the login of the person who made them; logging out removes the stored network copy from the device when nothing is waiting; a restore never removes audit entries. `/health` gives counts and the revision only to someone logged in.
 
 **Nobody can log in?** On the server's own computer: `npm run user -w @fibergis/server -- list`, and `npm run user -w @fibergis/server -- reset-password <login name>`, which prints a temporary password once.
 
@@ -87,13 +90,14 @@ To be safe before anyone else can reach the server, set `SETUP_TOKEN` (the first
 |---|---|---|
 | `AUTH_REQUIRED` | `false` | `true`: login is required even before the first account exists |
 | `SETUP_TOKEN` | not set | Code needed to create the first administrator |
-| `SESSION_DAYS` | 30 | How long a login lasts |
+| `SESSION_DAYS` | 30 | How long a login lasts without use (it is extended while in use) |
+| `SESSION_MAX_DAYS` | 90 | A login ends this long after it began, however much it is used |
 | `PASSWORD_MIN_LENGTH` | 8 | Shortest allowed password |
-| `LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES` | 5, 15 | Wrong passwords allowed before waiting, and how long |
+| `LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES` | 5, 15 | Wrong passwords allowed per name and address before waiting, and how long. Also 4× per address and 10× per name from anywhere. Each try is counted before the password is checked, so tries sent all at once are limited too |
 | `RATE_LIMIT_PER_MINUTE` | 1200 | Requests per minute per address |
 | `COOKIE_SECURE` | `auto` | Secure cookies when the request came over https |
-| `TRUST_PROXY` | not set | Trust a reverse proxy's forwarded address and protocol |
-| `CORS_ORIGINS` | not set | Other web addresses allowed to call the API |
+| `TRUST_PROXY` | not set | Trust a reverse proxy's forwarded address and protocol. Prefer the proxy's address or a hop count (`127.0.0.1`, `1`); `true` trusts any forwarded address, so use it only when the port is reachable through the proxy alone (the server warns at start) |
+| `CORS_ORIGINS` | not set | Other web addresses allowed to call the API. When not set, the dev addresses (`localhost:3000`, `:5173`) are allowed only if `NODE_ENV` is not `production` |
 | `HTTPS_CERT_FILE`, `HTTPS_KEY_FILE` | not set | Let the server serve https itself |
 | `CSP`, `CSP_IMG_SOURCES` | `on`, not set | Security policy for the web app; add other map tile hosts here |
 | `BACKUPS_DIR`, `BACKUP_KEEP` | `backups` beside the database, 20 | Safety copies made before each reset and restore |
@@ -101,7 +105,7 @@ To be safe before anyone else can reach the server, set `SETUP_TOKEN` (the first
 
 ## Backups and restore (Phase 9)
 
-Administration, **Backup & KML**. A backup with photos is a zip (`GET /api/v1/backup?photos=1`); without photos it is the JSON file as before. A safety copy is saved before every reset and restore. A restore is checked first: if the backup would leave broken links, double-used fibers or other rule errors, nothing is restored and the problems are listed; the administrator may then restore anyway, and that choice is written to the audit log.
+Administration, **Backup & KML**. A backup with photos is a zip (`GET /api/v1/backup?photos=1`); without photos it is the JSON file as before. A safety copy is saved before every reset and restore. A restore is checked first: if the backup would leave broken links, double-used fibers or other rule errors, nothing is restored and the problems are listed; the administrator may then restore anyway, and that choice is written to the audit log. A restore never removes or changes an audit entry already stored (older entries from the backup are added), and who made each record is kept.
 
 ## Live monitoring (Phase 7)
 
@@ -122,6 +126,8 @@ The token can only send rows: it cannot read the network or open any other route
 
 | Setting | Default | What it does |
 |---|---|---|
-| `INGEST_PER_MINUTE` | 60 | Push requests per minute per token. A request carries at most 2000 rows and 512 KB |
+| `INGEST_PER_MINUTE` | 60 | Push requests per minute per source (per address for unknown tokens). A request carries at most 2000 rows and 512 KB |
+| `MONITORING_KEEP_DAYS` | 90 | Device readings and statuses older than this are removed at the next import or push. The newest one for each ONT is always kept |
+| `MONITORING_MAX_ROWS` | 200000 | Most readings (and most statuses) kept; beyond this the oldest go first |
 
-Administration, **Monitoring settings**: when a status (15 min) and a reading (60 min) become stale, and how far ahead of the server clock a device time may be (5 min). All proposed: set them to a little more than twice your OLT's or NMS's sending interval.
+Administration, **Monitoring settings**: when a status (15 min, at most 1 day) and a reading (60 min, at most 7 days) become stale, and how far ahead of the server clock a device time may be (5 min, at most 1 day). All proposed: set them to a little more than twice your OLT's or NMS's sending interval.

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
+  CameraOff,
   CheckCircle2,
   ChevronRight,
   Circle,
@@ -26,7 +27,9 @@ import {
   applyJobEvent,
   isJobForField,
   type JobEventInput,
+  jobPhotoProblem,
   newJobPartId,
+  noPhotoReasonText,
   padValueDbm,
   resolveFieldSettings,
   type WorkOrder,
@@ -76,7 +79,7 @@ type Screen =
   | { name: 'checkWhere'; jobId: string }
   | { name: 'material'; jobId: string }
   | { name: 'qty'; jobId: string; item: MaterialKey; digits: string }
-  | { name: 'note'; jobId: string; hold?: boolean };
+  | { name: 'note'; jobId: string; hold?: boolean; noPhoto?: boolean };
 
 const CAMERA: Record<PhotoPurpose, { instruction: MessageKey; guide: GuideShape }> = {
   before: { instruction: 'jobs.cameraBefore', guide: 'none' },
@@ -239,6 +242,7 @@ export function JobsApp() {
     const needsCheck = w.status === 'Completed' && !w.verification;
     const finished = !isJobForField(w);
     const photos = w.photoRefs ?? [];
+    const photoOk = jobPhotoProblem(w) === null;
     const main = (() => {
       if (startable) {
         return (
@@ -247,8 +251,9 @@ export function JobsApp() {
           </BigButton>
         );
       }
-      if (active && !hasPhoto(w, 'before')) return <BigButton icon={Camera} testId="job-photo-before" onClick={() => setScreen({ name: 'camera', jobId: w.id, purpose: 'before' })}>{t('jobs.photoBefore')}</BigButton>;
-      if (active && !hasPhoto(w, 'after')) return <BigButton icon={Camera} testId="job-photo-after" onClick={() => setScreen({ name: 'camera', jobId: w.id, purpose: 'after' })}>{t('jobs.photoAfter')}</BigButton>;
+      // A written "no photo possible" reason stands in for the photos (same rule as the office and server).
+      if (active && !photoOk && !hasPhoto(w, 'before')) return <BigButton icon={Camera} testId="job-photo-before" onClick={() => setScreen({ name: 'camera', jobId: w.id, purpose: 'before' })}>{t('jobs.photoBefore')}</BigButton>;
+      if (active && !photoOk && !hasPhoto(w, 'after')) return <BigButton icon={Camera} testId="job-photo-after" onClick={() => setScreen({ name: 'camera', jobId: w.id, purpose: 'after' })}>{t('jobs.photoAfter')}</BigButton>;
       if (active) return <BigButton tone="go" icon={Wrench} testId="job-repair-done" disabled={saving} onClick={() => void save(w, base('repair_done'), [], t('jobs.repairDone'), { name: 'checkHow', jobId: w.id })}>{t('jobs.repairDone')}</BigButton>;
       if (needsCheck) return <BigButton tone="go" icon={Gauge} testId="job-check" onClick={() => setScreen({ name: 'checkHow', jobId: w.id })}>{t('jobs.checkTitle')}</BigButton>;
       return null;
@@ -366,6 +371,11 @@ export function JobsApp() {
         </div>
         <div className="flex shrink-0 flex-col gap-2 border-t-2 border-slate-900 bg-white p-3">
           {main}
+          {active && !photoOk && (
+            <MidButton icon={CameraOff} testId="job-no-photo" onClick={() => { setNoteText(''); setScreen({ name: 'note', jobId: w.id, noPhoto: true }); }}>
+              {t('same.noPhoto')}
+            </MidButton>
+          )}
           <MidButton onClick={() => { setProblem(null); setScreen({ name: 'list' }); }} testId="job-back-list">
             {t('jobs.myJobs')}
           </MidButton>
@@ -568,20 +578,35 @@ export function JobsApp() {
         const w = jobOf(screen.jobId);
         if (!w) return null;
         const hold = !!screen.hold;
+        // "No photo": the reason is saved as a job note "No photo possible: …", which the rules accept.
+        const noPhoto = !!screen.noPhoto && !hold;
         return (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-              <StepTitle k={hold ? 'jobs.hold' : 'jobs.note'} />
-              <p className="text-[1.0625rem] text-slate-900">{t('jobs.noteHint')}</p>
+              <StepTitle k={hold ? 'jobs.hold' : noPhoto ? 'same.noPhoto' : 'jobs.note'} />
+              {noPhoto ? (
+                <p className="flex items-center gap-2 text-[1.0625rem] text-slate-900" data-testid="job-no-photo-hint">
+                  <CameraOff className="h-7 w-7 shrink-0" aria-hidden />
+                  {t('jobs.noPhotoHint')}
+                </p>
+              ) : (
+                <p className="text-[1.0625rem] text-slate-900">{t('jobs.noteHint')}</p>
+              )}
               <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} rows={4} data-testid="job-note-text" aria-label={t('jobs.note')} className="w-full rounded-2xl border-2 border-slate-900 bg-white p-3 text-[1.125rem] text-slate-900" />
             </div>
             <div className="flex shrink-0 flex-col gap-2 border-t-2 border-slate-900 bg-white p-3">
               <BigButton
                 tone={hold ? 'plain' : 'go'}
                 testId="job-note-save"
-                disabled={saving || (!hold && !noteText.trim())}
+                disabled={saving || (!hold && noteText.trim().length < (noPhoto ? 3 : 1))}
                 onClick={() =>
-                  void save(w, hold ? { ...base('hold'), text: noteText } : { ...base('note'), text: noteText }, [], hold ? t('jobs.hold') : t('jobs.note'), hold ? { name: 'list' } : { name: 'job', jobId: w.id })
+                  void save(
+                    w,
+                    hold ? { ...base('hold'), text: noteText } : { ...base('note'), text: noPhoto ? noPhotoReasonText(noteText) : noteText },
+                    [],
+                    hold ? t('jobs.hold') : noPhoto ? t('same.noPhoto') : t('jobs.note'),
+                    hold ? { name: 'list' } : { name: 'job', jobId: w.id },
+                  )
                 }
               >
                 {hold ? t('jobs.hold') : t('summary.save')}

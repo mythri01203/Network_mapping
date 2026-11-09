@@ -49,6 +49,47 @@ export function verificationProblem(v: Verification): string | null {
   }
 }
 
+/**
+ * A repair is shown by a photo before and a photo after it. When no photo is possible (no light,
+ * inside a customer's home, the phone broke) the reason is written down instead: a job note that
+ * starts with this text (from the phone or the office), or a fault history line with action
+ * `NO_PHOTO`. The reason stays in the record.
+ */
+export const NO_PHOTO_PREFIX = 'No photo possible: ';
+export const NO_PHOTO_ACTION = 'NO_PHOTO';
+export const noPhotoReasonText = (reason: string): string => `${NO_PHOTO_PREFIX}${reason.trim()}`;
+
+/** The reason in a "No photo possible: …" text, or '' when it is not one. */
+export function noPhotoReasonOf(text: string | undefined): string {
+  if (!text || !text.toLowerCase().startsWith(NO_PHOTO_PREFIX.toLowerCase())) return '';
+  return text.slice(NO_PHOTO_PREFIX.length).trim();
+}
+
+/** Why a job has no proof of the repair, in plain words, or null when it has both photos or a reason. */
+export function jobPhotoProblem(w: Pick<WorkOrder, 'photoRefs' | 'fieldNotes'>): string | null {
+  if ((w.fieldNotes ?? []).some((n) => noPhotoReasonOf(n.text))) return null;
+  const kinds = new Set((w.photoRefs ?? []).map((p) => p.kind));
+  const before = kinds.has('before');
+  const after = kinds.has('after');
+  if (before && after) return null;
+  const need = !before && !after ? 'a photo before and a photo after the repair' : !before ? 'a photo before the repair' : 'a photo after the repair';
+  return `It needs ${need}, or a note of why no photo was possible.`;
+}
+
+/** Why a fault has no proof of the repair, or null: a job of it with both photos (or a reason), or a reason on the fault. */
+export function faultPhotoProblem(data: Pick<FaultCheckData, 'workOrders'>, fault: Pick<Fault, 'id' | 'history'>): string | null {
+  if ((fault.history ?? []).some((h) => h.action === NO_PHOTO_ACTION && noPhotoReasonOf(h.details))) return null;
+  const jobs = data.workOrders.filter((w) => w.faultId === fault.id && w.status !== 'Cancelled');
+  if (jobs.some((w) => !jobPhotoProblem(w))) return null;
+  return jobs.length === 0
+    ? 'It has no work order with a photo before and after the repair. Record why no photo was possible.'
+    : 'Its work order has no photo before and after the repair. Take them, or record why no photo was possible.';
+}
+
+const DONE: readonly WorkOrderStatus[] = ['Completed', 'Verified', 'Closed'];
+/** "done" (repair done) and "checked" (verified or closed) are kept apart, so a step forward is a new check. */
+export const jobPhotoStage = (status: WorkOrderStatus): 'done' | 'checked' | null => (status === 'Completed' ? 'done' : DONE.includes(status) ? 'checked' : null);
+
 /** The verification that lets a fault close: its own, or a complete one from one of its jobs. */
 export function faultVerificationOf(data: Pick<FaultCheckData, 'workOrders'>, fault: Fault): Verification | undefined {
   if (fault.verification && !verificationProblem(fault.verification)) return fault.verification;
@@ -106,6 +147,10 @@ export function findFaultProblems(data: FaultCheckData): FiberProblem[] {
         [f.id],
       );
     }
+    if (FAULT_NEEDS_VERIFICATION.includes(f.status)) {
+      const why = faultPhotoProblem(data, f);
+      if (why) error('fault_closed_no_photo', f.id, `Fault ${f.id} cannot be ${f.status === 'Closed' ? 'closed' : 'marked verified'} yet. ${why}`, [f.id]);
+    }
     // `Resolved` predates verification. Writing it now would skip the check.
     if (f.status === 'Resolved') {
       error('fault_resolved_without_check', f.id, `Fault ${f.id}: "Resolved" is no longer used. Close it with a check instead.`, [f.id]);
@@ -127,6 +172,12 @@ export function findFaultProblems(data: FaultCheckData): FiberProblem[] {
         `Work order ${w.id} cannot be ${w.status === 'Closed' ? 'closed' : 'marked verified'} without a check: a light reading measured in the field, a photo, or an office check.`,
         [w.id],
       );
+    }
+    const stage = jobPhotoStage(w.status);
+    const photoWhy = stage ? jobPhotoProblem(w) : null;
+    if (stage && photoWhy) {
+      // Keyed by stage: an older job already done without photos still saves, but moving it on is a new check.
+      error('wo_done_no_photo', `${w.id}:${stage}`, `Work order ${w.id} cannot be ${stage === 'done' ? 'marked repair done' : w.status === 'Closed' ? 'closed' : 'marked verified'} yet. ${photoWhy}`, [w.id]);
     }
   }
   return problems;

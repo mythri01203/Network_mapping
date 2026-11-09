@@ -182,7 +182,7 @@ export function PhotoView({ photoId, url, className, alt = '' }: { photoId?: str
 
 /**
  * Always visible in capture: "Saved on phone N", "Sending", "Sent to office", or "Not saved on
- * phone" in red. Each state has its own icon and words, never colour alone.
+ * phone" in red. Until the phone's storage has been read it shows a neutral "Checking" with a phone. Each state has its own icon and words, never colour alone.
  */
 export function SyncChip() {
   const { t } = useT();
@@ -208,6 +208,17 @@ export function SyncChip() {
     text = t('sync.notSaved');
     tone = 'bg-red-800 text-white border-red-900';
     state = 'not-saved';
+  } else if (!status.ready) {
+    // Phone storage not read yet: the count is unknown, so never claim "Sent to office".
+    icon = (
+      <span className="flex items-center" aria-hidden>
+        <Smartphone className="h-6 w-6" />
+        <Loader2 className="-ml-1 h-4 w-4 animate-spin" />
+      </span>
+    );
+    text = `${t('login.checking')}…`;
+    tone = 'bg-slate-100 text-slate-900 border-slate-500';
+    state = 'checking';
   } else if (status.waitingCount > 0 && online && (status.uploading || phase === 'saving' || phase === 'pending')) {
     icon = <CloudUpload className="h-6 w-6 animate-pulse" aria-hidden />;
     text = `${t('sync.sending')} ${status.waitingCount}`;

@@ -35,6 +35,8 @@ export const FaultManagementModal: React.FC = () => {
       faults: s.faults,
       workOrders: s.workOrders,
       settings: s.settings,
+      rfElements: s.rfElements,
+      rfLinks: s.rfLinks,
     })),
   );
   const optical = useNetworkStore(selectOpticalSettings);
@@ -46,10 +48,14 @@ export const FaultManagementModal: React.FC = () => {
     () => (open ? buildImpactIndex(data, optical) : null),
     // Only the recorded network matters for paths; alarms and faults do not change them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open, data.equipment, data.cables, data.splitters, data.closures, data.customers, data.spans, data.attachments, data.onts, data.services, optical],
+    [open, data.equipment, data.cables, data.splitters, data.closures, data.customers, data.spans, data.attachments, data.onts, data.services, data.rfElements, data.rfLinks, optical],
   );
   const faultSettings = useMemo(() => resolveFaultSettings(data.settings), [data.settings]);
-  const correlation = useMemo(() => (ix ? correlateAlarms(ix, data.alarms, faultSettings) : { suspicions: [], notes: [] }), [ix, data.alarms, faultSettings]);
+  // Danger reports from the field are faults, so they are passed in as evidence too.
+  const correlation = useMemo(
+    () => (ix ? correlateAlarms(ix, data.alarms, faultSettings, data.faults) : { suspicions: [], notes: [] }),
+    [ix, data.alarms, faultSettings, data.faults],
+  );
 
   if (!open || !ix) return null;
 

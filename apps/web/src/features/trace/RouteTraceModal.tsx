@@ -185,8 +185,15 @@ export const RouteTraceModal: React.FC = () => {
                 />
                 <StatTile
                   label="Estimated Rx"
-                  value={<span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm) ?? 'Not recorded'}</span>}
-                  tone={BUDGET_TILE_TONE[summary.budgetStatus] ?? 'default'}
+                  value={
+                    // A broken path covers only its linked part, so no number is shown for it.
+                    !summary.pathComplete ? (
+                      <span className="text-sm font-semibold">Not known: path not complete</span>
+                    ) : (
+                      <span className="font-mono text-base">{formatDbm(summary.estimatedRxDbm) ?? 'Not recorded'}</span>
+                    )
+                  }
+                  tone={summary.pathComplete ? (BUDGET_TILE_TONE[summary.budgetStatus] ?? 'default') : 'default'}
                 />
                 <StatTile
                   label="Measured Rx"

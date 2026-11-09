@@ -1,15 +1,19 @@
 import type { AlarmKind, Confidence, NetworkElementType } from '../model/enums';
-import type { Alarm, NetworkElementRef } from '../model/types';
+import type { Alarm, Fault, NetworkElementRef } from '../model/types';
 import {
   affectedByElement,
   type CustomerPathInfo,
+  elementExists,
   elementKey,
   elementLabel,
   type ImpactIndex,
   pathPassesThrough,
   recommendedChecks,
+  type TvPathInfo,
 } from './faultImpact';
+import { isFaultOpen } from './faultRules';
 import { DEFAULT_FAULT_SETTINGS, type FaultSettings } from './faultSettings';
+import { RF_KIND_INFO } from './rfTree';
 
 /**
  * Evidence-based grouping of alarms (Phase 8). Alarms reported on customers are grouped by the
@@ -112,6 +116,14 @@ function sharedCandidates(info: CustomerPathInfo): NetworkElementRef[] {
   return out;
 }
 
+/**
+ * Cable TV: the map pins its RF items sit at and the drawn cables its RF links run in, nearest the
+ * customer first, so a tie between items carrying the same customers keeps the nearest one.
+ */
+function tvSharedCandidates(info: TvPathInfo): NetworkElementRef[] {
+  return [...[...info.siteIds].reverse().map((id) => ({ type: 'equipment' as const, id })), ...[...info.cableIds].reverse().map((id) => ({ type: 'cable' as const, id }))];
+}
+
 const faultIdsOf = (alarms: Alarm[]) => [...new Set(alarms.map((a) => a.faultId).filter((x): x is string => !!x))];
 
 function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTest: boolean): Suspicion[] {
@@ -123,7 +135,16 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
   const unplaced: string[] = [];
   const incomplete: string[] = [];
   const placed: CustomerPathInfo[] = [];
+  // Cable TV customers are placed through RF links; a missing RF link never lowers a fiber suspicion.
+  const placedTv: TvPathInfo[] = [];
+  const tvIncomplete: string[] = [];
   for (const id of alarmsByCustomer.keys()) {
+    const tv = ix.tv.get(id);
+    if (tv) {
+      placedTv.push(tv);
+      if (!tv.complete) tvIncomplete.push(`Cable TV customer ${id}: ${tv.gap ?? 'RF path not fully recorded'}`);
+      continue;
+    }
     const info = ix.paths.get(id);
     if (!info) {
       unplaced.push(`Customer ${id} has an alarm but is not an active customer on record, so it cannot be placed on any element.`);
@@ -139,18 +160,19 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
   const span = Math.round(minutesBetween(windowStart, group.at(-1)!.firstSeenAt));
   const timing = `The alarms started within ${span} minute(s) of each other (window ${s.correlationWindowMinutes} min, in settings).`;
 
-  const candidates = new Map<string, { el: NetworkElementRef; down: CustomerPathInfo[] }>();
-  for (const info of placed) {
-    for (const el of sharedCandidates(info)) {
-      const key = elementKey(el);
-      const entry = candidates.get(key) ?? { el, down: [] };
-      if (!entry.down.includes(info)) entry.down.push(info);
-      candidates.set(key, entry);
-    }
-  }
+  const candidates = new Map<string, { el: NetworkElementRef; down: string[]; tv: boolean }>();
+  const addCandidate = (el: NetworkElementRef, customerId: string, tv: boolean) => {
+    const key = elementKey(el);
+    const entry = candidates.get(key) ?? { el, down: [], tv: false };
+    if (!entry.down.includes(customerId)) entry.down.push(customerId);
+    entry.tv ||= tv;
+    candidates.set(key, entry);
+  };
+  for (const info of placed) for (const el of sharedCandidates(info)) addCandidate(el, info.customer.id, false);
+  for (const info of placedTv) for (const el of tvSharedCandidates(info)) addCandidate(el, info.customer.id, true);
 
   const out: Suspicion[] = [];
-  for (const [key, { el, down }] of candidates) {
+  for (const [key, { el, down, tv }] of candidates) {
     if (down.length < s.minAlarmsForGroup) continue;
     const impact = affectedByElement(ix, el);
     const behind = impact.affected.length;
@@ -158,12 +180,12 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
     const share = down.length / behind;
     let confidence = confidenceFor(share, s);
     const label = elementLabel(ix.data, el);
-    const missing = [...unplaced, ...incomplete];
+    const missing = [...unplaced, ...incomplete, ...(tv ? tvIncomplete : [])];
     if (impact.mayBeAffected.length > 0) {
       missing.push(`${impact.mayBeAffected.length} more customer(s) may be on ${label}, but their path is not fully recorded (${impact.mayBeAffected[0].firstGap})`);
     }
     if (missing.length > 0) confidence = LOWER[confidence];
-    const downIds = down.map((i) => i.customer.id);
+    const downIds = down;
     const alarmIds = [...new Set(downIds.flatMap((id) => (alarmsByCustomer.get(id) ?? []).map((a) => a.id)))];
     out.push({
       key: `${isTest ? 'test' : 'real'}:${windowStart}:${key}`,
@@ -177,7 +199,7 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
       confidence,
       evidence: [
         `${down.length} of ${behind} customers recorded on ${label} are reported down (${behind - down.length} have no alarm), ${pct(share)}.`,
-        `Their recorded fiber paths all pass through ${label}.`,
+        tv ? `Their recorded paths (fiber, or Cable TV links) all pass through ${label}.` : `Their recorded fiber paths all pass through ${label}.`,
         timing,
         ...common,
       ],
@@ -252,7 +274,45 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
       windowEnd,
     });
   }
+  for (const info of placedTv) {
+    if (explained.has(info.customer.id)) continue;
+    top.push(tvAlone(ix, info, alarmsByCustomer.get(info.customer.id) ?? [], { isTest, windowStart, windowEnd, common, first: top.length === 0 }));
+  }
   return top;
+}
+
+/** A Cable TV customer down alone: suspect their own house wire or set top box, named from RF records. */
+function tvAlone(ix: ImpactIndex, info: TvPathInfo, alarms: Alarm[], o: { isTest: boolean; windowStart: string; windowEnd: string; common: string[]; first: boolean }): Suspicion {
+  const id = info.customer.id;
+  // The item just above the customer's device, usually the tap.
+  const aboveId = info.rfElementIds.length >= 2 ? info.rfElementIds[info.rfElementIds.length - 2] : undefined;
+  const above = aboveId ? (ix.data.rfElements ?? []).find((e) => e.id === aboveId) : undefined;
+  const siblings = above ? [...ix.tv.values()].filter((t) => t.customer.id !== id && t.rfElementIds.includes(above.id)).length : 0;
+  const missing = info.complete ? [] : [`Cable TV customer ${id}: ${info.gap ?? 'RF path not fully recorded'}`];
+  return {
+    key: `${o.isTest ? 'test' : 'real'}:${o.windowStart}:customer:${id}`,
+    element: { type: 'customer', id },
+    label: elementLabel(ix.data, { type: 'customer', id }),
+    isTest: o.isTest,
+    alarmIds: alarms.map((a) => a.id),
+    downCustomerIds: [id],
+    behindCount: 1,
+    share: 1,
+    confidence: missing.length > 0 || siblings <= 0 ? 'low' : 'medium',
+    evidence: [
+      above
+        ? `Only this Cable TV customer is reported down on ${RF_KIND_INFO[above.kind].label} ${above.name}; ${siblings} other(s) recorded there have no alarm.`
+        : 'Only this Cable TV customer is reported down, and no RF item is recorded above their set top box or modem.',
+      'One customer alone points at their own house wire or set top box rather than a shared item.',
+      ...o.common,
+    ],
+    missing,
+    checks: ['Check the house wire, its connectors and the set top box power at the house.', 'Read the level at the tap drop port and at the set top box, and compare them.'],
+    primary: o.first,
+    faultIds: faultIdsOf(alarms),
+    windowStart: o.windowStart,
+    windowEnd: o.windowEnd,
+  };
 }
 
 /** PON port faults grouped by OLT, and OLT-unreachable reports. */
@@ -334,8 +394,65 @@ function reportedDamage(ix: ImpactIndex, alarms: Alarm[], downAlarms: Alarm[], s
   return out;
 }
 
-/** Groups open alarms into suspected causes, TEST and real apart, using recorded paths only. */
-export function correlateAlarms(ix: ImpactIndex, alarms: readonly Alarm[], settings: FaultSettings = DEFAULT_FAULT_SETTINGS): CorrelationResult {
+/** A danger report from the phone: saved as a Safety Hazard fault (not an alarm), still open, real. */
+export const isFieldHazardFault = (f: Fault): boolean =>
+  isFaultOpen(f) && !f.isTest && f.type === 'Safety Hazard' && (f.source === 'field_report' || f.captureSource === 'field_capture') && !(f.alarmIds?.length);
+
+/**
+ * Danger reports from the field are evidence too. One that names an element is listed with who is
+ * behind it; one with only a position is named in a note, never placed on an element by distance.
+ */
+function fieldHazards(ix: ImpactIndex, faults: readonly Fault[], downAlarms: Alarm[], s: FaultSettings): { suspicions: Suspicion[]; notes: string[] } {
+  const hazards = faults.filter(isFieldHazardFault);
+  const downCustomers = new Set(downAlarms.flatMap((a) => customersOfAlarm(ix, a)));
+  const suspicions: Suspicion[] = [];
+  const unplaced: string[] = [];
+  for (const f of hazards) {
+    const el = f.element;
+    if (!el || !elementExists(ix.data, el)) {
+      unplaced.push(f.id);
+      continue;
+    }
+    const impact = affectedByElement(ix, el);
+    const label = elementLabel(ix.data, el);
+    const crossing = impact.affected.filter((c) => downCustomers.has(c.customerId)).length;
+    const missing = impact.mayBeAffected.length > 0 ? [`${impact.mayBeAffected.length} customer(s) may be on it, but their path is not fully recorded (${impact.mayBeAffected[0].firstGap})`] : [];
+    const at = f.history?.[0]?.at ?? f.reportedAt;
+    suspicions.push({
+      key: `real:${at}:hazard:${f.id}`,
+      element: el,
+      label,
+      isTest: false,
+      alarmIds: [],
+      downCustomerIds: [],
+      behindCount: impact.affected.length,
+      share: 0,
+      confidence: crossing >= s.minAlarmsForGroup && missing.length === 0 ? 'high' : missing.length > 0 ? 'low' : 'medium',
+      evidence: [
+        `Danger reported from the field on ${label} (fault ${f.id}).`,
+        ...(crossing > 0 ? [`${crossing} customer(s) reported down have recorded paths through it.`] : []),
+        `${impact.affected.length} customer(s) are recorded behind it.`,
+      ],
+      missing,
+      checks: recommendedChecks(el.type),
+      primary: true,
+      faultIds: [f.id],
+      windowStart: at,
+      windowEnd: at,
+    });
+  }
+  const notes =
+    unplaced.length > 0
+      ? [`${unplaced.length} danger report(s) from the field are open (${unplaced.slice(0, 5).join(', ')}${unplaced.length > 5 ? ', …' : ''}). They have a position and a photo but name no element, so they are not linked to any element here; nothing is placed by distance. Look at them in Faults.`]
+      : [];
+  return { suspicions, notes };
+}
+
+/**
+ * Groups open alarms into suspected causes, TEST and real apart, using recorded paths only. Open
+ * danger reports from the field (`faults`, else the faults in the index's data) are added as evidence.
+ */
+export function correlateAlarms(ix: ImpactIndex, alarms: readonly Alarm[], settings: FaultSettings = DEFAULT_FAULT_SETTINGS, faults?: readonly Fault[]): CorrelationResult {
   const open = alarms.filter(isOpenAlarm);
   const notes: string[] = [];
   const suspicions: Suspicion[] = [];
@@ -349,6 +466,10 @@ export function correlateAlarms(ix: ImpactIndex, alarms: readonly Alarm[], setti
       suspicions.push(...reportedDamage(ix, group, down, settings, isTest));
     }
   }
+  const realDown = open.filter((a) => !a.isTest && CUSTOMER_DOWN_KINDS.includes(a.kind) && (a.element.type === 'customer' || a.element.type === 'ont'));
+  const hazards = fieldHazards(ix, faults ?? (ix.data as { faults?: readonly Fault[] }).faults ?? [], realDown, settings);
+  suspicions.push(...hazards.suspicions);
+  notes.push(...hazards.notes);
   if (suspicions.length > 0) notes.push('Every result is a suspected shared fault, not proof of a physical cut. Send someone to check before telling customers.');
   return { suspicions, notes };
 }

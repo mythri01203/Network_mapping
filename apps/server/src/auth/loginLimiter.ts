@@ -21,8 +21,16 @@ export class LoginLimiter {
 
   constructor(private readonly limits: LoginLimits) {}
 
+  /**
+   * Per address and name; per address; and per name from anywhere (much higher, so guessing from
+   * many addresses is still stopped, while one stranger cannot easily lock the owner out).
+   */
   private keys(ip: string, username: string) {
-    return [{ key: `name:${ip}|${username}`, max: this.limits.maxFailures }, { key: `ip:${ip}`, max: this.limits.maxFailures * 4 }];
+    return [
+      { key: `name:${ip}|${username}`, max: this.limits.maxFailures },
+      { key: `ip:${ip}`, max: this.limits.maxFailures * 4 },
+      { key: `user:${username}`, max: this.limits.maxFailures * 10 },
+    ];
   }
 
   /** Seconds to wait, or 0 when this login may be tried. */
@@ -48,8 +56,18 @@ export class LoginLimiter {
     if (this.entries.size > 10_000) this.prune(now);
   }
 
+  /**
+   * A right password. Every try is counted as wrong before the (slow) password check, so many tries
+   * sent at once cannot all slip past the limit; this takes back that count for the address.
+   */
   succeeded(ip: string, username: string): void {
     this.entries.delete(`name:${ip}|${username}`);
+    this.entries.delete(`user:${username}`);
+    const byIp = this.entries.get(`ip:${ip}`);
+    if (byIp && !byIp.blockedUntil) {
+      byIp.failures = Math.max(0, byIp.failures - 1);
+      if (byIp.failures === 0) this.entries.delete(`ip:${ip}`);
+    }
   }
 
   private prune(now: number) {

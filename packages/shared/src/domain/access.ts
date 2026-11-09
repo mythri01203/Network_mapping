@@ -68,6 +68,13 @@ export interface AuthStatus {
   mustChangePassword?: boolean;
   /** Shortest password the server accepts. */
   passwordMinLength: number;
+  /**
+   * No account exists yet and this device is not the server computer, so it is locked until the
+   * first administrator is made on the server computer. `setupCodeAccepted`: it may be made here
+   * with the server's setup code instead.
+   */
+  setupPending?: boolean;
+  setupCodeAccepted?: boolean;
 }
 
 export const PASSWORD_MAX_LENGTH = 200;
@@ -248,6 +255,25 @@ function technicianProblem(account: Account, collection: CollectionName, id: str
   return noRight(account, collection, id, action);
 }
 
+const DEVICE_READING_FIELDS = ['rxSource', 'rxOpticalPowerDbm', 'rxMeasuredAt'] as const;
+/** What the office writes when it decides a conflict a phone left to it; never the copies themselves. */
+const CONFLICT_DECISION_FIELDS = new Set(['status', 'decidedAt', 'decidedBy']);
+
+/**
+ * A customer light reading may say "reported by the device" only when it came from the monitoring
+ * connection (Phase 7), never typed in. Keeping one already stored is fine.
+ */
+function deviceReadingProblem(id: string, after: Record<string, unknown>, before: Record<string, unknown> | undefined): AccessProblem | null {
+  if (after.rxSource !== 'device_reported') return null;
+  if (before && DEVICE_READING_FIELDS.every((key) => sameJson(before[key], after[key]))) return null;
+  return refuse(
+    'customers',
+    id,
+    before ? 'update' : 'create',
+    `A reading "reported by the device" comes only from the OLT connection. Customer ${id} was not changed. Save a meter reading as "measured on site" with a photo instead.`,
+  );
+}
+
 /**
  * Which writes in a change set this account may not make. Audit entries are not judged here: the
  * server keeps them append-only (a new one is stamped with the real person; an old one is never
@@ -263,6 +289,20 @@ export function checkChangeAccess(account: Account, changes: ChangeSet, lookup: 
     const action: AccessAction = !after ? 'delete' : stored ? 'update' : 'create';
     if (!roleCan(account.role, action, collection)) {
       problems.push(noRight(account, collection, id, action));
+      return;
+    }
+    // Trips, routes and sync conflicts belong to the person who made them. Only an engineer or the
+    // administrator may change someone else's (a conflict copy could otherwise be filled with any
+    // change and then saved by an office user who trusts it).
+    const officeDecision =
+      collection === 'syncConflicts' && account.role === 'office' && !!after && !!stored && changedKeys(stored.record, after).every((key) => CONFLICT_DECISION_FIELDS.has(key));
+    if (stored && PERSONAL.includes(collection) && account.role !== 'admin' && account.role !== 'engineer' && !officeDecision && ownedBy(stored, account) === false) {
+      problems.push(refuse(collection, id, action, `This ${word(collection)} (${id}) belongs to someone else, so it was not changed.`));
+      return;
+    }
+    const fake = after && collection === 'customers' ? deviceReadingProblem(id, after, stored?.record) : null;
+    if (fake) {
+      problems.push(fake);
       return;
     }
     if (account.role === 'technician') {
