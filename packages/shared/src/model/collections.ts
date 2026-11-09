@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { monitoringSourceSchema, onuReadingSchema, onuStatusSchema } from './monitoringSchemas';
 import { rfElementSchema, rfLevelSchema, rfLinkSchema } from './rfSchemas';
 import {
   agentTripSchema,
@@ -60,6 +61,9 @@ export const COLLECTION_SCHEMAS = {
   rfElements: rfElementSchema,
   rfLinks: rfLinkSchema,
   rfLevels: rfLevelSchema,
+  monitoringSources: monitoringSourceSchema,
+  onuReadings: onuReadingSchema,
+  onuStatuses: onuStatusSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

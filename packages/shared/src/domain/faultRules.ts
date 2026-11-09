@@ -1,5 +1,6 @@
 import type { ChangeSet } from '../model/api';
 import type { FaultStatus, WorkOrderStatus } from '../model/enums';
+import type { MonitoringSource } from '../model/monitoringSchemas';
 import type { Alarm, Fault, Verification, WorkOrder } from '../model/types';
 import { elementExists, type ImpactData } from './faultImpact';
 import type { FiberProblem } from './fiberRules';
@@ -17,6 +18,8 @@ export type FaultCheckData = ImpactData & {
   faults: readonly Fault[];
   workOrders: readonly WorkOrder[];
   alarms?: readonly Alarm[];
+  /** Phase 7: when given, a device alarm must name a real (not TEST) source on record. */
+  monitoringSources?: readonly MonitoringSource[];
 };
 
 /** Statuses that need a verification first. */
@@ -64,7 +67,13 @@ export function findFaultProblems(data: FaultCheckData): FiberProblem[] {
 
   for (const a of data.alarms ?? []) {
     if (a.source === 'device_adapter') {
-      error('alarm_device_not_connected', a.id, `There is no live connection to the OLT yet, so alarm ${a.id} cannot be stored as a device alarm.`, [a.id]);
+      // Phase 7: only the monitoring ingestion path makes these, always with its source and rows.
+      if (!a.monitoringSourceId || !a.evidenceIds?.length) {
+        error('alarm_device_not_connected', a.id, `There is no live connection to the OLT for alarm ${a.id}: a device alarm must name its monitoring source and the rows it came from.`, [a.id]);
+      } else if (data.monitoringSources) {
+        const src = data.monitoringSources.find((s) => s.id === a.monitoringSourceId);
+        if (!src || src.isTest) error('alarm_device_bad_source', a.id, `Alarm ${a.id} names monitoring source ${a.monitoringSourceId}, which is not a real source on record.`, [a.id]);
+      }
     }
     if ((a.source === 'test') !== a.isTest) {
       error('alarm_test_label', a.id, `Alarm ${a.id}: a TEST event must be marked TEST, and only a TEST event may be.`, [a.id]);

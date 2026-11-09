@@ -53,7 +53,7 @@ Basis: **Physics** (cannot be otherwise), **Integrity** (the data contradicts it
 | `service-ont-missing` | A live service names an ONT that does not exist | Integrity |
 | `building-link-missing` | A building's entry pin, riser cable, floor box pin or floor box splitter does not exist | Integrity |
 | `unit-box-missing` | A unit names a floor box its building does not have | Integrity |
-| `alarm-device-not-connected` | An alarm claims to come from the OLT, but no OLT is connected (Phase 7 not built) | Integrity: it cannot be real |
+| `alarm-device-not-connected` | An alarm claims to come from the OLT but names no real (not TEST) monitoring source and rows (Phase 7) | Integrity: it cannot be real |
 | `alarm-test-label` | A TEST event not marked TEST, or a real alarm marked TEST | Integrity |
 | `fault-closed-unverified` | A fault verified or closed with no check (field light reading with meter photo, photo, or office check), on itself or one of its jobs | Integrity: the app and server refuse it since Phase 8 |
 | `work-order-closed-unverified` | A work order verified or closed with no complete check | Integrity |
@@ -144,6 +144,19 @@ These run on `rfElements`, `rfLinks` and `rfLevels` only. No PON, splitter, core
 | `rf-power-not-recorded` | Check these | A node or mini-node does not say powered or passive | Integrity |
 
 Level windows, cascade limits and estimates are in the app (`packages/shared/src/domain/rfRules.ts`), with values that are all proposed. This script does not repeat them.
+
+## Live monitoring (Phase 7)
+
+These run on `monitoringSources`, `onuReadings` and `onuStatuses`. Messages use ids only. The app shows the same rows with their age (`monitoringStatus.ts`); this script only checks that they are honest.
+
+| Rule | Level | Meaning | Basis |
+|---|---|---|---|
+| `monitoring-row-no-source` | Must fix | A reading or status names a monitoring source that is not on record | Integrity |
+| `monitoring-row-origin` | Must fix | A row is not marked `device_reported` | Data truth |
+| `monitoring-unknown-ont` | Must fix | A row is for an ONT that is not on record | Integrity |
+| `monitoring-test-outside-test-path` | Must fix | A TEST row from a real source, a real row from the TEST simulator, or a source whose TEST mark does not fit its kind | Data truth |
+| `monitoring-stale-online` | Check these | An ONT's newest real status is "online" but older than `monitoring.statusStaleMinutes` (default 15), so it may not be online now | Data truth (proposed limit) |
+| `monitoring-unmatched-rows` | Good to know | Rows from a source matched no ONT record (count per source). They are kept and shown on nobody | Data truth |
 
 ## Ideas not yet built
 

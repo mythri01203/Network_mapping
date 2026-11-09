@@ -45,6 +45,7 @@ export const MODAL_IDS = [
   'oltConfig',
   'kmlImport',
   'ductForm',
+  'monitoring',
 ] as const;
 export type ModalId = (typeof MODAL_IDS)[number];
 

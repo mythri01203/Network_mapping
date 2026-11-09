@@ -83,6 +83,9 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   rfElements: 'rf_elements',
   rfLinks: 'rf_links',
   rfLevels: 'rf_levels',
+  monitoringSources: 'monitoring_sources',
+  onuReadings: 'onu_readings',
+  onuStatuses: 'onu_statuses',
 };
 
 export const MAX_AUDIT_LOGS = 500;

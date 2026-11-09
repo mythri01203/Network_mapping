@@ -15,8 +15,10 @@ import type { SqliteAuthStore } from './auth/authStore';
 import type { AppConfig } from './config';
 import type { NetworkRepository } from './db/repository';
 import { HttpError } from './lib/errors';
+import type { MonitoringTokenStore } from './monitoring/tokenStore';
 import { authRoutes, PUBLIC_API_PATHS } from './routes/auth';
 import { collectionRoutes } from './routes/collections';
+import { monitoringRoutes } from './routes/monitoring';
 import { networkRoutes } from './routes/network';
 import { photoRoutes } from './routes/photos';
 import { reportRoutes } from './routes/reports';
@@ -25,7 +27,7 @@ import { systemRoutes } from './routes/system';
 
 export interface AppOptions {
   config: AppConfig;
-  repository: NetworkRepository & { auth: SqliteAuthStore };
+  repository: NetworkRepository & { auth: SqliteAuthStore; monitoringTokens: MonitoringTokenStore };
   /** Injected for tests; defaults to the global `fetch`. */
   fetch?: typeof fetch;
 }
@@ -160,6 +162,7 @@ export async function buildApp({ config, repository, fetch }: AppOptions): Promi
         networkRoutes(repository, { photosDir: config.photosDir, backupsDir: config.backupsDir, backupKeep: config.backupKeep, restoreMaxBytes: config.restoreMaxBytes }),
       );
       await api.register(reportRoutes(repository));
+      await api.register(monitoringRoutes({ repository, tokens: repository.monitoringTokens, ingestPerMinute: config.ingestPerMinute }));
       await api.register(routingRoutes({ baseUrl: config.osrmUrl, timeoutMs: config.routingTimeoutMs, fetch }));
       await api.register(photoRoutes({ dir: config.photosDir }));
       await api.register(collectionRoutes(repository));

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { FAULT_SETTING_DEFS, FIELD_SETTING_DEFS, OSP_SETTING_DEFS } from '@fibergis/shared';
+import { FAULT_SETTING_DEFS, FIELD_SETTING_DEFS, MONITORING_SETTING_DEFS, OSP_SETTING_DEFS } from '@fibergis/shared';
 
 /** What a settings row needs: both field capture and outside-plant settings have this shape. */
 interface SettingRowDef {
@@ -175,6 +175,32 @@ export function OspSettingsPanel() {
           <table className="w-full text-left text-xs">
             <tbody className="divide-y divide-slate-100">
               {OSP_SETTING_DEFS.map((def) => (
+                <FieldSettingRow key={def.id} def={def} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** How old a monitored status or reading may be before it is shown as stale (Phase 7). */
+export function MonitoringSettingsPanel() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-4" data-testid="monitoring-settings">
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">Monitoring settings</h3>
+        <p className="text-xs text-slate-500">
+          Used by Live status, the customer panel and the dashboard. They are proposals, not standards: match them to how often your OLT or NMS sends data. A value older than
+          these is shown as stale, never as current, and &quot;Live&quot; is shown only for a real source inside the status time.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <tbody className="divide-y divide-slate-100">
+              {MONITORING_SETTING_DEFS.map((def) => (
                 <FieldSettingRow key={def.id} def={def} />
               ))}
             </tbody>

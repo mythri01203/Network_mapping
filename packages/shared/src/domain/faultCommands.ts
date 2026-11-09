@@ -70,6 +70,9 @@ export interface AlarmDraft {
   note?: string;
   reportedBy?: string;
   id?: string;
+  /** Phase 7: the monitoring source and the rows behind a device (or simulator TEST) alarm. */
+  monitoringSourceId?: string;
+  evidenceIds?: string[];
 }
 
 const DEFAULT_SEVERITY: Record<AlarmKind, Severity> = {
@@ -85,8 +88,14 @@ const DEFAULT_SEVERITY: Record<AlarmKind, Severity> = {
 
 const NO_LIVE = 'There is no live connection to the OLT yet, so device alarms cannot be stored. Report what you saw as a person, or make a TEST event.';
 
-function addAlarm(alarms: Alarm[], data: NetworkData, draft: AlarmDraft, ctx: CommandContext): { alarms: Alarm[]; alarm: Alarm; repeated: boolean } | string {
-  if (draft.source === 'device_adapter') return NO_LIVE;
+/**
+ * `fromMonitoring` is set only by `raiseMonitoringAlarms`, which the server runs for rows that came
+ * through the monitoring ingestion path. Every other caller gets "No live connection" for a device alarm.
+ */
+export function addAlarm(alarms: Alarm[], data: NetworkData, draft: AlarmDraft, ctx: CommandContext, fromMonitoring = false): { alarms: Alarm[]; alarm: Alarm; repeated: boolean } | string {
+  if (draft.source === 'device_adapter' && !fromMonitoring) return NO_LIVE;
+  const evidence = draft.evidenceIds?.length ? { evidenceIds: draft.evidenceIds.slice(-20) } : {};
+  const monitoring = draft.monitoringSourceId ? { monitoringSourceId: draft.monitoringSourceId, ...evidence } : {};
   if (!elementExists(impactDataOf(data), draft.element)) return `${elementLabel(impactDataOf(data), draft.element)} is not on record.`;
   const isTest = draft.source === 'test';
   const at = nowIso(ctx);
@@ -97,6 +106,7 @@ function addAlarm(alarms: Alarm[], data: NetworkData, draft: AlarmDraft, ctx: Co
       ...open,
       lastSeenAt: at,
       occurrences: open.occurrences + 1,
+      ...(draft.monitoringSourceId ? { monitoringSourceId: open.monitoringSourceId ?? draft.monitoringSourceId, evidenceIds: [...(open.evidenceIds ?? []), ...(draft.evidenceIds ?? [])].slice(-20) } : {}),
       history: [...(open.history ?? []), line('REPORTED_AGAIN', `${isTest ? 'TEST: ' : ''}${ALARM_KIND_LABELS[draft.kind]} reported again${draft.note ? `: ${draft.note}` : ''}`, ctx, draft.reportedBy)],
     };
     return { alarms: replace(alarms, alarm), alarm, repeated: true };
@@ -114,6 +124,7 @@ function addAlarm(alarms: Alarm[], data: NetworkData, draft: AlarmDraft, ctx: Co
     occurrences: 1,
     ...(draft.note?.trim() ? { note: draft.note.trim().slice(0, 1000) } : {}),
     reportedBy: actorOf(ctx, draft.reportedBy),
+    ...monitoring,
     history: [line('RAISED', `${isTest ? 'TEST: ' : ''}${ALARM_KIND_LABELS[draft.kind]} on ${elementLabel(impactDataOf(data), draft.element)}`, ctx, draft.reportedBy)],
   };
   return { alarms: [alarm, ...alarms], alarm, repeated: false };

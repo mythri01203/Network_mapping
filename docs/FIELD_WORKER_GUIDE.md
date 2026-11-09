@@ -157,6 +157,18 @@ The app draws the house wire by itself. Do not draw it again. It also marks the 
 3. Every line should be filled. "Not linked" means something is missing.
 4. **Trace service path** names any missing link in red at the top. A path with a missing link never shows a pass. When the office has recorded every fiber, it says **Every fiber recorded** and follows the exact fiber from the machine to the house. Otherwise it says **Cables only** and names the first fiber that is not recorded. That is office work, not yours.
 
+## Is the customer online?
+
+Open the customer. Read **Live status**.
+
+- **Online**, **Offline**, **LOS (no light)**, **Power lost**: what the machine at the office said, and how long ago.
+- **Live**: the machine sent it a short time ago.
+- **Stale**: the news is old. The customer may have changed since.
+- **No live connection**: no news from the machine. We do not know. This is normal until the owner connects the machine.
+- **TEST · not real**: practice only.
+
+Offline does not always mean a cut cable. The house may have no power. Check before you climb or dig.
+
 ## Cable TV page
 
 Open **Cable TV** in the menu. It shows only what people recorded. Nothing is filled in for you.
@@ -181,7 +193,7 @@ Tap the **Undo** arrow straight away. It does not work after you close the page.
 ## Remember
 
 - This only records your work on the map. It does not turn on the customer's internet.
-- A light level says where it came from: **Estimated**, **Measured**, **Sample data** or **Not recorded**. Only **Measured** is a real meter or device reading. There is no live link to the machines.
+- A light level says where it came from: **Estimated**, **Measured**, **Sample data** or **Not recorded**. Only **Measured** is a real meter or device reading. A machine reading shows its time and says **stale** when it is old. With no news from the machine, the app says **No live connection**.
 - If the top bar says **Not saved on phone**, the phone is full. Stay connected until your work reaches the office.
 - If you are stuck, call your supervisor. Do not guess.
 

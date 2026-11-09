@@ -16,6 +16,7 @@ import {
 
 import { SqliteAuthStore } from '../auth/authStore';
 import { versionConflict } from '../lib/errors';
+import { MonitoringTokenStore } from '../monitoring/tokenStore';
 import type { NetworkRepository, RecordLookup, WriteGuard, WriteOptions } from './repository';
 
 /** Ordered schema migrations; `PRAGMA user_version` records how many have been applied. */
@@ -81,6 +82,8 @@ export class SqliteNetworkRepository implements NetworkRepository {
   private closed = false;
   /** Accounts and sessions (Phase 9), in the same database file. */
   readonly auth: SqliteAuthStore;
+  /** Push tokens for monitoring sources (Phase 7), hashed, in the same database file. */
+  readonly monitoringTokens: MonitoringTokenStore;
 
   constructor(path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -90,6 +93,7 @@ export class SqliteNetworkRepository implements NetworkRepository {
 
     this.statements = prepareStatements(this.db);
     this.auth = new SqliteAuthStore(this.db);
+    this.monitoringTokens = new MonitoringTokenStore(this.db);
   }
 
   async getNetwork() {

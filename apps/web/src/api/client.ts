@@ -135,7 +135,7 @@ export interface AuthClient {
   dataQuality(): Promise<DataQualitySummary>;
 }
 
-type RawRequest = <T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown, options?: RequestOptions) => Promise<T>;
+export type RawRequest = <T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, options?: RequestOptions) => Promise<T>;
 
 export interface ApiClientOptions {
   /** Origin of the API server; empty means same origin (served by the API or proxied by Vite). */
@@ -166,7 +166,7 @@ export function createApiClient({
   // The session cookie goes with every request: same-origin by default, or to the configured API.
   const credentials: RequestCredentials = baseUrl ? 'include' : 'same-origin';
 
-  async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown, options: RequestOptions = {}) {
+  async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, options: RequestOptions = {}) {
     const timeout = AbortSignal.timeout(options.timeoutMs ?? timeoutMs);
     const headers: Record<string, string> = { accept: 'application/json' };
     const raw = typeof Blob !== 'undefined' && body instanceof Blob;

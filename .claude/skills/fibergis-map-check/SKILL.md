@@ -50,6 +50,7 @@ Always include the limit: **passing this check does not prove the map matches th
 - Whether a disconnected customer really was unplugged. It checks that their output and fiber were released and that services ended (Phase 5 rules), from the records only
 - Whether a cable is really on a pole. It checks attachment records and flags one far from the drawn line, but a missing attachment is only a note, and a cable drawn past a pole is never counted as attached
 - Whether a fault's suspected cause is right, or whether a repair really worked. It checks (Phase 8) that no device alarm is stored while no OLT is connected, that TEST is labelled TEST, that nothing is verified or closed without a check, and flags an open fault whose affected customers now have broken paths. The suspicion itself is worked out in the app from core-level paths, not here
+- Whether a customer is really online. It checks (Phase 7) that monitoring rows come from a source on record, are `device_reported`, name an ONT on record and keep TEST in the TEST path, and flags an ONT whose last "online" is stale. It cannot tell whether the OLT or the file was right
 - Why two people changed one record. It only counts conflicts waiting for a choice; both versions are in the app under Operations, Changed twice
 
 Rule meanings, evidence and how to add rules: `references/rules.md`.

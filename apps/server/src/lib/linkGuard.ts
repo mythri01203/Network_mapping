@@ -4,11 +4,13 @@ import {
   changeSetTouchesFaults,
   changeSetTouchesFiber,
   changeSetTouchesLinks,
+  changeSetTouchesMonitoring,
   changeSetTouchesRf,
   checkChangeSetConnections,
   checkChangeSetFaults,
   checkChangeSetFiber,
   checkChangeSetLinks,
+  checkChangeSetMonitoring,
   checkChangeSetRf,
   type ConnectionData,
   describeFiberProblems,
@@ -61,6 +63,7 @@ const readFaults = (read: CollectionReader): FaultCheckData => ({
   faults: read('faults'),
   workOrders: read('workOrders'),
   alarms: read('alarms'),
+  monitoringSources: read('monitoringSources'),
 });
 
 const readConnections = (read: CollectionReader): ConnectionData => ({
@@ -103,11 +106,18 @@ export function changeSetGuard(changes: ChangeSet): WriteGuard | undefined {
   const connections = changeSetTouchesConnections(changes);
   const faults = changeSetTouchesFaults(changes);
   const rf = changeSetTouchesRf(changes);
-  if (!osp && !fiber && !connections && !faults && !rf) return undefined;
+  const monitoring = changeSetTouchesMonitoring(changes);
+  if (!osp && !fiber && !connections && !faults && !rf && !monitoring) return undefined;
   return (read) => {
     if (faults) {
       const errors = checkChangeSetFaults(readFaults(read), changes);
       if (errors.length > 0) throw linkError(`${describeFiberProblems(errors)} Nothing was saved.`);
+    }
+    if (monitoring) {
+      // Phase 7: monitoring rows, sources and device alarms come only through the monitoring routes.
+      const alarms = new Map(read('alarms').map((a) => [a.id, a]));
+      const errors = checkChangeSetMonitoring(changes, (id) => alarms.get(id));
+      if (errors.length > 0) throw linkError(errors[0].message);
     }
     if (osp) {
       const problems = checkChangeSetLinks(readLinked(read), changes);

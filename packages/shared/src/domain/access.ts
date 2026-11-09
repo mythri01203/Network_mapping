@@ -287,7 +287,17 @@ export function describeAccessProblems(problems: readonly AccessProblem[]): stri
 }
 
 /** Whole-network actions with their own rule. */
-export type SystemAction = 'reset' | 'restore' | 'backup' | 'manage_users' | 'change_settings' | 'upload_photo';
+export type SystemAction =
+  | 'reset'
+  | 'restore'
+  | 'backup'
+  | 'manage_users'
+  | 'change_settings'
+  | 'upload_photo'
+  /** Phase 7: make, change or switch off monitoring sources and their push tokens, run the TEST simulator. */
+  | 'manage_monitoring'
+  /** Phase 7: import a CSV or TSV export from the OLT or NMS. */
+  | 'import_monitoring';
 
 export function roleMay(role: AccountRole, action: SystemAction): boolean {
   switch (action) {
@@ -295,7 +305,10 @@ export function roleMay(role: AccountRole, action: SystemAction): boolean {
     case 'restore':
     case 'backup':
     case 'manage_users':
+    case 'manage_monitoring':
       return role === 'admin';
+    case 'import_monitoring':
+      return role === 'admin' || role === 'engineer';
     case 'change_settings':
       return role === 'admin' || role === 'engineer';
     case 'upload_photo':

@@ -19,6 +19,7 @@ import {
   LOCATION_METHOD_LABELS,
   RX_ORIGIN_LABELS,
   rxReadingOf,
+  withDeviceRx,
 } from '@fibergis/shared';
 
 import { Badge, Button, cn, KeyValueList } from '../../components/ui';
@@ -36,6 +37,7 @@ import {
   RxCheckSection,
   ServicesSection,
 } from '../customers/ConnectionSections';
+import { LiveStatusSection } from '../monitoring/LiveStatusSection';
 import { navigateToSite } from './actions';
 import { formatDate, formatDateTime, formatDbm, joinPresent, orNotRecorded, presentItems, rxBudget } from './format';
 import { InspectorLayout, InspectorSection, Metric } from './sections';
@@ -199,7 +201,9 @@ function NoLocationNotice({ customer }: { customer: Customer }) {
 export function CustomerInspector({ customer, detailed }: { customer: Customer; detailed: boolean }) {
   const steps = useServicePath(customer);
   const optical = useNetworkStore(selectOpticalSettings);
-  const reading = rxReadingOf(customer, optical);
+  // Phase 7: the newest real device reading counts as measured, with its device time (never TEST).
+  const onuReadings = useNetworkStore((s) => s.onuReadings);
+  const reading = rxReadingOf(withDeviceRx(customer, { onuReadings }), optical);
   const budget = rxBudget(reading.valueDbm);
   const openFiberTrace = useUiStore((s) => s.openFiberTrace);
   const openSpliceModal = useUiStore((s) => s.openSpliceModal);
@@ -292,6 +296,7 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
         </InspectorSection>
       )}
 
+      <LiveStatusSection customer={customer} />
       <RxCheckSection customer={customer} />
 
       <InspectorSection title="Service path" icon={Waypoints}>

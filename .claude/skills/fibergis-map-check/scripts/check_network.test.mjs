@@ -592,3 +592,45 @@ test('Cable TV messages use ids only, never customer or item names', () => {
   assert.ok(found.length >= 3);
   assert.ok(found.every((f) => !f.message.includes('Asha') && !f.message.includes('Name of')));
 });
+
+// --- Phase 7: live monitoring ---
+const monSource = (id, extra = {}) => ({ id, name: id, kind: 'push', isTest: false, enabled: true, createdAt: '2026-11-01T00:00:00Z', ...extra });
+const monStatus = (id, extra = {}) => ({ id, ontId: 'ONT-1', matchedBy: 'serial', origin: 'device_reported', sourceId: 'MON-1', isTest: false, deviceTime: new Date(Date.now() - 60_000).toISOString(), receivedAt: new Date().toISOString(), state: 'online', ...extra });
+const withMonitoring = () => ({
+  ...healthy(),
+  onts: [{ id: 'ONT-1', arrangement: 'single', status: 'installed', statusSource: 'person', createdAt: '2026-11-01T00:00:00Z' }],
+  monitoringSources: [monSource('MON-1'), monSource('MON-T', { kind: 'test_simulator', isTest: true })],
+  onuStatuses: [monStatus('S-1')],
+  onuReadings: [],
+});
+
+test('fresh real monitoring rows and a TEST row from the simulator add no findings', () => {
+  const data = withMonitoring();
+  data.onuStatuses.push(monStatus('S-2', { sourceId: 'MON-T', isTest: true, state: 'los' }));
+  assert.deepEqual(rules(data).filter((r) => r.startsWith('monitoring-')), []);
+});
+
+test('a reading for an unknown ONT, a stale online and TEST rows outside the TEST path are found', () => {
+  const data = withMonitoring();
+  data.onuStatuses = [
+    monStatus('S-1', { deviceTime: new Date(Date.now() - 3 * 3600_000).toISOString() }),
+    monStatus('S-2', { ontId: 'ONT-GONE' }),
+    monStatus('S-3', { isTest: true }),
+    monStatus('S-4', { sourceId: 'MON-T' }),
+    monStatus('S-5', { ontId: undefined, matchedBy: 'none' }),
+  ];
+  const found = rules(data);
+  assert.ok(found.includes('monitoring-unknown-ont'));
+  assert.ok(found.includes('monitoring-stale-online'));
+  assert.equal(found.filter((r) => r === 'monitoring-test-outside-test-path').length, 2);
+  assert.ok(found.includes('monitoring-unmatched-rows'));
+  data.settings = [{ id: 'monitoring.statusStaleMinutes', value: 600 }];
+  assert.ok(!rules(data).includes('monitoring-stale-online'));
+});
+
+test('a device alarm is accepted only with a real monitoring source and its rows', () => {
+  const data = { ...withMonitoring(), alarms: [alarm('A-9', { source: 'device_adapter', isTest: false, monitoringSourceId: 'MON-1', evidenceIds: ['S-1'] })] };
+  assert.ok(!rules(data).includes('alarm-device-not-connected'));
+  data.alarms[0].monitoringSourceId = 'MON-T';
+  assert.ok(rules(data).includes('alarm-device-not-connected'));
+});

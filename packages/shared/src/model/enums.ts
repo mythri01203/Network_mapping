@@ -441,7 +441,7 @@ export const ALARM_SOURCE_LABELS: Record<AlarmSource, string> = {
   manual: 'Reported by a person at the office',
   field_report: 'Reported from the field',
   test: 'TEST event (not real)',
-  device_adapter: 'OLT monitoring (not connected)',
+  device_adapter: 'Reported by a monitoring source (OLT or NMS)',
 };
 
 export const ALARM_STATES = ['active', 'acknowledged', 'cleared'] as const;

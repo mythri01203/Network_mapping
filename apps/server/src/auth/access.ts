@@ -45,6 +45,8 @@ const SYSTEM_WORDS: Record<SystemAction, string> = {
   manage_users: 'manage user accounts',
   change_settings: 'change settings',
   upload_photo: 'send photos',
+  manage_monitoring: 'manage monitoring sources and tokens',
+  import_monitoring: 'import monitoring files',
 };
 
 /** The account, or a 401 when login is on and nobody is logged in. In setup mode: null. */

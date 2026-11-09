@@ -675,6 +675,7 @@ export function checkNetwork(data, limits = DEFAULT_LIMITS, today = new Date().t
 
   checkFaults(data, add, { equipmentById, cableById, splitterById, customerById, faultById });
   checkCableTv(data, add, { equipmentById, customerById });
+  checkMonitoring(data, add);
 
   return findings;
 }
@@ -744,7 +745,11 @@ function checkFaults(data, add, { equipmentById, cableById, splitterById, custom
 
   for (const a of alarms) {
     if (a.source === 'device_adapter') {
-      add('error', 'alarm-device-not-connected', a.id, `Alarm ${a.id} claims to come from the OLT, but no OLT is connected. It cannot be real.`);
+      // Phase 7: a device alarm is real only when it names a real monitoring source and its rows.
+      const src = (data.monitoringSources ?? []).find((m) => m.id === a.monitoringSourceId);
+      if (!a.monitoringSourceId || !(a.evidenceIds ?? []).length || !src || src.isTest) {
+        add('error', 'alarm-device-not-connected', a.id, `Alarm ${a.id} claims to come from the OLT, but it names no real monitoring source and rows. It cannot be real.`);
+      }
     }
     if ((a.source === 'test') !== !!a.isTest) {
       add('error', 'alarm-test-label', a.id, `Alarm ${a.id}: a TEST event must be marked TEST, and only a TEST event may be.`);
@@ -944,6 +949,48 @@ function checkCableTvPaths(data, add, { elements, byId, good, portOf }) {
     if (level.origin === 'calculated') {
       add('error', 'rf-level-calculated-stored', level.id, `Cable TV level ${level.id} is stored as calculated. Estimates are worked out on the page, never stored as readings.`);
     }
+  }
+}
+
+/**
+ * Live monitoring (Phase 7): rows must be device_reported from a source on record, for an ONT on
+ * record, and TEST rows only from the TEST simulator. An ONT last reported "online" longer ago than
+ * the status setting is stale. Rows that matched no ONT are counted per source. Ids only.
+ */
+function checkMonitoring(data, add, now = Date.now()) {
+  const sources = new Map((data.monitoringSources ?? []).map((m) => [m.id, m]));
+  const onts = new Set((data.onts ?? []).map((o) => o.id));
+  const setting = (data.settings ?? []).find((x) => x.id === 'monitoring.statusStaleMinutes')?.value;
+  const staleMinutes = Number.isInteger(setting) && setting >= 1 ? setting : 15;
+  for (const src of sources.values()) {
+    if (src.isTest !== (src.kind === 'test_simulator')) {
+      add('error', 'monitoring-test-outside-test-path', src.id, `Monitoring source ${src.id}: only the TEST simulator may be TEST, and it must be.`);
+    }
+  }
+  const unmatched = new Map();
+  const newest = new Map();
+  for (const row of [...(data.onuReadings ?? []), ...(data.onuStatuses ?? [])]) {
+    const src = sources.get(row.sourceId);
+    if (row.origin !== 'device_reported') add('error', 'monitoring-row-origin', row.id, `Monitoring row ${row.id} is not marked device_reported.`);
+    if (!src) add('error', 'monitoring-row-no-source', row.id, `Monitoring row ${row.id} names source "${row.sourceId}", which is not on record.`);
+    else if (!!row.isTest !== !!src.isTest) {
+      add('error', 'monitoring-test-outside-test-path', row.id, `Monitoring row ${row.id}: ${row.isTest ? 'a TEST row from a real source' : 'a real row from the TEST simulator'}. TEST rows come only from the TEST simulator.`);
+    }
+    if (row.ontId && !onts.has(row.ontId)) add('error', 'monitoring-unknown-ont', row.id, `Monitoring row ${row.id} is for ONT "${row.ontId}", which is not on record.`);
+    if (!row.ontId && !row.isTest) unmatched.set(row.sourceId, (unmatched.get(row.sourceId) ?? 0) + 1);
+    if (row.state && row.ontId && !row.isTest && src && !src.isTest) {
+      const prev = newest.get(row.ontId);
+      if (!prev || row.deviceTime > prev.deviceTime) newest.set(row.ontId, row);
+    }
+  }
+  for (const [ontId, row] of newest) {
+    const minutes = Math.round((now - Date.parse(row.deviceTime)) / 60_000);
+    if (row.state === 'online' && minutes > staleMinutes) {
+      add('warning', 'monitoring-stale-online', ontId, `ONT ${ontId} was last reported online ${minutes} min ago (stale after ${staleMinutes} min), so it may not be online now.`);
+    }
+  }
+  for (const [sourceId, count] of unmatched) {
+    add('note', 'monitoring-unmatched-rows', sourceId, `${count} row(s) from monitoring source ${sourceId} matched no ONT record. They are kept and not shown on any customer.`);
   }
 }
 

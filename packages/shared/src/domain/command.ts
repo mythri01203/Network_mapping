@@ -20,12 +20,16 @@ export type FaultCollection = (typeof FAULT_COLLECTIONS)[number];
 export const RF_COLLECTIONS = ['rfElements', 'rfLinks', 'rfLevels'] as const;
 export type RfCollection = (typeof RF_COLLECTIONS)[number];
 
+/** Live monitoring added in Phase 7, written only by the monitoring routes. Optional for the same reason. */
+export const MONITORING_COLLECTIONS = ['monitoringSources', 'onuReadings', 'onuStatuses'] as const;
+export type MonitoringCollection = (typeof MONITORING_COLLECTIONS)[number];
+
 /** The mutable network collections that domain commands read and patch. */
 export type NetworkData = Pick<
   NetworkSnapshot,
   'equipment' | 'cables' | 'splitters' | 'closures' | 'customers' | 'faults' | 'workOrders' | 'zones' | 'documents'
 > &
-  Partial<Pick<NetworkSnapshot, OspCollection | ConnectionCollection | FaultCollection | RfCollection>>;
+  Partial<Pick<NetworkSnapshot, OspCollection | ConnectionCollection | FaultCollection | RfCollection | MonitoringCollection>>;
 
 /** Replacement arrays for the collections a command changed. Untouched collections are omitted. */
 export type NetworkPatch = Partial<NetworkData>;

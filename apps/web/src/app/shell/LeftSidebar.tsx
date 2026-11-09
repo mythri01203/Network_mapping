@@ -22,6 +22,7 @@ import {
   TriangleAlert,
   Unplug,
   UserPlus,
+  Wifi,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
@@ -176,6 +177,7 @@ export const LeftSidebar: React.FC = () => {
     {
       label: 'Insights',
       items: [
+        tool('monitoring', 'Live status', Wifi, () => setModalOpen('monitoring', true), { simple: true }),
         tool('capacity', 'Capacity', ChartColumn, () => setModalOpen('capacityDashboard', true)),
         tool('reports', 'Reports', FileText, () => setModalOpen('reports', true)),
         tool('docs', 'Documents', FolderOpen, () => setModalOpen('documents', true), {

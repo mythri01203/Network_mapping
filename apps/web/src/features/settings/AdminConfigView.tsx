@@ -7,7 +7,7 @@ import { exportKML } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { BackupRestorePanel } from '../admin/BackupRestorePanel';
-import { FaultSettingsPanel, FieldSettingsPanel, OspSettingsPanel } from '../admin/FieldSettingsPanel';
+import { FaultSettingsPanel, FieldSettingsPanel, MonitoringSettingsPanel, OspSettingsPanel } from '../admin/FieldSettingsPanel';
 import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
 import { RfSettingsPanel } from '../admin/RfSettingsPanel';
 import { UsersPanel } from '../admin/UsersPanel';
@@ -15,7 +15,7 @@ import { UsersPanel } from '../admin/UsersPanel';
 export const AdminConfigView: React.FC = () => {
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
-  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'cable_tv' | 'audit_logs' | 'backup'>('roles');
+  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'monitoring' | 'cable_tv' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
 
   const filteredLogs = auditLogs.filter(
@@ -92,6 +92,15 @@ export const AdminConfigView: React.FC = () => {
             }`}
           >
             Fault checks settings
+          </button>
+          <button
+            onClick={() => setActiveTab('monitoring')}
+            data-testid="admin-monitoring-tab"
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'monitoring' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Monitoring settings
           </button>
           <button
             onClick={() => setActiveTab('cable_tv')}
@@ -187,6 +196,7 @@ export const AdminConfigView: React.FC = () => {
         {activeTab === 'field' && <FieldSettingsPanel />}
         {activeTab === 'routes' && <OspSettingsPanel />}
         {activeTab === 'faults' && <FaultSettingsPanel />}
+        {activeTab === 'monitoring' && <MonitoringSettingsPanel />}
         {activeTab === 'cable_tv' && <RfSettingsPanel />}
 
         {/* Tab 3: Audit Logs */}

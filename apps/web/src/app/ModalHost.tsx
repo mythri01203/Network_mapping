@@ -15,6 +15,7 @@ import { HelpModal } from '../features/help/HelpModal';
 import { KmlImportModal } from '../features/import/KmlImportModal';
 import { EquipmentKnowledgeModal } from '../features/knowledge/EquipmentKnowledgeModal';
 import { AdvancedLayersDrawer } from '../features/map/AdvancedLayersDrawer';
+import { MonitoringModal } from '../features/monitoring/MonitoringModal';
 import { PortManagerModal } from '../features/ports/PortManagerModal';
 import { SplitterPortModal } from '../features/ports/SplitterPortModal';
 import { TerminalBoxModal } from '../features/ports/TerminalBoxModal';
@@ -52,6 +53,7 @@ export const ModalHost: React.FC = () => {
       <TechnicianMobileView />
       <SavedRoutesModal />
       <CapacityDashboardModal />
+      <MonitoringModal />
       <ReportsModal />
       <HelpModal />
       <DocumentManagerModal />

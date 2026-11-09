@@ -25,7 +25,8 @@ export interface AuthRouteOptions {
 }
 
 /** Routes anyone may call, even with login on and no session. */
-export const PUBLIC_API_PATHS = new Set(['/health', '/auth/status', '/auth/login', '/auth/setup', '/auth/logout']);
+/** `/monitoring/ingest` has no session: it checks its own per-source token (Phase 7). */
+export const PUBLIC_API_PATHS = new Set(['/health', '/auth/status', '/auth/login', '/auth/setup', '/auth/logout', '/monitoring/ingest']);
 
 /** The routes accept small JSON bodies only. */
 const AUTH_BODY_LIMIT = 16 * 1024;

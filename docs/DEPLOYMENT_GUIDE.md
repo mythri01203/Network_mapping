@@ -102,3 +102,26 @@ To be safe before anyone else can reach the server, set `SETUP_TOKEN` (the first
 ## Backups and restore (Phase 9)
 
 Administration, **Backup & KML**. A backup with photos is a zip (`GET /api/v1/backup?photos=1`); without photos it is the JSON file as before. A safety copy is saved before every reset and restore. A restore is checked first: if the backup would leave broken links, double-used fibers or other rule errors, nothing is restored and the problems are listed; the administrator may then restore anyway, and that choice is written to the audit log.
+
+## Live monitoring (Phase 7)
+
+No OLT is connected yet: until a real source sends data, every screen says "No live connection". The adapters are described in `MONITORING_ADAPTERS.md`.
+
+**Database.** The first start of a Phase 7 server adds one table, `monitoring_tokens` (`CREATE TABLE IF NOT EXISTS`), and leaves the schema number (`user_version`) at 1. Readings, statuses and sources are ordinary records (`onuReadings`, `onuStatuses`, `monitoringSources`), so they are in the JSON backup; tokens are not.
+
+**Set up a push source** (administrator):
+
+1. Menu, **Live status**, **Sources**. Type a name (such as "NMS push, OLT-1"), choose "Push from a script or NMS", **Add source**.
+2. The token (`fgm_…`) is shown **once**. Copy it into the script's secret store straight away; the server keeps only a hash and cannot show it again. **New token** replaces it (the old one stops working); **Revoke token** stops it.
+3. Run the script on your own network, sending `POST https://<server>/api/v1/monitoring/ingest` with `Authorization: Bearer <token>` and the rows described in `MONITORING_ADAPTERS.md`. Use https once the server is reachable beyond one trusted network.
+4. **Switch off** stops a source at once without losing its history.
+
+The token can only send rows: it cannot read the network or open any other route. Never put it in the code, git, a chat or a log; if it leaks, make a new one.
+
+**File import:** add a "File import" source the same way, then **Import file** (administrator or engineer). **TEST simulator:** add a "TEST simulator" source; it stays off until the administrator switches it on, and all its rows and alarms are marked TEST.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `INGEST_PER_MINUTE` | 60 | Push requests per minute per token. A request carries at most 2000 rows and 512 KB |
+
+Administration, **Monitoring settings**: when a status (15 min) and a reading (60 min) become stale, and how far ahead of the server clock a device time may be (5 min). All proposed: set them to a little more than twice your OLT's or NMS's sending interval.

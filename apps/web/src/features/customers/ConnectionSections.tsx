@@ -20,6 +20,7 @@ import {
   SERVICE_STATUS_LABELS,
   type ServiceKind,
   splitterCapacity,
+  withDeviceRx,
 } from '@fibergis/shared';
 
 import { Badge, Button, Field, Input, Select } from '../../components/ui';
@@ -227,6 +228,7 @@ export function OntSection({ customer }: { customer: Customer }) {
   const customers = useNetworkStore((s) => s.customers);
   const view = ontOfCustomer({ onts }, customer);
   const record = view.record;
+  const hasMonitoringRows = useNetworkStore((s) => !!record && s.onuStatuses.some((r) => r.ontId === record.id));
   const [mode, setMode] = useState<'none' | 'edit' | 'swap' | 'change'>('none');
   const [serial, setSerial] = useState('');
   const [vendor, setVendor] = useState('');
@@ -255,7 +257,9 @@ export function OntSection({ customer }: { customer: Customer }) {
         </p>
         {record ? (
           <div className="text-xs text-slate-600">
-            <p>{ONT_STATUS_SOURCE_LABELS[record.statusSource]}{record.statusAt ? `, ${formatDateTime(record.statusAt)}` : ''}. No live connection to the OLT, so online status is not known.</p>
+            <p>{ONT_STATUS_SOURCE_LABELS[record.statusSource]}{record.statusAt ? `, ${formatDateTime(record.statusAt)}` : ''}.{' '}
+              {hasMonitoringRows ? 'This is the install state. Online status from the OLT is under Live status.' : 'No live connection to the OLT, so online status is not known.'}
+            </p>
             <p>OLT address for this ONT: {record.onuAddress ?? 'not recorded'}{record.ponPortId ? ` on ${record.oltId} ${record.ponPortId}` : ''}</p>
             <p>Plugged into: {record.splitterId ? `output ${record.splitterOutputPort ?? '?'} of ${record.splitterId}` : 'not recorded'}{record.dropCableId ? `, fiber ${record.dropCore ?? '?'} of ${record.dropCableId}` : ''}</p>
             <p>{ONT_ARRANGEMENT_LABELS[record.arrangement]}</p>
@@ -543,7 +547,9 @@ export function CustomerPlaceSection({ customer }: { customer: Customer }) {
 export function RxCheckSection({ customer }: { customer: Customer }) {
   const optical = useNetworkStore(selectOpticalSettings);
   // Recomputed with the inspector: the check is cheap for one customer.
-  const result = reconcileCustomerRx(customer, getNetworkData(), optical);
+  // Phase 7: the newest real device reading (never TEST) is compared with the prediction.
+  const onuReadings = useNetworkStore((s) => s.onuReadings);
+  const result = reconcileCustomerRx(withDeviceRx(customer, { onuReadings }), getNetworkData(), optical);
   if (customer.status === 'Disconnected') return null;
   return (
     <InspectorSection title="Reading against the records" icon={Activity}>

@@ -859,8 +859,8 @@ export const verificationSchema = z.object({
 });
 
 /**
- * One alarm: something a person, a field report or a TEST said about one element. There is no
- * live OLT connection, so a `device_adapter` alarm is refused everywhere until Phase 7.
+ * One alarm: something a person, a field report, a TEST or (Phase 7) a monitoring source said
+ * about one element. A `device_adapter` alarm is made only by the monitoring ingestion path.
  */
 export const alarmSchema = z.object({
   id,
@@ -883,6 +883,12 @@ export const alarmSchema = z.object({
   clearedBy: z.string().optional(),
   faultId: z.string().min(1).optional(),
   history: z.array(historyEntrySchema).optional(),
+  /**
+   * Phase 7: a `device_adapter` alarm (or a TEST alarm from the simulator) names the monitoring
+   * source and the status or reading rows behind it. A device alarm without them is refused.
+   */
+  monitoringSourceId: z.string().min(1).optional(),
+  evidenceIds: z.array(z.string().min(1)).max(20).optional(),
 });
 
 /** What the office was told when it opened a fault from a suspected cause, kept as it was then. */

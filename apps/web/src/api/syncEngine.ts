@@ -120,6 +120,8 @@ export interface SyncEngine {
   flush(): Promise<void>;
   /** Tries the server again, including records it refused earlier. */
   retry(): Promise<void>;
+  /** Checks the server for changes made elsewhere now (such as rows a monitoring route stored). */
+  refresh(): Promise<void>;
   /** Drops unsent local edits and reloads the network from the server. */
   discardLocalChanges(): Promise<void>;
   /** Reloads the demo network (keeping the catalog) on the server, or locally while offline. */
@@ -702,6 +704,8 @@ export function createSyncEngine({
     },
 
     flush,
+
+    refresh: () => poll(),
 
     retry: () =>
       exclusive(async () => {

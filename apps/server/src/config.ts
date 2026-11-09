@@ -36,6 +36,8 @@ const envSchema = z.object({
   HTTPS_CERT_FILE: z.string().min(1).optional(),
   HTTPS_KEY_FILE: z.string().min(1).optional(),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(1200),
+  /** Phase 7: push requests per minute for one monitoring token. */
+  INGEST_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(60),
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(3).max(100).default(5),
   LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   RESTORE_MAX_MB: z.coerce.number().int().min(1).max(2048).default(200),
@@ -72,6 +74,7 @@ export interface AppConfig {
   trustProxy: boolean | number | string;
   https?: { certFile: string; keyFile: string };
   rateLimitPerMinute: number;
+  ingestPerMinute: number;
   loginMaxFailures: number;
   loginLockMinutes: number;
   restoreMaxBytes: number;
@@ -131,6 +134,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: parseTrustProxy(value.TRUST_PROXY),
     ...(value.HTTPS_CERT_FILE && value.HTTPS_KEY_FILE ? { https: { certFile: value.HTTPS_CERT_FILE, keyFile: value.HTTPS_KEY_FILE } } : {}),
     rateLimitPerMinute: value.RATE_LIMIT_PER_MINUTE,
+    ingestPerMinute: value.INGEST_PER_MINUTE,
     loginMaxFailures: value.LOGIN_MAX_FAILURES,
     loginLockMinutes: value.LOGIN_LOCK_MINUTES,
     restoreMaxBytes: value.RESTORE_MAX_MB * 1024 * 1024,

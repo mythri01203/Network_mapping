@@ -42,8 +42,20 @@ export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
   );
 }
 
-/** Said everywhere alarms are shown: there is no device connection, so nothing here is live. */
+/**
+ * Said everywhere alarms are shown. With no real monitoring source: "No live connection". With one
+ * (Phase 7): device alarms come only from it, and a customer with no alarm is still not proven up.
+ */
 export function NoLiveConnection() {
+  const hasSource = useNetworkStore((s) => s.monitoringSources.some((m) => !m.isTest && m.lastReceivedAt));
+  if (hasSource) {
+    return (
+      <div className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-[11px] text-slate-700" data-testid="monitoring-source-note">
+        Some alarms come from a monitoring source (see Live status for its age). The rest are reported by people, from the field, or are TEST events. A customer with no
+        alarm is not proven to be working.
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-[11px] text-slate-700" data-testid="no-live-connection">
       <strong>No live connection</strong> to the OLT. Alarms here are reported by people, from the field, or are TEST events. None comes from a device,

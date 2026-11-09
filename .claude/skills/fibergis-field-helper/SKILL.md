@@ -159,7 +159,7 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 
 **House in the wrong place, or no place:** open the customer. A yellow box says **House location not recorded**; tap **Use my GPS** or **Pick on map**.
 
-**Report a problem (office):** tap the bell icon at the top, or the blue **Create** button in the menu and then **Report a fault**, or **Operations** then **Faults and alarms**. The window **Faults and field work** opens. It says **No live connection**: there is no link to the real machines, so every alarm is typed by a person, comes from the field, or is a TEST. Tap **Report Outage** (it covers damage too), choose what happened and what it is on, tap **Save the report**. On a phone the bell is hidden: open the menu first.
+**Report a problem (office):** tap the bell icon at the top, or the blue **Create** button in the menu and then **Report a fault**, or **Operations** then **Faults and alarms**. The window **Faults and field work** opens. It says **No live connection** while no machine sends data: then every alarm is typed by a person, comes from the field, or is a TEST. Alarms from a monitoring source say **Reported by a monitoring source**. Tap **Report Outage** (it covers damage too), choose what happened and what it is on, tap **Save the report**. On a phone the bell is hidden: open the menu first.
 
 **Practice with a TEST event (office):** in the same window tap **Make a TEST event**, choose a splitter, tick the customers, tap **Make TEST event**. Everything it makes says **TEST · not real**, is not counted as an outage, and is left out of reports unless **Include TEST events** is ticked.
 
@@ -168,6 +168,10 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 **Work orders (office):** in the fault, tap **Make a work order**, type the technician's name and the steps, tap **Make the work order**. Or open **Operations**, tap **Create Work Order**. A fault or work order closes only with a check: a light reading measured in the field (from **My jobs**), a photo, or **Record office check**. Without one, **Close the fault** is refused with a plain message, and the server refuses it too. The fault shows the whole **Repair, check and resolution history**.
 
 **Cable TV (office):** open **Cable TV** in the menu. Tabs: **RF tree** (the TV line from the headend to each set top box; pieces no headend reaches are listed with what is missing), **Items** (add a headend, node, amplifier, tap, set top box; say powered or passive, never guess), **Links** (which OUT port feeds which IN port; one tap port takes one house wire), **Levels** (tap **Record a level**, choose the **Unit on the meter**, fill **Level as read**, **Read by** and **Meter**), **TV customers** (tap **Add Cable TV customer** and choose a free tap port), **Checks** (what is wrong or missing). The limits are changed in **Administration**, **Cable TV settings**, by an engineer or the administrator. No PON splitter rule applies here.
+
+**Is a customer online? (office):** open the customer and read **Live status**. It says **Online**, **Offline**, **LOS (no light)**, **Power lost (dying gasp)** or **Unknown**, with how long ago, and which source said it. **Live** means a real machine sent it a short time ago. **Stale** means the last news is old: the customer may have changed since. **No live connection** means nothing has come from a machine for this customer: we do not know. **TEST · not real** is practice only. Offline alone does not mean the cable is cut. All customers together: menu, **Live status**.
+
+**Bring in readings from the OLT (administrator or engineer):** menu, **Live status**, **Import file**. Choose the source, choose the file the OLT or its software exported, say which column is which, say what each status word means, tap **Preview**, read **Not matched** and **Skipped**, then **Import**. A row is shown on a customer only when its ONU address or serial is exactly the one on their ONT record. Sources, push tokens and the **TEST simulator** are for the administrator only (**Sources**).
 
 **Track a duty day:** open **Agent Tracking**. Type your name. Tap **Start Duty**. Allow location. Keep the page open. Tap **End Duty** when finished. Then tap **CSV** or **PDF** under **Daily report**.
 
@@ -197,12 +201,14 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 | Pin moved by mistake | It can only move after **Move this item** | Tap Undo straight away. The cable ends go back too |
 | **My jobs** shows "No jobs for you now" | The office has not put your name on a job, or you tapped the wrong name | Tap your name at the top, then **Not me**, and choose again. Otherwise call the office |
 | "Someone else changed this" | You worked offline and the office changed the same thing | Nothing is lost. Tap **Office decides** if unsure |
+| **Live status** says **No live connection** | No machine has sent anything for this customer, or the customer has no ONT record | Normal until the owner connects the OLT. Make the ONT record with the serial and OLT address exactly as the OLT writes them |
+| A reading is listed under **Not matched** | The address or serial in the file is not exactly the one on any ONT record, or is on two | Fix the ONT record; the next reading will match. Nothing was guessed |
 | **Close the fault** says it cannot be closed yet | No check is recorded | The technician records a light reading or photo in **My jobs**, or the office types what it checked and taps **Record office check** |
 
 ## Honesty rules
 
-- Light levels say where they came from. **Estimated**, **Sample data** and **Not recorded** are not readings; only **Measured** is. There is no link to the real machines yet, and screens say **No live connection**
-- Alarms are typed by people, come from the field, or are **TEST**. A customer with no alarm is not proven to be working. A suspected cause is a suspicion, never proof of a cut
+- Light levels say where they came from. **Estimated**, **Sample data** and **Not recorded** are not readings; only **Measured** is. A level from a machine is **Measured** with its time and source; old ones say **stale**. With no machine data, screens say **No live connection**. No OLT is connected yet, only file imports, a push from the owner's own script, and TEST
+- Alarms are typed by people, come from the field, come from a monitoring source (it is named), or are **TEST**. A customer with no alarm is not proven to be working. A suspected cause is a suspicion, never proof of a cut
 - The **Cable TV** page shows only recorded items, links and levels. Its level limits are "Proposed: check with your operators": no operator has confirmed them. Levels it works out are estimates, not readings
 - Names typed by staff are not verified, because there is no login
 
