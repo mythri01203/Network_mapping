@@ -41,6 +41,9 @@ export function createSampleNetwork(): NetworkSnapshot {
     buildings: [],
     alarms: [],
     syncConflicts: [],
+    rfElements: [],
+    rfLinks: [],
+    rfLevels: [],
   };
   return JSON.parse(JSON.stringify(snapshot)) as NetworkSnapshot;
 }

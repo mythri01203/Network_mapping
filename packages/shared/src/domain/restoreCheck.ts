@@ -3,6 +3,7 @@ import { findConnectionProblems } from './connectionRules';
 import { findFaultProblems } from './faultRules';
 import { findFiberProblems } from './fiberRules';
 import { findBrokenLinks } from './outsidePlant';
+import { findRfProblems } from './rfRules';
 
 /**
  * Phase 9: a restore is checked against the same rules every change is checked against (Phases 3
@@ -10,13 +11,14 @@ import { findBrokenLinks } from './outsidePlant';
  * (broken data, physical impossibilities) are listed; warnings never stop a restore.
  */
 
-export type RestoreRule = 'links' | 'fiber' | 'connections' | 'faults';
+export type RestoreRule = 'links' | 'fiber' | 'connections' | 'faults' | 'rf';
 
 export const RESTORE_RULE_LABELS: Record<RestoreRule, string> = {
   links: 'Poles, spans, ducts and attachments',
   fiber: 'Fibers, splices, splitters and ports',
   connections: 'Customers, ONTs, services and buildings',
   faults: 'Alarms, faults and jobs',
+  rf: 'Cable TV items, links and levels',
 };
 
 export interface RestoreProblem {
@@ -43,7 +45,10 @@ export function checkRestoredNetwork(data: NetworkSnapshot): RestoreCheck {
   for (const p of findFiberProblems(data)) if (p.severity === 'error') problems.push({ rule: 'fiber', key: `fiber:${p.key}`, message: p.message, refs: p.refs });
   for (const p of findConnectionProblems(data)) if (p.severity === 'error') problems.push({ rule: 'connections', key: `connections:${p.key}`, message: p.message, refs: p.refs });
   for (const p of findFaultProblems(data)) if (p.severity === 'error') problems.push({ rule: 'faults', key: `faults:${p.key}`, message: p.message, refs: p.refs });
-  const counts: Record<RestoreRule, number> = { links: 0, fiber: 0, connections: 0, faults: 0 };
+  // Backups made before Phase 6 have no Cable TV records.
+  const rf = { rfElements: data.rfElements ?? [], rfLinks: data.rfLinks ?? [], rfLevels: data.rfLevels ?? [], cables: data.cables, customers: data.customers, equipment: data.equipment };
+  for (const p of findRfProblems(rf, { warnings: false })) problems.push({ rule: 'rf', key: `rf:${p.key}`, message: p.message, refs: p.refs });
+  const counts: Record<RestoreRule, number> = { links: 0, fiber: 0, connections: 0, faults: 0, rf: 0 };
   for (const p of problems) counts[p.rule] += 1;
   return { problems, counts };
 }
@@ -55,7 +60,7 @@ export function checkRestoredNetwork(data: NetworkSnapshot): RestoreCheck {
 export function newRestoreProblems(before: NetworkSnapshot, after: NetworkSnapshot): RestoreCheck {
   const known = new Set(checkRestoredNetwork(before).problems.map((p) => p.key));
   const problems = checkRestoredNetwork(after).problems.filter((p) => !known.has(p.key));
-  const counts: Record<RestoreRule, number> = { links: 0, fiber: 0, connections: 0, faults: 0 };
+  const counts: Record<RestoreRule, number> = { links: 0, fiber: 0, connections: 0, faults: 0, rf: 0 };
   for (const p of problems) counts[p.rule] += 1;
   return { problems, counts };
 }

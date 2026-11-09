@@ -505,3 +505,90 @@ test('older resolved faults, jobs waiting for a check and conflicts waiting are 
   assert.ok(notes.includes('work-order-awaiting-check'));
   assert.ok(notes.includes('sync-conflicts-waiting'));
 });
+
+// --- Phase 6: Cable TV / HFC -------------------------------------------------------------------
+const rfPort = (id, direction, extra = {}) => ({ id, label: id, direction, signal: 'rf', ...extra });
+const rfItem = (id, kind, ports, extra = {}) => ({ id, name: `Name of ${id}`, kind, status: 'built', ports, createdAt: '2026-11-01', ...extra });
+const rfLink = (id, from, to, extra = {}) => ({
+  id,
+  from: { elementId: from[0], portId: from[1] },
+  to: { elementId: to[0], portId: to[1] },
+  medium: 'coax',
+  status: 'active',
+  createdAt: '2026-11-01',
+  ...extra,
+});
+const withCableTv = () => ({
+  customers: [{ id: 'C-TV', name: 'Asha Rao', status: 'Active', accessNetwork: 'hfc' }],
+  rfElements: [
+    rfItem('HE-1', 'headend', [rfPort('out', 'out')]),
+    rfItem('AMP-1', 'rf_amplifier', [rfPort('in', 'in'), rfPort('out', 'out', { role: 'main' })], { powerFeed: 'local', gainDb: 30 }),
+    rfItem('TAP-1', 'tap', [rfPort('in', 'in'), rfPort('d1', 'out', { role: 'drop' }), rfPort('d2', 'out', { role: 'drop' })]),
+    rfItem('STB-1', 'stb', [rfPort('in', 'in')], { customerId: 'C-TV' }),
+  ],
+  rfLinks: [
+    rfLink('L-1', ['HE-1', 'out'], ['AMP-1', 'in']),
+    rfLink('L-2', ['AMP-1', 'out'], ['TAP-1', 'in']),
+    rfLink('L-3', ['TAP-1', 'd1'], ['STB-1', 'in']),
+  ],
+  rfLevels: [{ id: 'LV-1', elementId: 'TAP-1', portId: 'd1', value: 65, unit: 'dBuV', origin: 'field_measured', technician: 'T', createdAt: '2026-11-01' }],
+});
+
+test('a clean Cable TV tree gives no findings, and no PON or fiber rule runs on the hfc customer', () => {
+  assert.deepEqual(checkNetwork(withCableTv()), []);
+});
+
+test('Cable TV links naming a missing item or port are errors', () => {
+  const data = withCableTv();
+  data.rfLinks.push(rfLink('L-9', ['TAP-1', 'd2'], ['GONE-1', 'in']), rfLink('L-10', ['TAP-1', 'd9'], ['STB-1', 'in']));
+  const found = rules(data);
+  assert.ok(found.includes('rf-link-missing-item'));
+  assert.ok(found.includes('rf-link-missing-port'));
+});
+
+test('a tap port used twice is an error, and removed links do not count', () => {
+  const data = withCableTv();
+  data.rfElements.push(rfItem('STB-2', 'stb', [rfPort('in', 'in')], { customerId: 'C-TV' }));
+  data.rfLinks.push(rfLink('L-4', ['TAP-1', 'd1'], ['STB-2', 'in']));
+  assert.ok(rules(data).includes('rf-tap-port-used-twice'));
+  data.rfLinks[3].status = 'removed';
+  assert.ok(!rules(data).includes('rf-tap-port-used-twice'));
+});
+
+test('a customer device on a tap with no recorded path to a headend is flagged', () => {
+  const data = withCableTv();
+  data.rfLinks = data.rfLinks.filter((l) => l.id !== 'L-1');
+  assert.ok(rules(data).includes('rf-customer-no-headend'));
+  data.rfLinks.push(rfLink('L-P', ['HE-1', 'out'], ['AMP-1', 'in'], { medium: 'power' }));
+  assert.ok(rules(data).includes('rf-customer-no-headend'), 'a power-only link is not a signal path');
+});
+
+test('a level with no unit or an unknown unit is an error, and so is dBuV on a light port', () => {
+  const data = withCableTv();
+  data.rfElements.push(rfItem('NODE-1', 'optical_node', [rfPort('opt', 'in', { signal: 'optical' })], { powered: true }));
+  data.rfLevels.push(
+    { id: 'LV-2', elementId: 'TAP-1', portId: 'd2', value: 60, origin: 'designed', createdAt: '' },
+    { id: 'LV-3', elementId: 'TAP-1', portId: 'd2', value: 60, unit: 'dB', origin: 'designed', createdAt: '' },
+    { id: 'LV-4', elementId: 'NODE-1', portId: 'opt', value: 60, unit: 'dBuV', origin: 'designed', createdAt: '' },
+  );
+  const found = checkNetwork(data);
+  assert.deepEqual(found.filter((f) => f.rule === 'rf-level-unit-unknown').map((f) => f.id), ['LV-2', 'LV-3']);
+  assert.ok(found.some((f) => f.rule === 'rf-level-unit-mismatch' && f.id === 'LV-4'));
+});
+
+test('an amplifier with no power source recorded is a warning', () => {
+  const data = withCableTv();
+  delete data.rfElements[1].powerFeed;
+  assert.ok(rules(data).includes('rf-amp-no-power'));
+  data.rfElements[1].powerFeed = 'unknown';
+  assert.ok(rules(data).includes('rf-amp-no-power'));
+});
+
+test('Cable TV messages use ids only, never customer or item names', () => {
+  const data = withCableTv();
+  data.rfLinks = [rfLink('L-X', ['TAP-1', 'd1'], ['MISSING', 'in'])];
+  data.rfElements.push(rfItem('STB-9', 'stb', [rfPort('in', 'in')], { customerId: 'C-GONE' }));
+  const found = checkNetwork(data).filter((f) => f.rule.startsWith('rf-'));
+  assert.ok(found.length >= 3);
+  assert.ok(found.every((f) => !f.message.includes('Asha') && !f.message.includes('Name of')));
+});

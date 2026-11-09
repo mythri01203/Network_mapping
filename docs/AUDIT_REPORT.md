@@ -13,6 +13,8 @@
 
 **Updated after Phase 8 (8 November 2026).** Faults and field operations (alarms with a lifecycle and clearly labelled TEST events, suspected causes from recorded paths with evidence and confidence, who is affected by any element, work orders with photos, materials, notes and a check before closing, the technician's job screens at `/jobs`, per-record version checks with a "Someone else changed this" choice that keeps both versions, and server checks for the new records) have been built on the same branch, not committed, and checked by unit tests and by a script in desktop Chrome at 1500 and 360 px on a test server with a fake camera. No technician or office user has used them. Phases 6 and 7 are not started (blocked). Sections 1 to 3, 6, 7 and 9 are updated.
 
+**Updated after Phase 6 (November 2026).** Cable TV is built from records on the same branch, checked by unit tests only, and not accepted. Section 5 is updated.
+
 **Updated after Phase 2 (same date).** The phone capture flow (`/capture`) has been built on the same branch, not committed, and checked only by scripts in desktop Chrome at phone size with a fake camera and simulated GPS. Nothing was tried on a real phone or with field workers. Sections 9 and 7 (#15) are updated.
 
 Status words: **Works** (built, saved, used end to end), **Partial** (see the note), **Missing**.
@@ -96,7 +98,7 @@ SQLite with one generic table, `records(collection, id, position, data JSON, upd
 
 ## 5. Cable TV (HFC)
 
-**Partial, mostly mock.** Equipment types and coax cable exist. The Cable TV page and node panel show hard-coded values with no sample label. `rfLevelDbf` is never read. Cable TV customers still pass through a PON splitter form. There is no RF loss model. HFC and PON are separated only by a display filter.
+**Partial, built from records (Phase 6, November 2026), not accepted.** The Cable TV page now shows only recorded Cable TV items, links and levels (`rfElements`, `rfLinks`, `rfLevels`), kept apart from PON. It has an RF tree, powered and passive nodes, taps with one house wire per port, levels with their unit and test point offset, a separate TV customer flow on a tap port, wavelengths on shared fiber, and switchable level profiles in Administration, Cable TV settings. Levels below a recorded point are estimated from recorded gains and losses and never stored. The same errors are checked on the server. No cable operator was interviewed, so every level and limit is proposed. Still old: the map's node panel shows labelled example values and the legacy `rfLevelDbf` field.
 
 ## 6. Monitoring and integrations
 

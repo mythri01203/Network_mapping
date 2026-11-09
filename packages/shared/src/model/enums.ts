@@ -558,6 +558,9 @@ export const AUDIT_ASSET_TYPES = [
   'Building',
   'Alarm',
   'SyncConflict',
+  'RfElement',
+  'RfLink',
+  'RfLevel',
 ] as const;
 
 /* ------------------------------------------------------------------ */

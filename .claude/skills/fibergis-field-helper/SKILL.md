@@ -167,6 +167,8 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 
 **Work orders (office):** in the fault, tap **Make a work order**, type the technician's name and the steps, tap **Make the work order**. Or open **Operations**, tap **Create Work Order**. A fault or work order closes only with a check: a light reading measured in the field (from **My jobs**), a photo, or **Record office check**. Without one, **Close the fault** is refused with a plain message, and the server refuses it too. The fault shows the whole **Repair, check and resolution history**.
 
+**Cable TV (office):** open **Cable TV** in the menu. Tabs: **RF tree** (the TV line from the headend to each set top box; pieces no headend reaches are listed with what is missing), **Items** (add a headend, node, amplifier, tap, set top box; say powered or passive, never guess), **Links** (which OUT port feeds which IN port; one tap port takes one house wire), **Levels** (tap **Record a level**, choose the **Unit on the meter**, fill **Level as read**, **Read by** and **Meter**), **TV customers** (tap **Add Cable TV customer** and choose a free tap port), **Checks** (what is wrong or missing). The limits are changed in **Administration**, **Cable TV settings**, by an engineer or the administrator. No PON splitter rule applies here.
+
 **Track a duty day:** open **Agent Tracking**. Type your name. Tap **Start Duty**. Allow location. Keep the page open. Tap **End Duty** when finished. Then tap **CSV** or **PDF** under **Daily report**.
 
 **Navigate on a bike:** open **Field Work**, then **Open Biker Mode**, or tap **Navigate** on a job (or **Show the way** in **My jobs**). Do not touch the phone while riding. **Drop Pole Here** uses your real GPS position and says how accurate it was. With no GPS it saves nothing and says so.
@@ -201,7 +203,7 @@ Tap the customer's pin. The box's pop-up card can hide it, so if you cannot find
 
 - Light levels say where they came from. **Estimated**, **Sample data** and **Not recorded** are not readings; only **Measured** is. There is no link to the real machines yet, and screens say **No live connection**
 - Alarms are typed by people, come from the field, or are **TEST**. A customer with no alarm is not proven to be working. A suspected cause is a suspicion, never proof of a cut
-- The **Cable TV** page is labelled "Example values, not your network"; only its customer names are real records
+- The **Cable TV** page shows only recorded items, links and levels. Its level limits are "Proposed: check with your operators": no operator has confirmed them. Levels it works out are estimates, not readings
 - Names typed by staff are not verified, because there is no login
 
 ## Safety, always

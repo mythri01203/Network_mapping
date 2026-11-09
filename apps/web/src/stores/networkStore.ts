@@ -29,6 +29,7 @@ import {
   resolveColorSchemes,
   resolveOpticalSettings,
   resolveOspSettings,
+  resolveRfSettings,
   roleMay,
   type Setting,
   type SyncConflict,
@@ -79,6 +80,9 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   buildings: 'buildings',
   alarms: 'alarms',
   syncConflicts: 'sync_conflicts',
+  rfElements: 'rf_elements',
+  rfLinks: 'rf_links',
+  rfLevels: 'rf_levels',
 };
 
 export const MAX_AUDIT_LOGS = 500;
@@ -104,6 +108,9 @@ const DATA_KEYS = [
   'services',
   'buildings',
   'alarms',
+  'rfElements',
+  'rfLinks',
+  'rfLevels',
 ] as const satisfies readonly (keyof NetworkData)[];
 
 const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
@@ -343,6 +350,7 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       fallbackLocation: state.projectStartPoint ?? undefined,
       optical: selectOpticalSettings(state),
       schemes: selectColorSchemes(state),
+      rf: resolveRfSettings(state.settings),
     });
     if (result.ok) return result;
     showToast(result.error.tone, result.error.title, result.error.message);

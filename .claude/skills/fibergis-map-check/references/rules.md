@@ -117,6 +117,34 @@ A disconnected customer has no path by design, so the customer path rules skip t
 
 A box on a pole at the same spot is normal and is not flagged, because poles are in a different category.
 
+## Cable TV (Phase 6)
+
+These run on `rfElements`, `rfLinks` and `rfLevels` only. No PON, splitter, core or fiber rule runs on an RF item, and a customer with `accessNetwork: 'hfc'` is left out of the PON customer rules. Messages use ids only. Removed links are history and are not counted.
+
+| Rule | Level | Meaning | Basis |
+|---|---|---|---|
+| `rf-link-missing-item` | Must fix | A link names an item that is not on record | Integrity |
+| `rf-link-missing-port` | Must fix | A link names a port the item does not have | Integrity |
+| `rf-link-self` | Must fix | A link joins an item to itself | Integrity |
+| `rf-link-direction` | Must fix | A link does not go from an OUT port to an IN port | Physics |
+| `rf-tap-port-used-twice` | Must fix | One tap drop port feeds more than one house wire | Physics |
+| `rf-port-two-links` | Must fix | One output feeds two places with no splitter or coupler recorded | Physics |
+| `rf-two-feeds` | Must fix | One input has two links into it | Physics |
+| `rf-port-repeated` | Must fix | An item lists one port twice | Integrity |
+| `rf-missing-site` | Must fix | An item's map pin does not exist | Integrity |
+| `rf-missing-customer` | Must fix | A set top box or modem names a customer not on record | Integrity |
+| `rf-level-unit-unknown` | Must fix | A level has no unit, or one that is not dBuV, dBmV or dBm | Integrity |
+| `rf-level-unit-mismatch` | Must fix | A level on a light port is not in dBm | Physics |
+| `rf-level-missing-item` | Must fix | A level is on an item or port not on record | Integrity |
+| `rf-level-calculated-stored` | Must fix | An estimate is stored as a reading | Data truth |
+| `rf-customer-no-headend` | Check these | A customer's set top box or modem has no recorded signal path up to a headend or CMTS (power-only links do not count) | Integrity |
+| `rf-customer-no-device` | Check these | A Cable TV customer has no set top box or modem recorded | Integrity |
+| `rf-device-no-customer` | Check these | A set top box or modem is not linked to a customer | Integrity |
+| `rf-amp-no-power` | Check these | An amplifier has no power source recorded (coax or local) | Integrity |
+| `rf-power-not-recorded` | Check these | A node or mini-node does not say powered or passive | Integrity |
+
+Level windows, cascade limits and estimates are in the app (`packages/shared/src/domain/rfRules.ts`), with values that are all proposed. This script does not repeat them.
+
 ## Ideas not yet built
 
 Mostly blocked by the data model:
@@ -124,5 +152,5 @@ Mostly blocked by the data model:
 - Whole-path core continuity, loss budget per direction, spread on one PON and split-product limits: built in the app (`packages/shared/src/domain/fiberRules.ts` with `trees: true`, and the trace screen); not repeated in this standalone script, which checks each link
 - Span length against a measured length, and long spans
 - Slack expected on long aerial routes (no sourced rule exists; see `fibergis-osp-mapping`)
-- RF rules (`fibergis-cable-tv-mapping`)
+- RF level estimates, level windows and cascade limits: built in the app (`rfRules.ts`), not repeated here
 - Whether a fault's suspected element really explains its alarms: the app works this out from core-level paths (`correlateAlarms`); this script only checks the stored affected list against each customer's own record

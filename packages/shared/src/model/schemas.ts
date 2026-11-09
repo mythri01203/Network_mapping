@@ -711,6 +711,11 @@ export const customerSchema = z.object({
   disconnectedAt: isoDate.optional(),
   disconnectReason: z.string().max(300).optional(),
   history: z.array(historyEntrySchema).optional(),
+  /**
+   * Phase 6. `hfc`: a Cable TV customer on a coax tap port (their path is the RF tree, not a PON
+   * port). Absent means a fiber customer, as before.
+   */
+  accessNetwork: z.enum(['pon', 'hfc']).optional(),
 });
 
 /* ------------------------------------------------------------------ */

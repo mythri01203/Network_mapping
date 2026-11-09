@@ -181,6 +181,8 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
   const unreached: LogicalNode[] = [];
   for (const c of data.customers) {
     if (!isActiveCustomer(c) || reached.has(c.id) || shown.has(c.id)) continue;
+    // Cable TV customers (Phase 6) are on the RF tree, not a PON port: the Cable TV page shows them.
+    if (c.accessNetwork === 'hfc') continue;
     // A customer on a shared ONT that another customer's drop reaches is served through it.
     if (c.ontId && data.customers.some((o) => o.id !== c.id && o.ontId === c.ontId && reached.has(o.id))) continue;
     const trace = traceCustomerCores(c, data, { settings: options.settings, index });

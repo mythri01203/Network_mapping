@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { rfElementSchema, rfLevelSchema, rfLinkSchema } from './rfSchemas';
 import {
   agentTripSchema,
   alarmSchema,
@@ -56,6 +57,9 @@ export const COLLECTION_SCHEMAS = {
   buildings: buildingSchema,
   alarms: alarmSchema,
   syncConflicts: syncConflictSchema,
+  rfElements: rfElementSchema,
+  rfLinks: rfLinkSchema,
+  rfLevels: rfLevelSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

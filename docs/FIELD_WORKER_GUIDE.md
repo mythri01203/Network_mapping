@@ -157,6 +157,19 @@ The app draws the house wire by itself. Do not draw it again. It also marks the 
 3. Every line should be filled. "Not linked" means something is missing.
 4. **Trace service path** names any missing link in red at the top. A path with a missing link never shows a pass. When the office has recorded every fiber, it says **Every fiber recorded** and follows the exact fiber from the machine to the house. Otherwise it says **Cables only** and names the first fiber that is not recorded. That is office work, not yours.
 
+## Cable TV page
+
+Open **Cable TV** in the menu. It shows only what people recorded. Nothing is filled in for you.
+
+- **RF tree**: the TV line from the headend down to each set top box. Pieces no headend reaches are listed with what is missing.
+- **Items**: headend, node, amplifier, tap, set top box and more. Say if a node is powered or passive. Do not guess.
+- **Links**: which OUT port feeds which IN port. One tap port takes one house wire.
+- **Levels**: tap **Record a level**. Choose the **Unit on the meter** (dBµV or dBmV), write the **Level as read**, and fill **Read by** and **Meter**.
+- **TV customers**: tap **Add Cable TV customer** and choose a free tap port.
+- **Checks**: what is wrong or missing.
+
+Every level limit is a guess until your operator checks it. The office changes them in **Administration**, **Cable TV settings**.
+
 ## Move a box or pole
 
 Pins stay put, so a slip of the finger cannot move them. To move one: tap it, open **Tools**, tap **Move this item**, then drag the pin. The cable ends move with it. Tap **Cancel move** to stop.

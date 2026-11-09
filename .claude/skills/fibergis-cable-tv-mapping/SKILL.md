@@ -64,14 +64,11 @@ Port, timestamp, instrument, frequency, level and unit, MER, BER, tilt, technici
 
 ## State of the code
 
-Mostly mock (`docs/AUDIT_REPORT.md` section 5):
+Phase 6 is built from records but **not accepted**. No cable operator was interviewed, so every level is proposed (`docs/IMPLEMENTATION_PLAN.md`, Phase 6).
 
-- `apps/web/src/features/cable-tv/CableTVView.tsx` shows hard-coded values and ignores CATV equipment
-- Node panel values are hard-coded (`EquipmentInspector.tsx:140-171`)
-- `rfLevelDbf` is stored but never read, and no unit is declared. The name implies dBf (11.25 dB from dBµV at 75 Ω), but sample values of 95–105 look like dBµV
-- The "Real-time" subscriber tab shows a fixed 66.4 dBµV (`CableTVView.tsx:426,461`)
-- No EDFA, WDM or mini-node equipment type exists, and `wavelengthNm` is per port, not a list on a fiber span
-- Cable TV customers go through the PON splitter form
-- No RF loss model exists
-
-Do not build on the mock values. Replace them with real records or "Not recorded".
+- Records: `packages/shared/src/model/rfSchemas.ts` (`rfElements`, `rfLinks`, `rfLevels`), kept apart from PON. EDFA, WDM, mini-node, tap, power inserter, set top box and modem are kinds; fiber links carry a wavelength list
+- Rules: `domain/rfRules.ts`, `rfTree.ts`, `rfLevels.ts`, `rfUnits.ts`. The server runs the same errors (`apps/server/src/lib/linkGuard.ts`) and on restore. No PON rule touches RF items
+- Settings: `domain/rfSettings.ts`, edited in Administration, Cable TV settings (`apps/web/src/features/admin/RfSettingsPanel.tsx`). Only dBµV = dBmV + 60 is a constant
+- Page: `apps/web/src/features/cable-tv/` with tabs RF tree, Items, Links, Levels, TV customers, Checks. TV customers are `accessNetwork: 'hfc'` on a tap drop port, not the PON splitter form
+- Map check: `rf-*` rules in `fibergis-map-check`
+- Still old: the map's node panel (`EquipmentInspector.tsx`) shows labelled example values and the legacy `rfLevelDbf` field (no unit). Do not build on them

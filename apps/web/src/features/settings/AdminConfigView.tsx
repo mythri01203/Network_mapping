@@ -9,12 +9,13 @@ import { useUiStore } from '../../stores/uiStore';
 import { BackupRestorePanel } from '../admin/BackupRestorePanel';
 import { FaultSettingsPanel, FieldSettingsPanel, OspSettingsPanel } from '../admin/FieldSettingsPanel';
 import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
+import { RfSettingsPanel } from '../admin/RfSettingsPanel';
 import { UsersPanel } from '../admin/UsersPanel';
 
 export const AdminConfigView: React.FC = () => {
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
-  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'audit_logs' | 'backup'>('roles');
+  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'cable_tv' | 'audit_logs' | 'backup'>('roles');
   const [auditSearch, setAuditSearch] = useState('');
 
   const filteredLogs = auditLogs.filter(
@@ -91,6 +92,15 @@ export const AdminConfigView: React.FC = () => {
             }`}
           >
             Fault checks settings
+          </button>
+          <button
+            onClick={() => setActiveTab('cable_tv')}
+            data-testid="admin-cable-tv-tab"
+            className={`px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'cable_tv' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Cable TV settings
           </button>
           <button
             onClick={() => setActiveTab('audit_logs')}
@@ -177,6 +187,7 @@ export const AdminConfigView: React.FC = () => {
         {activeTab === 'field' && <FieldSettingsPanel />}
         {activeTab === 'routes' && <OspSettingsPanel />}
         {activeTab === 'faults' && <FaultSettingsPanel />}
+        {activeTab === 'cable_tv' && <RfSettingsPanel />}
 
         {/* Tab 3: Audit Logs */}
         {activeTab === 'audit_logs' && (

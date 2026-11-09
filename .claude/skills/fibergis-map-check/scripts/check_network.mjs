@@ -86,7 +86,9 @@ export function checkNetwork(data, limits = DEFAULT_LIMITS, today = new Date().t
   const cables = data.cables ?? [];
   const splitters = data.splitters ?? [];
   const closures = data.closures ?? [];
-  const customers = data.customers ?? [];
+  const allCustomers = data.customers ?? [];
+  // Phase 6: a Cable TV (hfc) customer's path is the RF tree. No PON or fiber rule is applied to it.
+  const customers = allCustomers.filter((c) => c.accessNetwork !== 'hfc');
   const faults = data.faults ?? [];
   const workOrders = data.workOrders ?? [];
   const spans = data.spans ?? [];
@@ -98,7 +100,7 @@ export function checkNetwork(data, limits = DEFAULT_LIMITS, today = new Date().t
   const equipmentById = new Map(equipment.map((e) => [e.id, e]));
   const cableById = new Map(cables.map((c) => [c.id, c]));
   const splitterById = new Map(splitters.map((s) => [s.id, s]));
-  const customerById = new Map(customers.map((c) => [c.id, c]));
+  const customerById = new Map(allCustomers.map((c) => [c.id, c]));
   const used = new Set();
 
   // --- Cables ---
@@ -672,6 +674,7 @@ export function checkNetwork(data, limits = DEFAULT_LIMITS, today = new Date().t
   }
 
   checkFaults(data, add, { equipmentById, cableById, splitterById, customerById, faultById });
+  checkCableTv(data, add, { equipmentById, customerById });
 
   return findings;
 }
@@ -811,12 +814,145 @@ function checkFaults(data, add, { equipmentById, cableById, splitterById, custom
   }
 }
 
+const RF_ROOT_KINDS = ['headend', 'cmts'];
+const RF_DEVICE_KINDS = ['stb', 'cable_modem'];
+const RF_UNITS = ['dBuV', 'dBmV', 'dBm'];
+
+/**
+ * Phase 6: Cable TV / HFC records (rfElements, rfLinks, rfLevels). Ids only in messages, never names.
+ * Only RF rules run here: no PON splitter, core or fiber rule is applied to an RF item, and Cable TV
+ * (hfc) customers are left out of the PON customer rules above. A link exists only when recorded.
+ */
+function checkCableTv(data, add, { equipmentById, customerById }) {
+  const elements = data.rfElements ?? [];
+  const links = (data.rfLinks ?? []).filter((l) => l.status !== 'removed');
+  const levels = data.rfLevels ?? [];
+  if (elements.length === 0 && links.length === 0 && levels.length === 0 && !(data.customers ?? []).some((c) => c.accessNetwork === 'hfc')) return;
+  const byId = new Map(elements.map((e) => [e.id, e]));
+  const portOf = (el, portId) => (el?.ports ?? []).find((p) => p.id === portId);
+  const portName = (ref) => `${ref.elementId} port ${ref.portId}`;
+
+  for (const el of elements) {
+    const ids = (el.ports ?? []).map((p) => p.id);
+    if (new Set(ids).size !== ids.length) add('error', 'rf-port-repeated', el.id, `Cable TV item ${el.id} lists one port twice.`);
+    if (!isBlank(el.siteEquipmentId) && !equipmentById.has(el.siteEquipmentId)) {
+      add('error', 'rf-missing-site', el.id, `Cable TV item ${el.id} is placed at pin ${el.siteEquipmentId}, which does not exist.`);
+    }
+    if (!isBlank(el.customerId) && !customerById.has(el.customerId)) {
+      add('error', 'rf-missing-customer', el.id, `Cable TV item ${el.id} names customer ${el.customerId}, who is not on record.`);
+    }
+    if (el.kind === 'rf_amplifier' && (isBlank(el.powerFeed) || el.powerFeed === 'unknown')) {
+      add('warning', 'rf-amp-no-power', el.id, `Amplifier ${el.id}: no power source recorded (over the coax or a local supply).`);
+    }
+    if ((el.kind === 'optical_node' || el.kind === 'mini_node') && typeof el.powered !== 'boolean') {
+      add('warning', 'rf-power-not-recorded', el.id, `Cable TV item ${el.id}: powered or passive is not recorded.`);
+    }
+    if (RF_DEVICE_KINDS.includes(el.kind) && isBlank(el.customerId)) {
+      add('warning', 'rf-device-no-customer', el.id, `Cable TV device ${el.id} is not linked to a customer.`);
+    }
+  }
+
+  const into = new Map();
+  const outOf = new Map();
+  const push = (map, key, link) => map.set(key, [...(map.get(key) ?? []), link]);
+  const good = [];
+  for (const link of links) {
+    const from = byId.get(link.from?.elementId);
+    const to = byId.get(link.to?.elementId);
+    if (!from || !to) {
+      const missing = !from ? link.from?.elementId : link.to?.elementId;
+      add('error', 'rf-link-missing-item', link.id, `Cable TV link ${link.id} names item ${missing ?? '(none)'}, which is not on record.`);
+      continue;
+    }
+    const fp = portOf(from, link.from.portId);
+    const tp = portOf(to, link.to.portId);
+    if (!fp || !tp) {
+      add('error', 'rf-link-missing-port', link.id, `Cable TV link ${link.id} names ${portName(!fp ? link.from : link.to)}, which is not on that item.`);
+      continue;
+    }
+    if (from.id === to.id) add('error', 'rf-link-self', link.id, `Cable TV link ${link.id} joins item ${from.id} to itself.`);
+    if (fp.direction !== 'out' || tp.direction !== 'in') {
+      add('error', 'rf-link-direction', link.id, `Cable TV link ${link.id} must go from an OUT port to an IN port (${portName(link.from)} to ${portName(link.to)}).`);
+    }
+    push(into, `${to.id}/${tp.id}`, link);
+    push(outOf, `${from.id}/${fp.id}`, link);
+    good.push(link);
+  }
+  for (const [key, list] of outOf) {
+    if (list.length < 2) continue;
+    const [elementId, portId] = [list[0].from.elementId, list[0].from.portId];
+    const isTapDrop = byId.get(elementId)?.kind === 'tap' && portOf(byId.get(elementId), portId)?.role === 'drop';
+    const ids = list.map((l) => l.id).join(', ');
+    if (isTapDrop) add('error', 'rf-tap-port-used-twice', key, `Tap port ${key} feeds ${list.length} house wires (${ids}). One tap port takes one house wire.`);
+    else add('error', 'rf-port-two-links', key, `Cable TV port ${key} feeds ${list.length} places (${ids}). Record a splitter or coupler between them.`);
+  }
+  for (const [key, list] of into) {
+    if (list.length > 1) add('error', 'rf-two-feeds', key, `Cable TV input ${key} has ${list.length} links into it (${list.map((l) => l.id).join(', ')}). One input takes one feed.`);
+  }
+  checkCableTvPaths(data, add, { elements, byId, good, portOf });
+}
+
+/** Cable TV customers need a recorded path up to a headend; levels need a known RF unit. */
+function checkCableTvPaths(data, add, { elements, byId, good, portOf }) {
+  // Signal links only: a power-only link carries no TV signal.
+  const feeds = new Map();
+  for (const link of good) {
+    if (link.medium === 'power') continue;
+    feeds.set(link.to.elementId, [...(feeds.get(link.to.elementId) ?? []), link.from.elementId]);
+  }
+  const reachesHeadend = (startId) => {
+    const seen = new Set([startId]);
+    const queue = [startId];
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (RF_ROOT_KINDS.includes(byId.get(id)?.kind)) return true;
+      for (const up of feeds.get(id) ?? []) {
+        if (!seen.has(up)) {
+          seen.add(up);
+          queue.push(up);
+        }
+      }
+    }
+    return false;
+  };
+  for (const el of elements) {
+    if (!RF_DEVICE_KINDS.includes(el.kind) || isBlank(el.customerId)) continue;
+    if (!reachesHeadend(el.id)) {
+      add('warning', 'rf-customer-no-headend', el.id, `Customer ${el.customerId}: device ${el.id} has no recorded path up to a headend. Record the links from its tap upwards.`);
+    }
+  }
+  for (const c of data.customers ?? []) {
+    if (c.accessNetwork !== 'hfc' || c.status === 'Disconnected') continue;
+    if (!elements.some((e) => RF_DEVICE_KINDS.includes(e.kind) && e.customerId === c.id)) {
+      add('warning', 'rf-customer-no-device', c.id, `Cable TV customer ${c.id} has no set top box or modem recorded.`);
+    }
+  }
+
+  for (const level of data.rfLevels ?? []) {
+    if (isBlank(level.unit) || !RF_UNITS.includes(level.unit)) {
+      add('error', 'rf-level-unit-unknown', level.id, `Cable TV level ${level.id}: unit ${isBlank(level.unit) ? 'is missing' : `"${level.unit}" is not dBuV, dBmV or dBm`}, so the number cannot be read.`);
+    }
+    const el = byId.get(level.elementId);
+    const port = portOf(el, level.portId);
+    if (!el || !port) {
+      add('error', 'rf-level-missing-item', level.id, `Cable TV level ${level.id} is on ${!el ? `item ${level.elementId}` : `port ${level.portId} of ${level.elementId}`}, which is not on record.`);
+      continue;
+    }
+    if (port.signal === 'optical' && RF_UNITS.includes(level.unit) && level.unit !== 'dBm') {
+      add('error', 'rf-level-unit-mismatch', level.id, `Cable TV level ${level.id} is on a light port, so it is in dBm, not ${level.unit}.`);
+    }
+    if (level.origin === 'calculated') {
+      add('error', 'rf-level-calculated-stored', level.id, `Cable TV level ${level.id} is stored as calculated. Estimates are worked out on the page, never stored as readings.`);
+    }
+  }
+}
+
 const SEVERITY_ORDER = ['error', 'warning', 'note'];
 const SEVERITY_TITLE = { error: 'MUST FIX', warning: 'CHECK THESE', note: 'GOOD TO KNOW' };
 
 export function formatReport(findings, data, limit = 10) {
   const lines = [];
-  const counts = ['equipment', 'cables', 'splitters', 'closures', 'customers', 'spans', 'attachments', 'ducts', 'onts', 'services', 'buildings', 'alarms', 'faults', 'workOrders']
+  const counts = ['equipment', 'cables', 'splitters', 'closures', 'customers', 'spans', 'attachments', 'ducts', 'onts', 'services', 'buildings', 'alarms', 'faults', 'workOrders', 'rfElements', 'rfLinks', 'rfLevels']
     .map((name) => `${(data[name] ?? []).length} ${name}`)
     .join(', ');
   lines.push(`Checked: ${counts}.`);

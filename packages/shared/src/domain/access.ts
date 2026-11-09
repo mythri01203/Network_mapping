@@ -116,6 +116,9 @@ const COLLECTION_WORDS: Partial<Record<CollectionName, string>> = {
   spans: 'span',
   alarms: 'alarm',
   syncConflicts: 'conflict record',
+  rfElements: 'Cable TV item',
+  rfLinks: 'Cable TV link',
+  rfLevels: 'Cable TV level',
 };
 
 const word = (collection: CollectionName) => COLLECTION_WORDS[collection] ?? collection;
@@ -172,7 +175,7 @@ export function roleCan(role: AccountRole, action: AccessAction, collection: Col
       return collection === 'documents' || PERSONAL.includes(collection);
     case 'technician':
       if (PERSONAL.includes(collection)) return true;
-      if (action === 'create') return ['equipment', 'faults', 'spans', 'alarms'].includes(collection);
+      if (action === 'create') return ['equipment', 'faults', 'spans', 'alarms', 'rfLevels'].includes(collection);
       if (action === 'update') return ['workOrders', 'customers', 'equipment', 'faults', 'spans'].includes(collection);
       return ['equipment', 'faults', 'spans'].includes(collection);
     case 'viewer':
@@ -208,6 +211,12 @@ function technicianProblem(account: Account, collection: CollectionName, id: str
   if (PERSONAL.includes(collection)) return null;
   if (action === 'create') {
     if (collection === 'alarms') return after?.source === 'field_report' ? null : refuse(collection, id, action, 'From the phone you can report a problem, not add an office alarm. Nothing was changed.');
+    // Phase 6: a Cable TV level read on site, with the meter photo.
+    if (collection === 'rfLevels') {
+      return after?.origin === 'field_measured' && typeof after.photoId === 'string'
+        ? null
+        : refuse(collection, id, action, 'From the field you can record a level you read on the meter, with a photo of the meter. Nothing was saved.');
+    }
     if (isFieldCapture(collection, after)) return null;
     return refuse(collection, id, action, `Technicians add items with Field capture only. ${id} was not added. Use the Field capture screen, or ask the office.`);
   }
