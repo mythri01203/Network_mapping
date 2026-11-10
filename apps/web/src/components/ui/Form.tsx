@@ -4,8 +4,8 @@ import { ChevronDown, Search, X } from 'lucide-react';
 import { cn } from './cn';
 
 const CONTROL_BASE =
-  'w-full rounded-md border border-slate-300 bg-white text-[13px] text-slate-900 placeholder:text-slate-400 transition-colors ' +
-  'hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ' +
+  'w-full rounded-lg border border-slate-200 bg-white text-[13px] text-slate-900 placeholder:text-slate-400 shadow-xs transition-[border-color,box-shadow] duration-150 ' +
+  'hover:border-slate-300 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/15 ' +
   'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500';
 
 const CONTROL_SIZES = {

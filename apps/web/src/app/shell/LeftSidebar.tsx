@@ -213,14 +213,16 @@ export const LeftSidebar: React.FC = () => {
       onBlur: hideTip,
       'aria-label': collapsed ? item.label : undefined,
       className: cn(
-        'group relative flex w-full items-center rounded-md text-[13px] transition-colors',
+        'group relative flex w-full items-center rounded-lg text-[13px] transition-[background-color,color,box-shadow] duration-150',
         collapsed ? 'h-9 justify-center' : 'h-[48px] gap-2.5 px-2.5 md:h-8',
-        item.active ? 'bg-blue-50 font-medium text-blue-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+        item.active
+          ? 'bg-gradient-to-r from-blue-50 to-indigo-50/60 font-semibold text-blue-700 shadow-xs ring-1 ring-blue-100'
+          : 'text-slate-600 hover:bg-slate-900/[0.04] hover:text-slate-900',
       ),
     };
     const content = (
       <>
-        {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600" />}
+        {item.active && <span className="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-gradient-to-b from-blue-500 to-indigo-600" />}
         <Icon
           size={collapsed ? 18 : 16}
           strokeWidth={1.8}
@@ -277,7 +279,7 @@ export const LeftSidebar: React.FC = () => {
     <nav
       aria-label="Primary"
       className={cn(
-        'flex-col border-r border-slate-200 bg-white transition-[width] duration-150 md:relative md:z-[900] md:flex md:h-full md:shrink-0',
+        'flex-col border-r border-slate-200/80 bg-white/95 backdrop-blur-sm transition-[width] duration-150 md:relative md:z-[900] md:flex md:h-full md:shrink-0',
         menuOpen ? 'fixed bottom-0 left-0 top-12 z-[1090] flex w-72 shadow-2xl md:static md:shadow-none' : 'hidden',
         collapsed ? 'md:w-14' : 'md:w-56',
       )}
@@ -298,9 +300,9 @@ export const LeftSidebar: React.FC = () => {
               aria-expanded={open}
               aria-label="Create"
               className={cn(
-                'flex w-full items-center justify-center rounded-md bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-700',
-                collapsed ? 'h-9' : 'h-[48px] gap-2 text-[13px] font-medium md:h-8',
-                open && 'bg-blue-700',
+                'ui-brand flex w-full items-center justify-center rounded-lg bg-blue-600 text-white transition-[filter,box-shadow] duration-150',
+                collapsed ? 'h-9' : 'h-[48px] gap-2 text-[13px] font-semibold md:h-8',
+                open && 'brightness-95',
               )}
             >
               <Plus size={collapsed ? 18 : 16} strokeWidth={2.2} />

@@ -25,7 +25,7 @@ export function Badge({ tone = 'neutral', dot = false, size = 'sm', className, c
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded font-medium ring-1 ring-inset',
+        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-medium ring-1 ring-inset',
         size === 'sm' ? 'h-5 px-1.5 text-[11px]' : 'h-6 px-2 text-xs',
         t.badge,
         className,

@@ -271,7 +271,7 @@ export const TopNavBar: React.FC = () => {
   let lastKind: ResultKind | null = null;
 
   return (
-    <header className="relative z-[1100] flex h-12 shrink-0 items-center gap-2 border-b border-slate-950 bg-slate-900 pl-1 pr-1 text-slate-300 md:gap-3 md:pl-3 md:pr-2">
+    <header className="ui-topbar relative z-[1100] flex h-12 shrink-0 items-center gap-2 border-b border-slate-950 bg-slate-900 pl-1 pr-1 text-slate-300 md:gap-3 md:pl-3 md:pr-2">
       <button
         type="button"
         aria-label="Open menu"
@@ -287,17 +287,19 @@ export const TopNavBar: React.FC = () => {
           className="flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 text-white"
           aria-label="FiberGIS home"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600">
+          <span className="ui-brand flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 ring-1 ring-white/15">
             <Waypoints size={16} strokeWidth={2.2} />
           </span>
-          <span className="hidden text-[14px] font-semibold tracking-tight sm:inline">FiberGIS</span>
+          <span className="hidden text-[14px] font-semibold tracking-tight sm:inline">
+            Fiber<span className="text-blue-300">GIS</span>
+          </span>
         </Link>
-        <span className="hidden h-5 w-px bg-slate-700 md:block" />
+        <span className="hidden h-5 w-px bg-white/10 md:block" />
         <div className="hidden min-w-0 items-center gap-2 md:flex">
-          <view.icon size={15} strokeWidth={1.9} className="shrink-0 text-slate-400" />
+          <view.icon size={15} strokeWidth={1.9} className="shrink-0 text-blue-300/80" />
           <span className="truncate text-[13px] font-medium text-slate-100">{view.label}</span>
           {uiMode === 'simple' && (
-            <span className="rounded border border-slate-600 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            <span className="rounded-md border border-blue-400/30 bg-blue-500/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-blue-200">
               Simple
             </span>
           )}
@@ -308,10 +310,10 @@ export const TopNavBar: React.FC = () => {
       <div ref={searchBoxRef} className="relative mx-auto w-full max-w-xl min-w-0 flex-1">
         <div
           className={cn(
-            'flex h-10 items-center gap-2 rounded-md border px-2.5 transition-colors md:h-8',
+            'flex h-10 items-center gap-2 rounded-lg border px-2.5 transition-[background-color,border-color,box-shadow] duration-150 md:h-8',
             open
-              ? 'border-blue-500 bg-white text-slate-900'
-              : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600',
+              ? 'border-blue-500 bg-white text-slate-900 ring-4 ring-blue-500/20'
+              : 'border-white/10 bg-white/[0.06] text-slate-300 hover:border-white/20 hover:bg-white/[0.09]',
           )}
         >
           <Search size={15} strokeWidth={2} className={open ? 'text-slate-400' : 'text-slate-500'} />
@@ -367,7 +369,7 @@ export const TopNavBar: React.FC = () => {
           <div
             id="global-search-results"
             role="listbox"
-            className="animate-pop-in absolute left-0 right-0 top-full mt-1.5 max-h-[70vh] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-slate-700 shadow-[var(--shadow-overlay)]"
+            className="animate-pop-in absolute left-0 right-0 top-full mt-1.5 max-h-[70vh] overflow-y-auto rounded-xl border border-slate-200/80 bg-white py-1 text-slate-700 shadow-[var(--shadow-overlay)]"
           >
             {results.length === 0 ? (
               <div className="px-4 py-6 text-center text-[13px] text-slate-500">

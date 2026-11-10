@@ -10,8 +10,34 @@
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
 
-  --shadow-overlay: 0 10px 38px -10px rgb(15 23 42 / 0.25), 0 10px 20px -15px rgb(15 23 42 / 0.2);
-  --shadow-panel: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.08);
+  /*
+   * Visual system (UI redesign, November 2026). Only looks change here: corner rounding, shadows
+   * and surface colours. Sizes, spacing and positions are untouched, so nothing moves, and the
+   * equipment icons and map pins keep their own fixed colours.
+   */
+  --radius-sm: 0.3125rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+
+  /* Soft, layered shadows tinted with the ink colour instead of flat grey. */
+  --shadow-2xs: 0 1px 0 0 rgb(15 23 42 / 0.04);
+  --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 0 0 1px rgb(15 23 42 / 0.015);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.07);
+  --shadow-md: 0 2px 4px -1px rgb(15 23 42 / 0.06), 0 4px 10px -2px rgb(15 23 42 / 0.09);
+  --shadow-lg: 0 4px 8px -2px rgb(15 23 42 / 0.06), 0 12px 24px -6px rgb(15 23 42 / 0.14);
+  --shadow-xl: 0 8px 16px -4px rgb(15 23 42 / 0.08), 0 20px 40px -8px rgb(15 23 42 / 0.18);
+  --shadow-2xl: 0 24px 56px -12px rgb(15 23 42 / 0.3);
+  --shadow-overlay: 0 0 0 1px rgb(15 23 42 / 0.05), 0 12px 32px -8px rgb(15 23 42 / 0.24), 0 4px 10px -4px rgb(15 23 42 / 0.12);
+  --shadow-panel: 0 0 0 1px rgb(15 23 42 / 0.04), 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+
+  /* Surfaces: a cool canvas behind white cards, and the deep navy of the top bar. */
+  --color-canvas: #f2f5fa;
+  --color-ink: #0b1220;
+  --color-ink-2: #121b2f;
+  --color-brand-from: #3b82f6;
+  --color-brand-to: #4f46e5;
 }
 
 /* ------------------------------------------------------------------ */
@@ -24,7 +50,8 @@
     font-size: 13px;
     line-height: 1.45;
     color: var(--color-slate-800);
-    background: var(--color-slate-100);
+    background: var(--color-canvas);
+    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv11', 'ss01';
@@ -41,7 +68,13 @@
 
   :focus-visible {
     outline: 2px solid var(--color-blue-500);
-    outline-offset: 1px;
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.011em;
   }
 
   input:focus-visible,
@@ -74,11 +107,12 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--color-slate-50);
+    background: color-mix(in srgb, var(--color-slate-50) 92%, white);
+    backdrop-filter: blur(6px);
     color: var(--color-slate-500);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     text-align: left;
     padding: 8px 12px;
@@ -91,14 +125,74 @@
     color: var(--color-slate-700);
     vertical-align: middle;
   }
+  .ui-table tbody tr td {
+    transition: background-color 120ms ease-out;
+  }
   .ui-table tbody tr:hover td {
-    background: var(--color-slate-50);
+    background: color-mix(in srgb, var(--color-blue-50) 55%, white);
   }
   .ui-table tbody tr[data-selected='true'] td {
     background: var(--color-blue-50);
+    box-shadow: inset 0 -1px 0 var(--color-blue-100);
   }
   .ui-table tbody tr:last-child td {
     border-bottom: 0;
+  }
+
+  /* Floating map tools and panels: frosted white with a soft edge. */
+  .ui-glass {
+    background: rgb(255 255 255 / 0.9);
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  /* Primary actions: a gentle brand gradient with a light top edge. */
+  .ui-brand {
+    background-image: linear-gradient(180deg, var(--color-brand-from), color-mix(in srgb, var(--color-brand-from) 40%, var(--color-brand-to)));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      0 1px 2px rgb(30 64 175 / 0.3),
+      0 2px 6px -1px rgb(37 99 235 / 0.35);
+  }
+  .ui-brand:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  /*
+   * App-wide polish for screens that style their own boxes, fields and buttons. Written with
+   * :where() inside this layer so any utility on the element (its own shadow, colour or ring)
+   * still wins; nothing here changes a size or position. Map pins are not buttons or cards, so
+   * the equipment icons are untouched.
+   */
+  :where(.bg-white.border.rounded-xl, .bg-white.border.rounded-2xl, .bg-white.border.rounded-lg) {
+    box-shadow: var(--shadow-xs);
+  }
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']), select, textarea) {
+    transition:
+      border-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']), select, textarea):focus {
+    border-color: var(--color-blue-500);
+    box-shadow: 0 0 0 4px rgb(59 130 246 / 0.15);
+  }
+  :where(button.bg-blue-600:not(:disabled), a.bg-blue-600) {
+    background-image: linear-gradient(180deg, var(--color-brand-from), color-mix(in srgb, var(--color-brand-from) 40%, var(--color-brand-to)));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.2),
+      0 1px 2px rgb(30 64 175 / 0.25);
+  }
+  :where(button.bg-blue-600:not(:disabled), a.bg-blue-600):hover {
+    filter: brightness(1.06);
+  }
+
+  /* The navy top bar. */
+  .ui-topbar {
+    background-image: linear-gradient(90deg, var(--color-ink), var(--color-ink-2) 60%, #16213b);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 0.06),
+      0 1px 3px rgb(2 6 23 / 0.3);
   }
 }
 
@@ -117,7 +211,7 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-slate-300);
+  background: color-mix(in srgb, var(--color-slate-400) 55%, transparent);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -190,10 +284,12 @@
 
 .leaflet-bar,
 .leaflet-control-layers {
-  border: 1px solid var(--color-slate-200) !important;
-  border-radius: 6px !important;
-  box-shadow: var(--shadow-panel) !important;
+  border: 1px solid rgb(15 23 42 / 0.08) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-overlay) !important;
   overflow: hidden;
+  background: rgb(255 255 255 / 0.94) !important;
+  backdrop-filter: blur(8px);
 }
 .leaflet-bar a,
 .leaflet-bar a:hover {
@@ -201,11 +297,15 @@
   height: 30px !important;
   line-height: 30px !important;
   color: var(--color-slate-600) !important;
-  border-bottom-color: var(--color-slate-200) !important;
+  background: transparent !important;
+  border-bottom-color: rgb(15 23 42 / 0.07) !important;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
 }
 .leaflet-bar a:hover {
-  background: var(--color-slate-50) !important;
-  color: var(--color-slate-900) !important;
+  background: var(--color-blue-50) !important;
+  color: var(--color-blue-700) !important;
 }
 .leaflet-control-attribution {
   font-size: 10px !important;
@@ -220,8 +320,8 @@
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 8px !important;
-  border: 1px solid var(--color-slate-200);
+  border-radius: 14px !important;
+  border: 1px solid rgb(15 23 42 / 0.07);
   box-shadow: var(--shadow-overlay) !important;
 }
 .leaflet-popup-content {
@@ -238,12 +338,12 @@
 .leaflet-tooltip.gis-tooltip {
   background: #fff;
   color: var(--color-slate-700);
-  border: 1px solid var(--color-slate-200);
-  border-radius: 6px;
+  border: 1px solid rgb(15 23 42 / 0.07);
+  border-radius: 8px;
   padding: 5px 8px;
   font-size: 11px;
   line-height: 1.35;
-  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.18);
+  box-shadow: var(--shadow-overlay);
 }
 .leaflet-tooltip-top.gis-tooltip::before {
   border-top-color: #fff;

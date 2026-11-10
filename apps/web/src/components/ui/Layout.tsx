@@ -7,7 +7,7 @@ import { cn } from './cn';
 
 export function Card({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('rounded-lg border border-slate-200 bg-white', className)} {...rest}>
+    <div className={cn('rounded-xl border border-slate-200/80 bg-white shadow-xs', className)} {...rest}>
       {children}
     </div>
   );
@@ -23,8 +23,8 @@ export interface CardHeaderProps {
 
 export function CardHeader({ title, description, icon: Icon, actions, className }: CardHeaderProps) {
   return (
-    <div className={cn('flex items-center gap-3 border-b border-slate-200 px-4 py-3', className)}>
-      {Icon && <Icon size={16} strokeWidth={1.9} className="shrink-0 text-slate-500" />}
+    <div className={cn('flex items-center gap-3 border-b border-slate-100 px-4 py-3', className)}>
+      {Icon && <Icon size={16} strokeWidth={1.9} className="shrink-0 text-blue-600" />}
       <div className="min-w-0 flex-1">
         <h3 className="truncate text-[13px] font-semibold text-slate-900">{title}</h3>
         {description && <p className="mt-0.5 truncate text-xs text-slate-500">{description}</p>}
@@ -55,10 +55,10 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, description, icon: Icon, actions, children, className }: PageHeaderProps) {
   return (
-    <div className={cn('shrink-0 border-b border-slate-200 bg-white px-6', className)}>
+    <div className={cn('shrink-0 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-sm', className)}>
       <div className="flex min-h-16 items-center gap-3 py-3">
         {Icon && (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-gradient-to-b from-blue-50 to-indigo-50 text-blue-700 shadow-xs">
             <Icon size={18} strokeWidth={1.8} />
           </div>
         )}
@@ -119,8 +119,8 @@ export function StatTile({ label, value, icon: Icon, hint, tone = 'default', cla
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left',
-        onClick && 'transition-colors hover:border-slate-300 hover:bg-slate-50',
+        'flex flex-col gap-1 rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-left shadow-xs',
+        onClick && 'transition-[border-color,box-shadow] duration-150 hover:border-blue-200 hover:shadow-md',
         className,
       )}
     >
@@ -157,7 +157,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
       {Icon && (
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-slate-100 text-slate-400',
+            'flex items-center justify-center rounded-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-400 ring-1 ring-slate-200/70',
             compact ? 'h-8 w-8' : 'h-10 w-10',
           )}
         >

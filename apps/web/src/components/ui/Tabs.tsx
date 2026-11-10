@@ -35,7 +35,7 @@ export function Tabs<T extends string = string>({
       <div
         role="tablist"
         className={cn(
-          'inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5',
+          'inline-flex rounded-lg border border-slate-200/80 bg-slate-100/80 p-0.5',
           fullWidth && 'flex w-full',
           className,
         )}
@@ -52,7 +52,7 @@ export function Tabs<T extends string = string>({
               disabled={item.disabled}
               onClick={() => onChange(item.id)}
               className={cn(
-                'inline-flex items-center justify-center gap-1.5 rounded-[5px] font-medium transition-colors disabled:opacity-40',
+                'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-[background-color,color,box-shadow] duration-150 disabled:opacity-40',
                 size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-3 text-xs',
                 fullWidth && 'flex-1',
                 active

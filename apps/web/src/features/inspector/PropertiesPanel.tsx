@@ -140,7 +140,7 @@ function InspectorBody({ selection, detailed }: { selection: SelectedObject; det
 
 /** A side panel from 768 px up. Below that, a full-screen sheet over the map. */
 const PANEL_CLASS =
-  'fixed inset-0 z-[1050] flex w-full flex-col bg-white md:static md:z-20 md:w-[22rem] md:shrink-0 md:border-l md:border-slate-200';
+  'fixed inset-0 z-[1050] flex w-full flex-col bg-white md:static md:z-20 md:w-[22rem] md:shrink-0 md:border-l md:border-slate-200/80 md:shadow-[-8px_0_24px_-16px_rgb(15_23_42/0.18)]';
 
 /** Right-hand inspector for whatever is selected on the map. */
 export function PropertiesPanel() {

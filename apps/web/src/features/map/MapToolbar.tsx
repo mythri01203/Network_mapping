@@ -368,7 +368,7 @@ function CablePicker({ onPick, className }: { onPick: (t: CableType) => void; cl
   return (
     <div
       className={cn(
-        'animate-pop-in z-[1500] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-[var(--shadow-overlay)]',
+        'animate-pop-in z-[1500] rounded-xl border border-slate-200/70 bg-white/95 p-1.5 text-slate-700 shadow-[var(--shadow-overlay)] backdrop-blur-md',
         className,
       )}
     >
@@ -504,7 +504,7 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
       ref={rootRef}
       className="absolute inset-x-0 bottom-0 z-[450] md:inset-x-auto md:bottom-auto md:left-1/2 md:top-3 md:-translate-x-1/2"
     >
-      <div className="no-scrollbar flex items-center gap-0.5 overflow-x-auto border-t border-slate-200 bg-white p-1 shadow-[0_-4px_16px_-6px_rgb(15_23_42/0.25)] md:overflow-visible md:rounded-lg md:border md:border-slate-200/90 md:bg-white/95 md:shadow-[0_1px_2px_rgb(15_23_42/0.06),0_8px_24px_-6px_rgb(15_23_42/0.18)] md:backdrop-blur">
+      <div className="no-scrollbar flex items-center gap-0.5 overflow-x-auto border-t border-slate-200 bg-white p-1 shadow-[0_-4px_16px_-6px_rgb(15_23_42/0.25)] md:overflow-visible md:rounded-xl md:border md:border-white/60 md:bg-white/90 md:shadow-[var(--shadow-overlay)] md:ring-1 md:ring-slate-900/5 md:backdrop-blur-md md:backdrop-saturate-150">
         {/* Phone only: the simple field flow for poles, boxes, drops, light levels and danger. */}
         <Link
           to="/capture"
@@ -687,7 +687,7 @@ export function MapModeBar({
 
   return (
     <div className="animate-pop-in absolute inset-x-2 top-2 z-[440] md:inset-x-auto md:left-1/2 md:top-[64px] md:-translate-x-1/2">
-      <div className="flex flex-col gap-2 rounded-lg bg-slate-900/95 py-1.5 pl-3 pr-1.5 text-white shadow-xl ring-1 ring-black/10 backdrop-blur md:flex-row md:items-center md:gap-3">
+      <div className="flex flex-col gap-2 rounded-xl bg-slate-900/90 py-1.5 pl-3 pr-1.5 text-white shadow-xl ring-1 ring-white/10 backdrop-blur-md md:flex-row md:items-center md:gap-3">
         <div className="flex items-center gap-2.5">
           {activeTool === 'draw_cable' && <CableSwatch type={selectedCableTypeToDraw} />}
           {activeTool === 'measure' && <Ruler className="h-4 w-4 text-amber-300" />}

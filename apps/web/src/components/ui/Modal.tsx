@@ -88,7 +88,7 @@ export function Modal({
         if (closeOnOverlayClick && e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="animate-fade-in pointer-events-none absolute inset-0 bg-slate-900/40" aria-hidden />
+      <div className="animate-fade-in pointer-events-none absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
@@ -96,14 +96,14 @@ export function Modal({
         aria-labelledby={`${id}-title`}
         tabIndex={-1}
         className={cn(
-          'animate-pop-in relative flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[var(--shadow-overlay)] outline-none',
+          'animate-pop-in relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-2xl outline-none',
           SIZE_CLASSES[size],
           className,
         )}
       >
-        <div className="flex shrink-0 items-start gap-3 border-b border-slate-200 px-5 py-3.5">
+        <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-5 py-3.5">
           {Icon && (
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-gradient-to-b from-blue-50 to-indigo-50 text-blue-700">
               <Icon size={16} strokeWidth={1.9} />
             </div>
           )}
@@ -126,7 +126,7 @@ export function Modal({
         </div>
         <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 py-4', bodyClassName)}>{children}</div>
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3">
             {footer}
           </div>
         )}
