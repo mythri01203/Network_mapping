@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { FAULT_SETTING_DEFS, FIELD_SETTING_DEFS, MONITORING_SETTING_DEFS, OSP_SETTING_DEFS } from '@fibergis/shared';
+import { FAULT_SETTING_DEFS, FIELD_SETTING_DEFS, MONITORING_SETTING_DEFS, OSP_SETTING_DEFS, VALIDATION_SETTING_DEFS } from '@fibergis/shared';
 
 /** What a settings row needs: both field capture and outside-plant settings have this shape. */
 interface SettingRowDef {
@@ -17,7 +17,8 @@ import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
-function FieldSettingRow({ def }: { def: SettingRowDef }) {
+/** One editable setting with its default and source. Exported for the Phase 18 capacity warning levels. */
+export function FieldSettingRow({ def }: { def: SettingRowDef }) {
   const override = useNetworkStore((s) => s.settings.find((item) => item.id === def.id));
   const role = useUiStore((s) => s.userRole);
   const isText = typeof def.defaultValue === 'string';
@@ -175,6 +176,25 @@ export function OspSettingsPanel() {
           <table className="w-full text-left text-xs">
             <tbody className="divide-y divide-slate-100">
               {OSP_SETTING_DEFS.map((def) => (
+                <FieldSettingRow key={def.id} def={def} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {/* Network mapping Phase 15: the map check uses these (ONT levels come from the optical settings). */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">Map check settings</h3>
+        <p className="text-xs text-slate-500">
+          Used by the map check on the server and its stored findings. They only warn: nothing is moved, joined or removed by them. The ONT
+          receive levels come from the optical settings, and the &quot;same cable?&quot; limits from the route settings above.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs" data-testid="validation-settings">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <tbody className="divide-y divide-slate-100">
+              {VALIDATION_SETTING_DEFS.map((def) => (
                 <FieldSettingRow key={def.id} def={def} />
               ))}
             </tbody>

@@ -24,6 +24,7 @@ import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStor
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 import { CorePathView } from '../fiber/CorePathView';
+import { OpticalBudgetPanel } from './OpticalBudgetPanel';
 
 const formatLength = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
 
@@ -106,7 +107,8 @@ export const FiberTraceModal: React.FC = () => {
   const notes = traceResult?.notes ?? [];
   const reading = traceResult?.rxReading;
   const verdict = budget?.verdict;
-  const isNeutral = verdict === 'Not Assessed';
+  // Network mapping Phase 17: an assumed optics class is no pass or fail, so it is shown neutral.
+  const isNeutral = verdict === 'Not Assessed' || verdict === 'Estimated With Default Class';
   const isGood = verdict === 'Normal';
   const isWarning = verdict === 'Margin Warning' || verdict === 'Incomplete';
   const isAlert = !isNeutral && !isGood && !isWarning;
@@ -258,9 +260,11 @@ export const FiberTraceModal: React.FC = () => {
                   {traceResult.level === 'core' ? 'Every fiber recorded' : 'Cables only: fibers not recorded end to end'}
                 </span>
               </h3>
-              <CorePathView path={traceResult.corePath} />
+              {/* Network mapping Phase 17: the budget, with each input's origin, is in the panel below. */}
+              <CorePathView path={traceResult.corePath} showBudget={false} />
             </section>
           )}
+          {traceResult?.corePath && <OpticalBudgetPanel path={traceResult.corePath} />}
 
           {/* Stats Grid */}
           {budget && (

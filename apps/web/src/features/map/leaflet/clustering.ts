@@ -49,6 +49,28 @@ export function buildPointIndex(points: readonly MapPoint[]): PointIndex {
   return { points, cluster };
 }
 
+/** Phase 24b: the same ids at the same places, in the same order. */
+export function samePoints(a: readonly MapPoint[], b: readonly MapPoint[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const p = a[i];
+    const q = b[i];
+    if (p.id !== q.id || p.lat !== q.lat || p.lng !== q.lng) return false;
+  }
+  return true;
+}
+
+/**
+ * Phase 24b: the groups are worked out again only when a pin was added, removed or moved. An edit
+ * that moves nothing (a rename, a status, a note) or choosing a pin keeps the index as it is. A
+ * changed set is rebuilt in full: the group index cannot be patched, and a patched count could say
+ * a wrong number of pins.
+ */
+export function updatePointIndex(previous: PointIndex | null, points: readonly MapPoint[]): PointIndex {
+  return previous && samePoints(previous.points, points) ? previous : buildPointIndex(points);
+}
+
 const inBox = (p: MapPoint, [w, s, e, n]: Bbox) => p.lat >= s && p.lat <= n && p.lng >= w && p.lng <= e;
 
 /**

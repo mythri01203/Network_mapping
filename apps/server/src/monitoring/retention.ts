@@ -1,4 +1,4 @@
-import type { OnuReading, OnuStatus } from '@fibergis/shared';
+import type { DeviceStatus, OnuReading, OnuStatus } from '@fibergis/shared';
 
 /**
  * How much device monitoring history the server keeps (Phase 7). Every push or import adds rows,
@@ -17,6 +17,9 @@ type Row = Pick<OnuReading, 'id' | 'ontId' | 'onuAddress' | 'serial' | 'sourceId
 const deviceKey = (row: Row) => `${row.sourceId}|${row.ontId ?? row.onuAddress ?? row.serial ?? row.id}`;
 export const readingKey = (row: OnuReading) => `${deviceKey(row)}|${row.direction}`;
 export const statusKey = (row: OnuStatus) => deviceKey(row);
+/** Phase 20: one OLT, card, PON port or interface of one source. Its newest row is always kept. */
+export const deviceStatusKey = (row: DeviceStatus) =>
+  `${row.sourceId}|${row.target}|${row.oltId ?? row.oltKey}|${row.ponPortId ?? row.portAddress ?? ''}|${row.slotId ?? row.slot ?? ''}|${row.interfaceName ?? ''}`;
 
 /** Ids of rows to remove, oldest first. */
 export function rowsToPrune<T extends Row>(rows: readonly T[], keyOf: (row: T) => string, limits: RetentionLimits, now: Date): string[] {

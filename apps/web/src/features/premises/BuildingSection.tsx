@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { type Building, BUILDING_KIND_LABELS, BUILDING_KINDS, type BuildingKind, buildingUnitPaths, type Equipment } from '@fibergis/shared';
+import { type Building, BUILDING_KIND_LABELS, BUILDING_KINDS, type BuildingKind, buildingUnitPaths, type Equipment, polygonAreaSqMeters } from '@fibergis/shared';
 
 import { Button, Field, Input, Select } from '../../components/ui';
 import { addBuildingFloorBox, addUnit, removeUnit, saveBuilding, setUpBuilding } from '../../stores/connectionActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
+import { setBuildingFootprint } from '../../stores/ospActions';
+import { useOspUiStore } from '../../stores/ospUiStore';
+import { useUiStore } from '../../stores/uiStore';
 import { InspectorSection } from '../inspector/sections';
 
 const STEP_TONE = { ok: 'text-slate-800', warning: 'text-amber-700', gap: 'text-red-700' } as const;
@@ -58,6 +61,35 @@ function BuildingSetup({ equipment }: { equipment: Equipment }) {
   );
 }
 
+/** Phase 4: the building's outline on the map, in addition to its point. Drawn by a person, never guessed. */
+function FootprintBlock({ building }: { building: Building }) {
+  const corners = building.footprint?.length ?? 0;
+  const draw = () => {
+    useOspUiStore.getState().startDraw({ kind: 'footprint', buildingId: building.id });
+    if (window.innerWidth < 768) useUiStore.getState().setPanelOpen('right', false);
+  };
+  return (
+    <div className="space-y-1" data-testid="bld-footprint">
+      <p className="text-xs font-semibold text-slate-600">Outline on the map</p>
+      <p className="text-xs text-slate-700">
+        {corners >= 3
+          ? `Drawn, ${corners} corners, about ${Math.round(polygonAreaSqMeters(building.footprint ?? []))} m² as drawn. The point stays as well.`
+          : 'Not drawn. The building is shown as its point only.'}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="md" className="min-h-[48px] md:min-h-0" data-testid="bld-footprint-draw" onClick={draw}>
+          {corners >= 3 ? 'Draw the outline again' : 'Draw the outline on the map'}
+        </Button>
+        {corners >= 3 && (
+          <Button size="md" className="min-h-[48px] md:min-h-0" data-testid="bld-footprint-remove" onClick={() => setBuildingFootprint(building.id, null)}>
+            Remove outline
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BuildingDetails({ building }: { building: Building }) {
   const network = useNetworkStore(useShallow((s) => ({ equipment: s.equipment, cables: s.cables, splitters: s.splitters, closures: s.closures, customers: s.customers, onts: s.onts, buildings: s.buildings })));
   const optical = useNetworkStore(selectOpticalSettings);
@@ -78,6 +110,7 @@ function BuildingDetails({ building }: { building: Building }) {
         <span className="font-semibold">{building.name}</span> · {BUILDING_KIND_LABELS[building.kind]}
         {building.floorsAbove !== undefined ? ` · ${building.floorsAbove} floors` : ''}
       </p>
+      <FootprintBlock building={building} />
       {multi && (
         <div className="space-y-1">
           <p className="text-xs font-semibold text-slate-600">Riser</p>

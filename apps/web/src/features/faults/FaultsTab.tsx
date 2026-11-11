@@ -87,7 +87,7 @@ function FaultDetail({ fault, ix, onShowJob }: { fault: Fault; ix: ImpactIndex; 
   const photoWhy = faultPhotoProblem({ workOrders }, fault);
   const [noPhoto, setNoPhoto] = useState('');
   const open = isFaultOpen(fault);
-  const now = fault.element ? affectedByElement(ix, fault.element) : null;
+  const now = fault.element ? affectedByElement(ix, fault.element, { downstream: true }) : null;
   const name = (id: string) => customers.find((c) => c.id === id)?.name ?? id;
   const timeline = faultTimeline({ workOrders }, fault);
   return (

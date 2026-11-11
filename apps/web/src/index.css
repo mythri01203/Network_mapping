@@ -262,6 +262,28 @@
   animation: ui-slide-in-right 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Learning assistant: light moving along a fiber, and a pulsing "tap here" ring. */
+.learn-flow {
+  stroke-dasharray: 10 8;
+  animation: dash-flow 1.2s linear infinite;
+}
+@keyframes learn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.08);
+  }
+}
+.learn-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: learn-pulse 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -637,4 +659,219 @@
   .toast-stack > :nth-last-child(n + 3) {
     display: none;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Map printout (Phase 1): only the map, its scale bar and a caption.  */
+/* ------------------------------------------------------------------ */
+.gis-print-only {
+  display: none;
+}
+@media print {
+  body.gis-printing * {
+    visibility: hidden;
+  }
+  body.gis-printing .gis-print-area,
+  body.gis-printing .gis-print-area * {
+    visibility: visible;
+  }
+  body.gis-printing .gis-print-area {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  body.gis-printing .gis-no-print,
+  body.gis-printing .gis-no-print * {
+    display: none !important;
+  }
+  body.gis-printing .gis-print-only {
+    display: block;
+  }
+  @page {
+    margin: 10mm;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* PON map: light flow, identifiers, splitter badges, affected areas   */
+/* ------------------------------------------------------------------ */
+@keyframes fiber-light {
+  to {
+    stroke-dashoffset: -34;
+  }
+}
+.fiber-light-flow {
+  animation: fiber-light 1.3s linear infinite;
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.9));
+}
+.fiber-light-flow--trunk {
+  animation-duration: 0.9s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fiber-light-flow,
+  .gis-affected,
+  .gis-affected::after {
+    animation: none !important;
+  }
+}
+
+.gis-cable-label {
+  position: absolute;
+  left: 0;
+  transform: translate(-50%, -50%);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1.5px solid rgb(255 255 255 / 0.95);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.3);
+  pointer-events: none;
+}
+
+.gis-badge {
+  position: absolute;
+  left: 0;
+  bottom: var(--badge-offset);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgb(15 23 42 / 0.88);
+  color: #f8fafc;
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 0.35);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  animation: badge-in 0.35s ease-out;
+}
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+.gis-badge::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: rgb(15 23 42 / 0.88);
+  transform: translateX(-50%) rotate(45deg);
+}
+.gis-badge__row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.gis-badge__chip {
+  padding: 0 5px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+.gis-badge__ratio {
+  font-weight: 800;
+}
+.gis-badge__ratio small {
+  margin-left: 2px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.gis-badge__free {
+  font-weight: 700;
+  filter: brightness(1.35);
+}
+.gis-badge__dbm {
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+.gis-badge__dots {
+  display: flex;
+  gap: 2px;
+}
+.gis-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+.gis-badge--olt {
+  align-items: center;
+  padding: 5px 9px;
+  background: linear-gradient(135deg, rgb(15 42 74 / 0.95), rgb(30 64 175 / 0.92));
+}
+.gis-badge--olt::after {
+  background: rgb(15 42 74 / 0.95);
+}
+.gis-badge__title {
+  font-size: 11px;
+  font-weight: 800;
+}
+.gis-badge__chips {
+  display: flex;
+  gap: 3px;
+}
+.gis-badge__chips i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid #fff;
+}
+.gis-badge__meta {
+  color: #bfdbfe;
+  font-weight: 600;
+}
+
+/* Customers: PON ring, inactive and suspected-affected states. */
+.gis-pin--customer.has-pon {
+  box-shadow: 0 0 0 2.5px var(--pon-ring), 0 2px 6px rgb(15 23 42 / 0.35);
+}
+.gis-pin--customer.is-inactive {
+  filter: grayscale(0.7);
+  opacity: 0.85;
+}
+@keyframes affected-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.4);
+    opacity: 0;
+  }
+}
+.gis-affected {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgb(220 38 38 / 0.35);
+  border: 2px solid rgb(220 38 38 / 0.85);
+  transform: translate(-50%, -50%);
+  animation: affected-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.gis-affected.is-test {
+  background: rgb(124 58 237 / 0.3);
+  border-color: rgb(124 58 237 / 0.85);
+}
+.gis-badge--compact {
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.gis-badge--compact .gis-badge__row {
+  gap: 3px;
 }

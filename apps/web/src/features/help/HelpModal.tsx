@@ -1,12 +1,15 @@
 import React from 'react';
-import { BookOpen, Map, ShieldCheck, X } from 'lucide-react';
+import { BookOpen, GraduationCap, Map, ShieldCheck, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { DEFAULT_OPTICAL_SETTINGS, STANDARD_12_COLORS } from '@fibergis/shared';
 
+import { useT } from '../../i18n/useT';
 import { useUiStore } from '../../stores/uiStore';
+import { useLearnStore } from '../learn/learnStore';
 
 export const HelpModal: React.FC = () => {
+  const { t } = useT();
   const { isHelpModalOpen, setModalOpen } = useUiStore(
     useShallow((s) => ({ isHelpModalOpen: s.modals.help, setModalOpen: s.setModalOpen })),
   );
@@ -39,6 +42,22 @@ export const HelpModal: React.FC = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+          {/* Learning assistant: the welcome lesson with pictures and voice. */}
+          <button
+            type="button"
+            data-testid="help-learn"
+            onClick={() => {
+              setModalOpen('help', false);
+              useLearnStore.getState().openWelcome();
+            }}
+            className="ui-brand flex min-h-16 w-full items-center gap-3 rounded-2xl bg-blue-600 px-4 text-left text-white"
+          >
+            <GraduationCap className="h-8 w-8 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-bold">{t('learn.open')}</span>
+              <span className="block text-xs text-blue-100">Pictures and voice, step by step · English, తెలుగు, ಕನ್ನಡ</span>
+            </span>
+          </button>
           {/* Section 1: 5-Minute Quick Start */}
           <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200 space-y-2">
             <div className="font-bold text-xs text-blue-950 flex items-center gap-1.5">

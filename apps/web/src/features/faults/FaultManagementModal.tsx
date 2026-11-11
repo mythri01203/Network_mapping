@@ -16,7 +16,8 @@ type Tab = 'alarms' | 'suspected' | 'faults' | 'jobs' | 'impact';
 /**
  * Faults and field operations (Phase 8): alarms (reported, from the field or TEST), suspected
  * causes from recorded paths, faults through their lifecycle, work orders with their phone
- * evidence and checks, and who is affected by any element. No device alarms: "No live connection".
+ * evidence and checks, and who is affected by any element (Phase 20: with the equipment, ports and
+ * fibres below it). Device alarms only from a monitoring source; with none: "No live connection".
  */
 export const FaultManagementModal: React.FC = () => {
   const { open, setModalOpen } = useUiStore(useShallow((s) => ({ open: s.modals.faults, setModalOpen: s.setModalOpen })));

@@ -1,6 +1,6 @@
 import type { ChangeSet } from '../model/api';
-import type { MonitoringSource, OnuReading, OnuStatus } from '../model/monitoringSchemas';
-import type { Alarm, Ont } from '../model/types';
+import type { DeviceStatus, MonitoringSource, OnuReading, OnuStatus } from '../model/monitoringSchemas';
+import type { Alarm, Equipment, Ont } from '../model/types';
 import { MONITORING_COLLECTIONS } from './command';
 import type { FiberProblem } from './fiberRules';
 
@@ -20,6 +20,9 @@ export interface MonitoringCheckData {
   onuReadings?: readonly OnuReading[];
   onuStatuses?: readonly OnuStatus[];
   onts?: readonly Ont[];
+  /** Phase 20: OLT, card and PON port rows, checked against the OLT records when `equipment` is given. */
+  deviceStatuses?: readonly DeviceStatus[];
+  equipment?: readonly Pick<Equipment, 'id' | 'type' | 'ponPorts'>[];
 }
 
 export const MONITORING_WRITE_REFUSED =
@@ -38,6 +41,21 @@ export function findMonitoringProblems(data: MonitoringCheckData): FiberProblem[
       add('error', 'monitoring_test_outside_test_path', row.id, `Row ${row.id}: ${row.isTest ? 'a TEST row from a real source' : 'a real row from the TEST simulator'}. TEST rows come only from the TEST simulator.`);
     }
     if (row.ontId && !onts.has(row.ontId)) add('error', 'monitoring_unknown_ont', row.id, `Row ${row.id} is for ONT ${row.ontId}, which is not on record.`);
+  }
+  // Phase 20: OLT, card and PON port rows. An OLT removed since is listed as a check, never an error.
+  const olts = data.equipment ? new Map(data.equipment.filter((e) => e.type === 'OLT').map((e) => [e.id, e])) : undefined;
+  for (const row of data.deviceStatuses ?? []) {
+    const src = sources.get(row.sourceId);
+    if (!src) add('error', 'monitoring_row_no_source', row.id, `Row ${row.id} names monitoring source ${row.sourceId}, which is not on record.`);
+    else if (src.isTest !== row.isTest) {
+      add('error', 'monitoring_test_outside_test_path', row.id, `Row ${row.id}: ${row.isTest ? 'a TEST row from a real source' : 'a real row from the TEST simulator'}. TEST rows come only from the TEST simulator.`);
+    }
+    if (!olts || !row.oltId) continue;
+    const olt = olts.get(row.oltId);
+    if (!olt) add('warning', 'monitoring_unknown_olt', row.id, `Device row ${row.id} is for OLT ${row.oltId}, which is not on record any more. It is kept as history.`);
+    else if (row.ponPortId && !olt.ponPorts?.some((p) => p.id === row.ponPortId)) {
+      add('warning', 'monitoring_unknown_olt', row.id, `Device row ${row.id} is for PON port ${row.ponPortId} of ${row.oltId}, which is not on record any more. It is kept as history.`);
+    }
   }
   return problems;
 }

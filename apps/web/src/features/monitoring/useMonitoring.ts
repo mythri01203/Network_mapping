@@ -22,10 +22,10 @@ export function useMonitoringSettings(): MonitoringSettings {
   return useMemo(() => resolveMonitoringSettings(settings), [settings]);
 }
 
-/** Sources, readings and statuses as last loaded from the server. */
+/** Sources, readings and statuses (Phase 20: and OLT, card and PON port rows) as last loaded from the server. */
 export function useMonitoringData() {
   return useNetworkStore(
-    useShallow((s) => ({ monitoringSources: s.monitoringSources, onuReadings: s.onuReadings, onuStatuses: s.onuStatuses })),
+    useShallow((s) => ({ monitoringSources: s.monitoringSources, onuReadings: s.onuReadings, onuStatuses: s.onuStatuses, deviceStatuses: s.deviceStatuses })),
   );
 }
 

@@ -1,5 +1,5 @@
 import type { AlarmKind } from '../model/enums';
-import { type MonitoringSource, ONU_STATE_LABELS, type OnuReading, type OnuStatus } from '../model/monitoringSchemas';
+import { type DeviceStatus, type MonitoringSource, ONU_STATE_LABELS, type OnuReading, type OnuStatus } from '../model/monitoringSchemas';
 import type { Alarm, NetworkElementRef } from '../model/types';
 import type { AuditEntry, CommandContext, NetworkData } from './command';
 import { isActiveCustomer } from './connectionRules';
@@ -86,6 +86,61 @@ export function raiseMonitoringAlarms(
   }
   const audit: AuditEntry[] = raised.length
     ? [{ action: source.isTest ? 'TEST_MONITORING_ALARM' : 'MONITORING_ALARM', details: `${raised.length} alarm(s) from ${source.name}: ${raised.map((a) => `${a.kind} on ${a.element.id}`).join(', ').slice(0, 400)}`, assetId: raised[0].id, assetType: 'Alarm' }]
+    : [];
+  return { alarms, raised, audit };
+}
+
+/**
+ * Phase 20: alarms from OLT and PON port rows. A new "down" for a PON port raises a PON port fault
+ * on that port; a new "down" for the whole OLT raises "OLT not reachable" on it. Only the newest row
+ * for the item, only inside the status stale time, only when it is tied to a record. "Degraded" and
+ * "unknown" raise nothing: they are shown as the device said. Cards and interfaces raise nothing.
+ */
+export function raiseDeviceAlarms(
+  data: NetworkData & MonitoringData,
+  fresh: readonly DeviceStatus[],
+  source: Pick<MonitoringSource, 'id' | 'name' | 'isTest'>,
+  options: { settings?: MonitoringSettings; now: Date; alarms?: Alarm[] },
+  ctx: CommandContext = {},
+): MonitoringAlarmResult {
+  const settings = options.settings ?? DEFAULT_MONITORING_SETTINGS;
+  const now = options.now.getTime();
+  const all = [...(data.deviceStatuses ?? []), ...fresh];
+  const keyOf = (d: DeviceStatus) => `${d.target}|${d.oltId}|${d.ponPortId ?? ''}`;
+  const newestByKey = new Map<string, DeviceStatus>();
+  for (const d of all) {
+    if (d.isTest !== source.isTest || !d.oltId || (d.target !== 'olt' && d.target !== 'pon_port') || (d.target === 'pon_port' && !d.ponPortId)) continue;
+    const kept = newestByKey.get(keyOf(d));
+    if (!kept || d.deviceTime > kept.deviceTime || (d.deviceTime === kept.deviceTime && d.receivedAt > kept.receivedAt)) newestByKey.set(keyOf(d), d);
+  }
+  let alarms = options.alarms ?? data.alarms ?? [];
+  const raised: Alarm[] = [];
+  for (const row of newestByKey.values()) {
+    if (!fresh.includes(row) || row.state !== 'down' || now - Date.parse(row.deviceTime) > settings.statusStaleMinutes * 60_000) continue;
+    const element: NetworkElementRef = row.target === 'pon_port' ? { type: 'pon_port', id: row.oltId!, ponPortId: row.ponPortId } : { type: 'olt', id: row.oltId! };
+    const kind: AlarmKind = row.target === 'pon_port' ? 'pon_port_fault' : 'olt_unreachable';
+    const what = row.target === 'pon_port' ? `PON port ${row.portAddress ?? row.ponPortId} reported down` : 'OLT reported down';
+    const result = addAlarm(
+      alarms,
+      data,
+      {
+        kind,
+        source: source.isTest ? 'test' : 'device_adapter',
+        element,
+        note: `${source.isTest ? 'TEST · not real. ' : ''}${what}${row.rawState ? ` ("${row.rawState}")` : ''}, by ${source.name} for device time ${row.deviceTime}`,
+        reportedBy: source.name,
+        monitoringSourceId: source.id,
+        evidenceIds: [row.id],
+      },
+      ctx,
+      true,
+    );
+    if (typeof result === 'string') continue;
+    alarms = result.alarms;
+    raised.push(result.alarm);
+  }
+  const audit: AuditEntry[] = raised.length
+    ? [{ action: source.isTest ? 'TEST_MONITORING_ALARM' : 'MONITORING_ALARM', details: `${raised.length} OLT or PON port alarm(s) from ${source.name}: ${raised.map((a) => `${a.kind} on ${a.element.id}${a.element.ponPortId ? `/${a.element.ponPortId}` : ''}`).join(', ').slice(0, 400)}`, assetId: raised[0].id, assetType: 'Alarm' }]
     : [];
   return { alarms, raised, audit };
 }

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { ageText, CUSTOMER_LIVE_STATE_LABELS, CUSTOMER_LIVE_STATES, NO_LIVE_CONNECTION, summarizeMonitoring } from '@fibergis/shared';
+import { ageText, CUSTOMER_LIVE_STATE_LABELS, CUSTOMER_LIVE_STATES, DEVICE_TARGET_LABELS, isDeviceRowMatched, NO_LIVE_CONNECTION, summarizeMonitoring } from '@fibergis/shared';
 
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { formatDateTime } from '../inspector/format';
@@ -111,20 +111,43 @@ export function MonitoringOverview() {
 
 /** Rows that matched no ONT, kept with the reason. Nothing was guessed for them. */
 export function UnmatchedList() {
-  const { onuReadings, onuStatuses, monitoringSources } = useMonitoringData();
+  const { onuReadings, onuStatuses, monitoringSources, deviceStatuses } = useMonitoringData();
   const rows = [...onuStatuses, ...onuReadings].filter((r) => !r.ontId).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
-  if (rows.length === 0) return <p className="text-xs text-slate-500" data-testid="mon-unmatched-none">Every stored row matched an ONT record.</p>;
+  // Phase 20: OLT, card and PON port rows not tied to a whole record.
+  const devices = deviceStatuses.filter((d) => !isDeviceRowMatched(d)).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  if (rows.length === 0 && devices.length === 0) return <p className="text-xs text-slate-500" data-testid="mon-unmatched-none">Every stored row matched an ONT record.</p>;
   return (
     <div className="space-y-2 text-xs">
-      <p className="text-slate-600">These rows named an ONU address or serial that is not written on exactly one ONT record. They are kept but shown on nobody. Fix the ONT record (address or serial exactly as the OLT writes it); the next row will match.</p>
-      <ul className="space-y-1" data-testid="mon-unmatched">
-        {rows.slice(0, 200).map((r) => (
-          <li key={r.id} className={`rounded-md border p-2 ${r.isTest ? 'border-violet-300 bg-violet-50' : 'border-slate-200'}`}>
-            {r.isTest ? 'TEST · ' : ''}
-            <span className="font-mono">{r.onuAddress ?? r.serial}</span> · {r.unmatchedReason ?? 'Not matched'} · {formatDateTime(r.deviceTime)} · {monitoringSources.find((s) => s.id === r.sourceId)?.name ?? r.sourceId}
-          </li>
-        ))}
-      </ul>
+      {devices.length > 0 && (
+        <div className="space-y-1" data-testid="mon-unmatched-devices">
+          <p className="text-slate-600">
+            These OLT, card or PON port rows named an OLT, port address or slot that is not written on exactly one record. Fix the OLT record (id, serial or IP), the port address or the
+            chassis slot exactly as the OLT writes it; the next row will match.
+          </p>
+          <ul className="space-y-1">
+            {devices.slice(0, 200).map((d) => (
+              <li key={d.id} className={`rounded-md border p-2 ${d.isTest ? 'border-violet-300 bg-violet-50' : 'border-slate-200'}`}>
+                {d.isTest ? 'TEST · ' : ''}
+                {DEVICE_TARGET_LABELS[d.target]} <span className="font-mono">{[d.oltKey, d.portAddress ?? d.slot ?? d.interfaceName].filter(Boolean).join(' ')}</span> · {d.unmatchedReason ?? 'Not matched'} ·{' '}
+                {formatDateTime(d.deviceTime)} · {monitoringSources.find((s) => s.id === d.sourceId)?.name ?? d.sourceId}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {rows.length > 0 && (
+        <>
+          <p className="text-slate-600">These rows named an ONU address or serial that is not written on exactly one ONT record. They are kept but shown on nobody. Fix the ONT record (address or serial exactly as the OLT writes it); the next row will match.</p>
+          <ul className="space-y-1" data-testid="mon-unmatched">
+            {rows.slice(0, 200).map((r) => (
+              <li key={r.id} className={`rounded-md border p-2 ${r.isTest ? 'border-violet-300 bg-violet-50' : 'border-slate-200'}`}>
+                {r.isTest ? 'TEST · ' : ''}
+                <span className="font-mono">{r.onuAddress ?? r.serial}</span> · {r.unmatchedReason ?? 'Not matched'} · {formatDateTime(r.deviceTime)} · {monitoringSources.find((s) => s.id === r.sourceId)?.name ?? r.sourceId}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

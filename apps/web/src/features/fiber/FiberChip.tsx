@@ -1,6 +1,7 @@
 import { CORE_STATUS_LABELS, type CoreIdentity, type CoreStatus } from '@fibergis/shared';
 
 import { cn } from '../../components/ui';
+import { STATUS_MARK } from './fiberUi';
 
 /** A fiber's identification colour. Shown only when the cable's scheme is known; never a status colour. */
 export function FiberSwatch({ identity, size = 14 }: { identity?: CoreIdentity; size?: number }) {
@@ -43,16 +44,11 @@ const STATUS_STYLE: Partial<Record<CoreStatus, string>> = {
   Damaged: 'bg-red-50 text-red-800 border-red-200',
   Spliced: 'bg-indigo-50 text-indigo-800 border-indigo-200',
   Disconnected: 'bg-slate-100 text-slate-700 border-slate-300',
+  Faulty: 'bg-red-50 text-red-800 border-red-300',
+  Retired: 'bg-slate-200 text-slate-700 border-slate-400 line-through decoration-slate-500',
 };
 
-const STATUS_MARK: Partial<Record<CoreStatus, string>> = {
-  'In Use': '●',
-  Reserved: '◐',
-  Damaged: '✕',
-  Spliced: '⋈',
-  Available: '○',
-  Dark: '○',
-};
+const statusMark = (status: CoreStatus) => STATUS_MARK[status] ?? '·';
 
 /** The core's state as a label with a mark. Separate from its colour, so blue stays blue. */
 export function CoreStatusBadge({ status }: { status: CoreStatus }) {
@@ -63,7 +59,7 @@ export function CoreStatusBadge({ status }: { status: CoreStatus }) {
         STATUS_STYLE[status] ?? 'bg-white text-slate-600 border-slate-200',
       )}
     >
-      <span aria-hidden>{STATUS_MARK[status] ?? '·'}</span>
+      <span aria-hidden>{statusMark(status)}</span>
       {CORE_STATUS_LABELS[status]}
     </span>
   );

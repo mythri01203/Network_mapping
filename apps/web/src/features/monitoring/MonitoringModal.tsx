@@ -5,11 +5,12 @@ import { Modal } from '../../components/ui';
 import { useUiStore } from '../../stores/uiStore';
 import { ImportPanel } from './ImportPanel';
 import { MonitoringOverview, UnmatchedList } from './MonitoringOverview';
+import { NocPanel } from './NocPanel';
 import { SimulatorPanel } from './SimulatorPanel';
 import { SourcesPanel } from './SourcesPanel';
 import { useMay } from './useMonitoring';
 
-type Tab = 'overview' | 'unmatched' | 'sources' | 'import' | 'test';
+type Tab = 'overview' | 'noc' | 'unmatched' | 'sources' | 'import' | 'test';
 
 /**
  * Live monitoring (Phase 7): what the OLT or NMS reported, from stored rows only. Everyone may look;
@@ -24,6 +25,8 @@ export function MonitoringModal() {
   if (!open) return null;
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: 'overview', label: 'Overview', show: true },
+    // Phase 20: the NOC screen, one line per PON port.
+    { id: 'noc', label: 'OLT and PON ports', show: true },
     { id: 'unmatched', label: 'Not matched', show: true },
     { id: 'sources', label: 'Sources', show: manage },
     { id: 'import', label: 'Import file', show: importer },
@@ -34,7 +37,7 @@ export function MonitoringModal() {
       open
       onClose={() => setModalOpen('monitoring', false)}
       title="Live status"
-      description="Status and light levels reported by your OLT or NMS, with their time and source. Nothing here is estimated."
+      description="Status and light levels reported by your OLT or NMS, with their time and source. Nothing here is estimated. With nothing sent: No live connection."
       icon={Wifi}
       size="2xl"
     >
@@ -49,13 +52,14 @@ export function MonitoringModal() {
               aria-selected={tab === t.id}
               data-testid={`mon-tab-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`min-h-[40px] rounded-lg px-3 text-xs font-semibold ${tab === t.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} ${t.id === 'test' ? 'border border-violet-300' : ''}`}
+              className={`min-h-[48px] rounded-lg px-3 text-xs font-semibold ${tab === t.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} ${t.id === 'test' ? 'border border-violet-300' : ''}`}
             >
               {t.label}
             </button>
           ))}
       </div>
       {tab === 'overview' && <MonitoringOverview />}
+      {tab === 'noc' && <NocPanel />}
       {tab === 'unmatched' && <UnmatchedList />}
       {tab === 'sources' && manage && <SourcesPanel />}
       {tab === 'import' && importer && <ImportPanel />}

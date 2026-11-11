@@ -16,7 +16,7 @@ import {
   StatusBadge,
 } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
-import { traceNetworkPath } from '../../stores/networkActions';
+import { traceCableRoute, traceNetworkPath } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useTraceStore } from '../../stores/traceStore';
@@ -58,7 +58,7 @@ export const RouteTraceModal: React.FC = () => {
   }, [isRouteTraceModalOpen]);
 
   const traceAndFly = (id: string, lat?: number, lng?: number) => {
-    if (traceNetworkPath(id) && lat !== undefined && lng !== undefined) {
+    if (traceCableRoute(id) && lat !== undefined && lng !== undefined) {
       flyToLocation(lat, lng, 17);
     }
   };
@@ -85,7 +85,7 @@ export const RouteTraceModal: React.FC = () => {
     if (eqByName) return traceAndFly(eqByName.id, eqByName.lat, eqByName.lng);
 
     // Faults, closures, splitters and PON ports are resolved by the context.
-    if (!traceNetworkPath(searchTarget.trim())) {
+    if (!traceCableRoute(searchTarget.trim())) {
       showToast('warning', 'No match', `Nothing matching "${searchTarget.trim()}" was found.`);
     }
   };
@@ -105,9 +105,17 @@ export const RouteTraceModal: React.FC = () => {
       bodyClassName="p-0"
       headerActions={
         activeTracePath ? (
-          <Button variant="ghost" size="sm" icon={X} onClick={clearTrace}>
-            Clear trace
-          </Button>
+          <>
+            {summary && (
+              // Network mapping Phase 15: the same target on the one trace engine, fibre by fibre.
+              <Button variant="secondary" size="sm" icon={Route} onClick={() => traceNetworkPath(summary.targetId)}>
+                Fibre by fibre
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" icon={X} onClick={clearTrace}>
+              Clear trace
+            </Button>
+          </>
         ) : undefined
       }
       footer={

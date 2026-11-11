@@ -39,8 +39,20 @@ export function useLeafletMap() {
   usePersistViewport(map);
   useAutoResize(map);
   useFlyToRequests(map);
+  useFitBoundsRequests(map);
 
   return { map, containerRef };
+}
+
+/** "Show all of this": fits a box on screen, with room around it, never closer than street level. */
+function useFitBoundsRequests(map: L.Map | null) {
+  const target = useMapStore((s) => s.fitBoundsTarget);
+  useEffect(() => {
+    if (!map || !target) return;
+    const bounds = L.latLngBounds([target.south, target.west], [target.north, target.east]);
+    map.flyToBounds(bounds, { padding: [48, 48], maxZoom: 18, duration: 1.2 });
+    useMapStore.getState().clearFitBounds();
+  }, [map, target]);
 }
 
 function useBaseLayer(map: L.Map | null) {

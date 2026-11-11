@@ -1,11 +1,15 @@
 import {
   type AuditLog,
+  type DeviceIngestPlan,
+  type DeviceIngestRow,
   formatLogTimestamp,
   type IngestPlan,
   type IngestRow,
   type MonitoringSource,
   type NetworkData,
+  planDeviceIngest,
   planIngest,
+  raiseDeviceAlarms,
   raiseMonitoringAlarms,
   randomCode,
   resolveMonitoringSettings,
@@ -14,7 +18,7 @@ import {
 
 import type { NetworkRepository } from '../db/repository';
 import { HttpError } from '../lib/errors';
-import { readingKey, type RetentionLimits, rowsToPrune, statusKey } from './retention';
+import { deviceStatusKey, readingKey, type RetentionLimits, rowsToPrune, statusKey } from './retention';
 
 const DEFAULT_RETENTION: RetentionLimits = { keepDays: 90, maxRows: 200_000 };
 
@@ -22,7 +26,9 @@ const DEFAULT_RETENTION: RetentionLimits = { keepDays: 90, maxRows: 200_000 };
  * The one path that stores monitoring rows (Phase 7): file import, the push endpoint and the TEST
  * simulator all come here. Rows are matched and checked by the shared `planIngest` (the browser
  * preview uses the same function), alarms are raised by `raiseMonitoringAlarms`, and everything is
- * written in one change with one audit entry. Nothing is written for a dry run.
+ * written in one change with one audit entry. Nothing is written for a dry run. Phase 20: OLT, card,
+ * PON port and interface rows from a push go through `planDeviceIngest` and `raiseDeviceAlarms` in
+ * the same change.
  */
 
 export interface IngestOutcome {
@@ -35,6 +41,8 @@ export interface IngestOutcome {
   alarmsRaised: number;
   isTest: boolean;
   dryRun: boolean;
+  /** Phase 20: OLT, card, PON port and interface rows, when any were sent. Row numbers count within `devices`. */
+  devices?: { stored: number; matched: number; duplicates: number; skipped: DeviceIngestPlan['skipped']; unmatched: DeviceIngestPlan['unmatched'] };
 }
 
 export interface IngestActor {
@@ -61,7 +69,7 @@ async function ingestNow(
   source: MonitoringSource,
   rows: readonly IngestRow[],
   actor: IngestActor,
-  options: { dryRun?: boolean; via: string; sourcePatch?: Partial<MonitoringSource>; now?: Date; retention?: RetentionLimits } = { via: 'push' },
+  options: { dryRun?: boolean; via: string; sourcePatch?: Partial<MonitoringSource>; now?: Date; retention?: RetentionLimits; devices?: readonly DeviceIngestRow[] } = { via: 'push' },
 ): Promise<IngestOutcome> {
   const now = options.now ?? new Date();
   const { data } = await repository.getNetwork();
@@ -72,12 +80,21 @@ async function ingestNow(
   const settings = resolveMonitoringSettings(data.settings);
   const existingIds = new Set([...data.onuReadings.map((r) => r.id), ...data.onuStatuses.map((s) => s.id)]);
   const plan = planIngest(rows, { source, onts: data.onts, existingIds, now, settings });
+  // Phase 20: OLT, card, PON port and interface rows (push only), checked the same way.
+  const storedDevices = data.deviceStatuses ?? [];
+  const devicePlan = options.devices?.length
+    ? planDeviceIngest(options.devices, { source, equipment: data.equipment, existingIds: new Set(storedDevices.map((d) => d.id)), now, settings })
+    : undefined;
+  const deviceOutcome = devicePlan
+    ? { devices: { stored: devicePlan.statuses.length, matched: devicePlan.matched, duplicates: devicePlan.duplicates, skipped: devicePlan.skipped.slice(0, 200), unmatched: devicePlan.unmatched.slice(0, 200) } }
+    : {};
   const base = {
     matched: plan.matched,
     duplicates: plan.duplicates,
     skipped: plan.skipped.slice(0, 200),
     unmatched: plan.unmatched.slice(0, 200),
     isTest: source.isTest,
+    ...deviceOutcome,
   };
   if (options.dryRun) {
     return { ...base, stored: { readings: plan.readings.length, statuses: plan.statuses.length }, alarmsRaised: 0, dryRun: true };
@@ -89,19 +106,25 @@ async function ingestNow(
     { optical: resolveOpticalSettings(data.settings), settings, now },
     { now, actor: actor.user },
   );
-  const made = plan.readings.length + plan.statuses.length;
-  const changedAlarms = alarms.alarms.filter((a) => alarms.raised.some((r) => r.id === a.id));
+  const deviceAlarms = devicePlan
+    ? raiseDeviceAlarms(data as unknown as NetworkData, devicePlan.statuses, source, { settings, now, alarms: alarms.alarms }, { now, actor: actor.user })
+    : { alarms: alarms.alarms, raised: [] };
+  const raised = [...alarms.raised, ...deviceAlarms.raised];
+  const newDevices = devicePlan?.statuses ?? [];
+  const made = plan.readings.length + plan.statuses.length + newDevices.length;
+  const changedAlarms = deviceAlarms.alarms.filter((a) => raised.some((r) => r.id === a.id));
   const limits = options.retention ?? DEFAULT_RETENTION;
   const oldReadings = rowsToPrune([...data.onuReadings, ...plan.readings], readingKey, limits, now);
   const oldStatuses = rowsToPrune([...data.onuStatuses, ...plan.statuses], statusKey, limits, now);
-  const removed = oldReadings.length + oldStatuses.length;
+  const oldDevices = newDevices.length ? rowsToPrune([...storedDevices, ...newDevices], deviceStatusKey, limits, now) : [];
+  const removed = oldReadings.length + oldStatuses.length + oldDevices.length;
   const audit: AuditLog = {
     id: `LOG-${randomCode(10)}`,
     timestamp: formatLogTimestamp(now),
     user: actor.user,
     role: actor.role,
     action: source.isTest ? 'TEST_MONITORING_ROWS' : 'MONITORING_ROWS',
-    details: `${source.isTest ? 'TEST · not real. ' : ''}${source.name} (${source.id}) via ${options.via}: ${plan.readings.length} reading(s), ${plan.statuses.length} status(es), ${plan.matched} matched, ${plan.unmatched.length} not matched, ${plan.skipped.length} skipped, ${plan.duplicates} already stored, ${alarms.raised.length} alarm(s).${removed ? ` ${removed} old row(s) removed (kept ${limits.keepDays} days; newest per ONT always kept).` : ''}`.slice(0, 1000),
+    details: `${source.isTest ? 'TEST · not real. ' : ''}${source.name} (${source.id}) via ${options.via}: ${plan.readings.length} reading(s), ${plan.statuses.length} status(es), ${plan.matched} matched, ${plan.unmatched.length} not matched, ${plan.skipped.length} skipped, ${plan.duplicates} already stored, ${raised.length} alarm(s).${devicePlan ? ` Devices: ${newDevices.length} OLT/card/PON port row(s), ${devicePlan.matched} matched, ${devicePlan.unmatched.length} not matched, ${devicePlan.skipped.length} skipped, ${devicePlan.duplicates} already stored.` : ''}${removed ? ` ${removed} old row(s) removed (kept ${limits.keepDays} days; newest per ONT always kept).` : ''}`.slice(0, 1000),
     assetId: source.id,
     assetType: 'System',
   };
@@ -111,20 +134,26 @@ async function ingestNow(
       upserts: {
         onuReadings: plan.readings,
         onuStatuses: plan.statuses,
+        ...(newDevices.length ? { deviceStatuses: newDevices } : {}),
         alarms: changedAlarms,
         monitoringSources: [nextSource],
         auditLogs: [audit],
       },
-      ...(removed ? { deletes: { onuReadings: oldReadings, onuStatuses: oldStatuses } } : {}),
+      ...(removed ? { deletes: { onuReadings: oldReadings, onuStatuses: oldStatuses, ...(oldDevices.length ? { deviceStatuses: oldDevices } : {}) } } : {}),
     },
     undefined,
-    actor.actorId ? { actorId: actor.actorId } : {},
+    {
+      ...(actor.actorId ? { actorId: actor.actorId } : {}),
+      // Phase 23: the server's audit events name the person (file import) or the source (push).
+      actor: { id: actor.actorId ?? null, name: actor.user, role: null },
+      source: 'monitoring',
+    },
   );
   return {
     ...base,
     revision: result.revision,
     stored: { readings: plan.readings.length, statuses: plan.statuses.length },
-    alarmsRaised: alarms.raised.length,
+    alarmsRaised: raised.length,
     dryRun: false,
   };
 }

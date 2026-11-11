@@ -3,6 +3,7 @@ import {
   Boxes,
   Cable,
   ClipboardList,
+  Cuboid,
   HardHat,
   Hexagon,
   type LucideIcon,
@@ -19,7 +20,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useMapStore } from '../stores/mapStore';
 import { type SelectedObject, useUiStore } from '../stores/uiStore';
 import type { MainView } from './mainView';
-import { focusFor } from './mapFocus';
+import { boundsFor, focusFor } from './mapFocus';
 
 export interface ViewMeta {
   path: string;
@@ -30,6 +31,7 @@ export interface ViewMeta {
 
 export const VIEW_META: Record<MainView, ViewMeta> = {
   map: { path: '/', label: 'Network Map', description: 'GIS workspace for the outside plant', icon: MapIcon },
+  view3d: { path: '/3d', label: '3D View', description: 'Every mapped item drawn in 3D, from the same records', icon: Cuboid },
   topology: { path: '/topology', label: 'Topology', description: 'Logical OLT to ONT hierarchy', icon: Network },
   olt_rack: { path: '/olt-rack', label: 'OLT Rack', description: 'Central office chassis and PON ports', icon: Server },
   inventory: { path: '/equipment', label: 'Equipment', description: 'All network equipment', icon: Boxes },
@@ -87,8 +89,11 @@ export function useShowOnMap(): (selection: SelectedObject, zoom?: number) => vo
       const ui = useUiStore.getState();
       ui.select(selection);
       ui.setPanelOpen('right', true);
+      // A route is shown whole; a point is centred.
+      const bounds = zoom === undefined ? boundsFor(selection) : null;
       const focus = focusFor(selection);
-      if (focus) useMapStore.getState().flyTo(focus.lat, focus.lng, zoom ?? focus.zoom);
+      if (bounds) useMapStore.getState().fitBounds(bounds);
+      else if (focus) useMapStore.getState().flyTo(focus.lat, focus.lng, zoom ?? focus.zoom);
       openView('map');
     },
     [openView],

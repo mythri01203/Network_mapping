@@ -6,9 +6,11 @@ import {
   type AttachmentStatus,
   cablesOnStructure,
   distanceMeters,
+  type Duct,
   ductsAt,
   type Equipment,
   hasPlacedPosition,
+  inspectionTargetOf,
   isPoleType,
   LINK_BASIS_LABELS,
   type Permission,
@@ -32,11 +34,13 @@ import {
   addSpan,
   deletePermission,
   removeAttachment,
+  saveDuct,
   savePermission,
 } from '../../../stores/ospActions';
 import { useUiStore } from '../../../stores/uiStore';
 import { NOT_RECORDED, orNotRecorded } from '../format';
 import { InspectorSection, RecordLink } from '../sections';
+import { InspectionsSection } from './InspectionSection';
 import { blankToUndefined, parseOptionalNumber, useOspData } from './ospData';
 
 const MATERIAL_LABELS: Record<string, string> = { concrete: 'Concrete', iron: 'Iron', wood: 'Wood', unknown: 'Not known' };
@@ -62,7 +66,7 @@ export function StatusChoice({
           aria-checked={value === status}
           onClick={() => onChange(status)}
           data-testid={testId ? `${testId}-${status}` : undefined}
-          className={`h-8 flex-1 rounded-md border text-[12px] font-medium ${
+          className={`h-12 flex-1 rounded-md border text-[13px] font-medium md:h-8 md:text-[12px] ${
             value === status ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
           }`}
         >
@@ -86,6 +90,9 @@ export function PoleDetailsSection({ equipment }: { equipment: Equipment }) {
     ownerPoleNumber: equipment.ownerPoleNumber ?? '',
     poleNumber: equipment.poleNumber ?? '',
     tagCode: equipment.tagCode ?? '',
+    // Network mapping Phase 18: cables the owner allows on the pole, from the permission.
+    allowed: equipment.attachmentCapacity?.toString() ?? '',
+    allowedSource: equipment.attachmentCapacitySource ?? '',
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +100,11 @@ export function PoleDetailsSection({ equipment }: { equipment: Equipment }) {
     const height = parseOptionalNumber(draft.height);
     if (height !== undefined && !(Number.isFinite(height) && height > 0 && height <= 100)) {
       setError('Height must be a number of metres between 0 and 100, or empty.');
+      return;
+    }
+    const allowed = parseOptionalNumber(draft.allowed);
+    if (allowed !== undefined && !(Number.isInteger(allowed) && allowed > 0 && allowed <= 100)) {
+      setError('Cables allowed must be a whole number from 1 to 100, or empty.');
       return;
     }
     const next: Equipment = { ...equipment };
@@ -106,6 +118,8 @@ export function PoleDetailsSection({ equipment }: { equipment: Equipment }) {
     set('ownerPoleNumber', blankToUndefined(draft.ownerPoleNumber));
     set('poleNumber', blankToUndefined(draft.poleNumber));
     set('tagCode', blankToUndefined(draft.tagCode)?.toUpperCase());
+    set('attachmentCapacity', allowed);
+    set('attachmentCapacitySource', allowed !== undefined ? blankToUndefined(draft.allowedSource) : undefined);
     updateEquipment(next);
     setError(null);
     setEditing(false);
@@ -127,6 +141,10 @@ export function PoleDetailsSection({ equipment }: { equipment: Equipment }) {
               { label: "Owner's pole number", value: orNotRecorded(equipment.ownerPoleNumber), mono: true },
               { label: 'Our pole number', value: orNotRecorded(equipment.poleNumber), mono: true },
               { label: 'QR tag', value: orNotRecorded(equipment.tagCode), mono: true },
+              {
+                label: 'Cables allowed by the owner',
+                value: equipment.attachmentCapacity !== undefined ? `${equipment.attachmentCapacity}${equipment.attachmentCapacitySource ? ` (from ${equipment.attachmentCapacitySource})` : ''}` : NOT_RECORDED,
+              },
             ]}
           />
           <Button size="sm" icon={Pencil} onClick={() => setEditing(true)} data-testid="pole-details-edit">
@@ -165,6 +183,14 @@ export function PoleDetailsSection({ equipment }: { equipment: Equipment }) {
           <Field label="QR tag code">
             <Input value={draft.tagCode} onChange={(e) => setDraft({ ...draft, tagCode: e.target.value })} />
           </Field>
+          <Field label="Cables allowed on this pole" hint="The number the owner allows, from the permission or agreement. Leave empty if you do not know.">
+            <Input inputMode="numeric" value={draft.allowed} onChange={(e) => setDraft({ ...draft, allowed: e.target.value })} data-testid="pole-allowed-cables" />
+          </Field>
+          {draft.allowed.trim() !== '' && (
+            <Field label="Where this number comes from" hint="Such as the permission letter number and date.">
+              <Input value={draft.allowedSource} onChange={(e) => setDraft({ ...draft, allowedSource: e.target.value })} data-testid="pole-allowed-source" />
+            </Field>
+          )}
           {error && <p className="text-[12px] font-semibold text-red-700">{error}</p>}
           <div className="flex gap-2">
             <Button variant="primary" size="sm" onClick={save} data-testid="pole-details-save">
@@ -464,6 +490,7 @@ export function PermissionsSection({ equipment }: { equipment: Equipment }) {
   const [editing, setEditing] = useState<string | 'new' | null>(null);
 
   return (
+    <>
     <InspectorSection title="Permission and right of way" icon={FileCheck2} aside={permissions.length || undefined}>
       <div className="space-y-2" data-testid="pole-permissions">
         {permissions.length === 0 && editing === null && (
@@ -520,12 +547,48 @@ export function PermissionsSection({ equipment }: { equipment: Equipment }) {
         </p>
       </div>
     </InspectorSection>
+    {/* Phase 4: a pole's inspections follow its permissions, so the pole panel needs no other change. */}
+    {inspectionTargetOf(equipment) === 'pole' && <InspectionsSection targetType="pole" targetId={equipment.id} name={equipment.name} />}
+    </>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /* Ducts at a chamber                                                  */
 /* ------------------------------------------------------------------ */
+
+/** Phase 4: where one duct end comes into this chamber, as written, with a small edit. */
+function DuctEntryRow({ duct, end }: { duct: Duct; end: 'start' | 'end' }) {
+  const current = end === 'start' ? duct.startEntry : duct.endEntry;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(current ?? '');
+  const save = async () => {
+    const next: Duct = { ...duct };
+    const key = end === 'start' ? 'startEntry' : 'endEntry';
+    const value = blankToUndefined(text);
+    if (value) next[key] = value;
+    else delete next[key];
+    if (await saveDuct(next)) setEditing(false);
+  };
+  return !editing ? (
+    <span className="flex items-center gap-1 text-[11px] text-slate-600">
+      {end === 'start' ? 'Leaves' : 'Comes in'} through: {orNotRecorded(current)}
+      <button type="button" aria-label={`Change where ${duct.name} comes in`} onClick={() => setEditing(true)} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100">
+        <Pencil size={12} />
+      </button>
+    </span>
+  ) : (
+    <span className="mt-1 flex items-end gap-2">
+      <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="North wall, hole 2" aria-label="Where it comes in" data-testid={`duct-entry-${duct.id}-${end}`} />
+      <Button size="sm" onClick={() => void save()} data-testid={`duct-entry-save-${duct.id}-${end}`}>
+        Save
+      </Button>
+      <Button size="sm" onClick={() => setEditing(false)}>
+        Cancel
+      </Button>
+    </span>
+  );
+}
 
 export function DuctsAtSection({ equipment }: { equipment: Equipment }) {
   const data = useOspData();
@@ -536,7 +599,8 @@ export function DuctsAtSection({ equipment }: { equipment: Equipment }) {
     if (window.innerWidth < 768) useUiStore.getState().setPanelOpen('right', false);
   };
   return (
-    <InspectorSection title="Ducts" icon={Waypoints} aside={ducts.length || undefined}>
+    <>
+    <InspectorSection title="Ducts, entries and exits" icon={Waypoints} aside={ducts.length || undefined}>
       <div className="space-y-2" data-testid="structure-ducts">
         {ducts.length === 0 ? (
           <p className="text-[12px] text-slate-600">No ducts recorded at this {equipment.type.toLowerCase()}.</p>
@@ -546,15 +610,23 @@ export function DuctsAtSection({ equipment }: { equipment: Equipment }) {
               <li key={duct.id} className="py-1.5 text-[13px]">
                 <RecordLink name={duct.name} id={duct.id} onSelect={() => select({ type: 'duct', data: duct })} />
                 <span className="block text-[11px] text-slate-500">{STRUCTURE_STATUS_LABELS[duct.status]}</span>
+                {duct.fromStructureId === equipment.id && <DuctEntryRow duct={duct} end="start" />}
+                {duct.toStructureId === equipment.id && <DuctEntryRow duct={duct} end="end" />}
               </li>
             ))}
           </ul>
         )}
+        <p className="text-[11px] text-slate-500">
+          A duct is listed here only when it is recorded as starting or ending at this {equipment.type.toLowerCase()}; a line passing near it does not count.
+        </p>
         <Button size="sm" icon={Waypoints} onClick={startDuct} data-testid="start-duct">
           Start duct here
         </Button>
       </div>
     </InspectorSection>
+    {/* Phase 4: a chamber's inspections, beside its ducts. */}
+    {inspectionTargetOf(equipment) === 'chamber' && <InspectionsSection targetType="chamber" targetId={equipment.id} name={equipment.name} />}
+    </>
   );
 }
 

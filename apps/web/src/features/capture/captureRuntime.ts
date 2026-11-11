@@ -2,6 +2,7 @@ import { photoUrl } from '@fibergis/shared';
 
 import { syncEngine } from '../../api/syncEngine';
 import { getNetworkData, useNetworkStore } from '../../stores/networkStore';
+import { recordSyncHistory } from '../../stores/syncHistoryStore';
 import { useSyncStore } from '../../stores/syncStore';
 import { createCaptureService, type UploadOutcome } from './captureService';
 import { createIdbCaptureStorage, type PhotoEntry } from './captureStorage';
@@ -51,6 +52,7 @@ export const captureService = createCaptureService({
     refusedKeys: () => useSyncStore.getState().refused,
     flush: () => void syncEngine.flush(),
   },
+  history: recordSyncHistory,
 });
 
 let started = false;

@@ -12,7 +12,9 @@ import type {
   Cable,
   Duct,
   Equipment,
+  Inspection,
   LatLng,
+  Microduct,
   Permission,
   SlackLoop,
   Span,
@@ -32,6 +34,7 @@ import {
 import { isLatLngPair, isValidCoordinate } from './defaults';
 import { assetGroupOf, distanceMeters, type RandomBytes, randomCode } from './fieldCapture';
 import { polylineLengthMeters } from './geo';
+import { ductOccupancyIssues } from './ospDucts';
 import { DEFAULT_OSP_SETTINGS, type OspSettings } from './ospSettings';
 
 /**
@@ -45,7 +48,7 @@ import { DEFAULT_OSP_SETTINGS, type OspSettings } from './ospSettings';
 /* IDs and small helpers                                               */
 /* ------------------------------------------------------------------ */
 
-export type OspIdPrefix = 'SPN' | 'ATT' | 'DCT' | 'SUB' | 'SLK' | 'PRM' | 'IMP';
+export type OspIdPrefix = 'SPN' | 'ATT' | 'DCT' | 'SUB' | 'MCD' | 'SLK' | 'PRM' | 'IMP' | 'INS';
 
 /** Random IDs, so two offline browsers cannot make the same one. */
 export const newOspId = (prefix: OspIdPrefix, random?: RandomBytes): string => `${prefix}-${randomCode(10, random)}`;
@@ -55,6 +58,35 @@ const attachmentsOf = (data: Partial<Pick<NetworkData, 'attachments'>>) => data.
 const ductsOf = (data: Partial<Pick<NetworkData, 'ducts'>>) => data.ducts ?? [];
 const slackLoopsOf = (data: Partial<Pick<NetworkData, 'slackLoops'>>) => data.slackLoops ?? [];
 const permissionsOf = (data: Partial<Pick<NetworkData, 'permissions'>>) => data.permissions ?? [];
+const inspectionsOf = (data: Partial<Pick<NetworkData, 'inspections'>>) => data.inspections ?? [];
+/** Network mapping Phase 6: stretches of cables. */
+const segmentsOf = (data: Partial<Pick<NetworkData, 'cableSegments'>>) => data.cableSegments ?? [];
+
+/** Stretches no longer naming a span or a duct that is going (the stretch itself stays). */
+function segmentsWithout(data: Partial<Pick<NetworkData, 'cableSegments'>>, kind: 'span' | 'duct', id: string): { patch: NetworkPatch; count: number } {
+  const named = segmentsOf(data).filter((s) => (kind === 'span' ? s.spanIds?.includes(id) : s.ductId === id));
+  if (named.length === 0) return { patch: {}, count: 0 };
+  const cableSegments = segmentsOf(data).map((s) => {
+    if (!named.includes(s)) return s;
+    const next = { ...s };
+    if (kind === 'span') {
+      const left = (s.spanIds ?? []).filter((x) => x !== id);
+      if (left.length) next.spanIds = left;
+      else delete next.spanIds;
+    } else {
+      delete next.ductId;
+      delete next.ductWayId;
+    }
+    return next;
+  });
+  return { patch: { cableSegments }, count: named.length };
+}
+
+/** Inspections of one record (a pole or chamber is equipment; a span or duct is its own record). */
+const inspectionsOfTarget = (data: Partial<Pick<NetworkData, 'inspections'>>, kind: 'equipment' | 'span' | 'duct', id: string): Inspection[] =>
+  inspectionsOf(data).filter(
+    (i) => i.targetId === id && (kind === 'equipment' ? i.targetType === 'pole' || i.targetType === 'chamber' : i.targetType === kind),
+  );
 
 const stamp = (ctx: CommandContext) => ({
   createdAt: (ctx.now ?? new Date()).toISOString(),
@@ -175,11 +207,22 @@ const spanName = (from: Equipment, to: Equipment) => `${from.name} – ${to.name
 export const spanBetween = (spans: readonly Span[], a: string, b: string): Span | undefined =>
   spans.find((s) => (s.fromStructureId === a && s.toStructureId === b) || (s.fromStructureId === b && s.toStructureId === a));
 
-/** Map length of a span, from its two ends. Undefined when an end is missing. */
-export function spanDrawnMeters(span: Span, equipment: readonly Equipment[]): number | undefined {
+/**
+ * The line a span is drawn as: its first pole, the bends a person drew (Phase 4), its second pole.
+ * Undefined when an end is missing. The ends always come from the poles, so moving a pole moves them.
+ */
+export function spanLine(span: Pick<Span, 'fromStructureId' | 'toStructureId' | 'routePoints'>, equipment: readonly Equipment[]): LatLng[] | undefined {
   const from = equipment.find((e) => e.id === span.fromStructureId);
   const to = equipment.find((e) => e.id === span.toStructureId);
-  return from && to ? distanceMeters([from.lat, from.lng], [to.lat, to.lng]) : undefined;
+  if (!from || !to) return undefined;
+  return [[from.lat, from.lng], ...(span.routePoints ?? []), [to.lat, to.lng]];
+}
+
+/** Map length of a span along its drawn line (straight when no bends were drawn). Undefined when an end is missing. */
+export function spanDrawnMeters(span: Span, equipment: readonly Equipment[]): number | undefined {
+  const line = spanLine(span, equipment);
+  if (!line) return undefined;
+  return line.length === 2 ? distanceMeters(line[0], line[1]) : polylineLengthMeters(line);
 }
 
 /** Builds a span record, or explains why it cannot exist. Does not change anything. */
@@ -272,6 +315,9 @@ export function updateSpan(data: NetworkData, span: Span): CommandResult<Span> {
   if (span.measuredLengthMeters !== undefined && !(span.measuredLengthMeters > 0)) {
     return fail('Length not saved', 'A measured length must be above 0.');
   }
+  if (span.routePoints && (span.routePoints.length > 200 || !span.routePoints.every((p) => isLatLngPair(p) && isValidCoordinate(p[0], p[1])))) {
+    return fail('Line not saved', 'The drawn line has a point that is not a real place, or more than 200 points. Draw it again.');
+  }
   return succeed(
     span,
     { spans: spansOf(data).map((s) => (s.id === span.id ? span : s)) },
@@ -282,19 +328,23 @@ export function updateSpan(data: NetworkData, span: Span): CommandResult<Span> {
   );
 }
 
-/** Removes a span and the attachments recorded on it. The caller must confirm. */
+/** Removes a span, the attachments recorded on it and its inspections. The caller must confirm. */
 export function deleteSpan(data: NetworkData, id: string): CommandResult<Span> {
   const span = spansOf(data).find((s) => s.id === id);
   if (!span) return fail('Span missing', `Span ${id} was not found.`);
   const onSpan = attachmentsOf(data).filter((a) => a.spanId === id);
+  const inspections = inspectionsOfTarget(data, 'span', id);
+  const stretches = segmentsWithout(data, 'span', id);
   return succeed(
     span,
     {
       spans: spansOf(data).filter((s) => s.id !== id),
       ...(onSpan.length ? { attachments: attachmentsOf(data).filter((a) => a.spanId !== id) } : {}),
+      ...(inspections.length ? { inspections: inspectionsOf(data).filter((i) => !inspections.includes(i)) } : {}),
+      ...stretches.patch,
     },
     {
-      confirm: `Delete span ${span.name}?${onSpan.length ? ` ${onSpan.length} cable record(s) on it will also be removed.` : ''} You can undo this.`,
+      confirm: `Delete span ${span.name}?${onSpan.length ? ` ${onSpan.length} cable record(s) on it will also be removed.` : ''}${inspections.length ? ` Its ${inspections.length} inspection(s) will also be removed.` : ''}${stretches.count ? ` ${stretches.count} cable stretch(es) will stay but no longer name it.` : ''} You can undo this.`,
       notice: notice('info', 'Span deleted', span.name),
       audit: [
         {
@@ -541,17 +591,21 @@ export function cablesOnSpan(data: NetworkData, spanId: string): { cable: Cable;
 /* Ducts                                                               */
 /* ------------------------------------------------------------------ */
 
-/** Every cable id recorded in a duct, in the duct itself or in a sub-duct. */
+/** Every cable id recorded in a duct: in the duct itself, in a sub-duct or in a microduct (Phase 4). */
 export const ductCableIds = (duct: Pick<Duct, 'cableIds' | 'subducts'>): string[] => [
   ...duct.cableIds,
-  ...duct.subducts.flatMap((s) => s.cableIds),
+  ...duct.subducts.flatMap((s) => [...s.cableIds, ...(s.microducts ?? []).flatMap((m) => m.cableIds)]),
 ];
 
-export function ductsForCable(data: NetworkData, cableId: string): { duct: Duct; subduct?: Subduct }[] {
+export function ductsForCable(data: NetworkData, cableId: string): { duct: Duct; subduct?: Subduct; microduct?: Microduct }[] {
   return ductsOf(data).flatMap((duct) => {
     if (duct.cableIds.includes(cableId)) return [{ duct }];
-    const subduct = duct.subducts.find((s) => s.cableIds.includes(cableId));
-    return subduct ? [{ duct, subduct }] : [];
+    for (const subduct of duct.subducts) {
+      if (subduct.cableIds.includes(cableId)) return [{ duct, subduct }];
+      const microduct = subduct.microducts?.find((m) => m.cableIds.includes(cableId));
+      if (microduct) return [{ duct, subduct, microduct }];
+    }
+    return [];
   });
 }
 
@@ -572,6 +626,10 @@ function ductProblem(data: NetworkData, duct: Duct): string | null {
   if (repeated) return `Cable ${repeated} is listed twice in this duct. One cable can only be in one place.`;
   const labels = duct.subducts.map((s) => s.label.trim().toLowerCase());
   if (new Set(labels).size !== labels.length) return 'Two sub-ducts have the same label.';
+  for (const sub of duct.subducts) {
+    const inner = (sub.microducts ?? []).map((m) => m.label.trim().toLowerCase());
+    if (new Set(inner).size !== inner.length) return `Two microducts in sub-duct ${sub.label} have the same label.`;
+  }
   return null;
 }
 
@@ -584,7 +642,16 @@ export interface DuctDraft {
   basis: LinkBasis;
   wayCount?: number;
   diameterMm?: number;
+  /** Phase 4: inside diameter, for fill. */
+  innerDiameterMm?: number;
   material?: string;
+  /** Phase 4: depth seen on site, depth in the permit, and who owns the duct, as written. */
+  depthObservedMeters?: number;
+  permitDepthMeters?: number;
+  ownerName?: string;
+  /** Phase 4: where it enters the chamber at each end, as written. */
+  startEntry?: string;
+  endEntry?: string;
   subductLabels?: string[];
   notes?: string;
 }
@@ -602,7 +669,13 @@ export function createDuct(data: NetworkData, draft: DuctDraft, ctx: CommandCont
     basis: draft.basis,
     ...(draft.wayCount ? { wayCount: draft.wayCount } : {}),
     ...(draft.diameterMm ? { diameterMm: draft.diameterMm } : {}),
+    ...(draft.innerDiameterMm ? { innerDiameterMm: draft.innerDiameterMm } : {}),
     ...(trimmed(draft.material) ? { material: trimmed(draft.material) } : {}),
+    ...(draft.depthObservedMeters ? { depthObservedMeters: draft.depthObservedMeters } : {}),
+    ...(draft.permitDepthMeters ? { permitDepthMeters: draft.permitDepthMeters } : {}),
+    ...(trimmed(draft.ownerName) ? { ownerName: trimmed(draft.ownerName) } : {}),
+    ...(draft.fromStructureId && trimmed(draft.startEntry) ? { startEntry: trimmed(draft.startEntry) } : {}),
+    ...(draft.toStructureId && trimmed(draft.endEntry) ? { endEntry: trimmed(draft.endEntry) } : {}),
     cableIds: [],
     subducts: (draft.subductLabels ?? []).filter((l) => l.trim()).map((label) => ({ id: newOspId('SUB'), label: label.trim(), cableIds: [] })),
     ...(trimmed(draft.notes) ? { notes: trimmed(draft.notes) } : {}),
@@ -620,11 +693,21 @@ export function createDuct(data: NetworkData, draft: DuctDraft, ctx: CommandCont
   );
 }
 
-/** Saves a duct's details and occupancy. Refuses a missing cable or one cable listed twice. */
-export function updateDuct(data: NetworkData, duct: Duct): CommandResult<Duct> {
-  if (!ductsOf(data).some((d) => d.id === duct.id)) return fail('Duct missing', `Duct ${duct.id} was not found.`);
+/**
+ * Saves a duct's details and occupancy. Refuses a missing cable, one cable listed twice, and a new
+ * cable in a way recorded as blocked (Phase 4: physically impossible until it is cleared). A new
+ * cable in a damaged way, or a fill above the setting, is a warning: the person is asked, and
+ * saving anyway is written to the audit trail.
+ */
+export function updateDuct(data: NetworkData, duct: Duct, settings: OspSettings = DEFAULT_OSP_SETTINGS): CommandResult<Duct> {
+  const current = ductsOf(data).find((d) => d.id === duct.id);
+  if (!current) return fail('Duct missing', `Duct ${duct.id} was not found.`);
   const problem = ductProblem(data, duct);
   if (problem) return fail('Duct not saved', problem);
+  const issues = ductOccupancyIssues(current, duct, data.cables, settings);
+  const blocked = issues.find((i) => i.severity === 'error');
+  if (blocked) return fail('Way is blocked', blocked.message);
+  const warnings = issues.filter((i) => i.severity === 'warning');
   return succeed(
     duct,
     { ducts: ductsOf(data).map((d) => (d.id === duct.id ? duct : d)) },
@@ -637,7 +720,11 @@ export function updateDuct(data: NetworkData, duct: Duct): CommandResult<Duct> {
           assetId: duct.id,
           assetType: 'Duct',
         },
+        ...(warnings.length
+          ? [{ action: 'WARNING_ACCEPTED', details: `Saved after the warning: ${warnings.map((w) => w.message).join(' ')}`.slice(0, 900), assetId: duct.id, assetType: 'Duct' as const }]
+          : []),
       ],
+      ...(warnings.length ? { confirm: `Please check: ${warnings.map((w) => w.message).join(' ')} Save anyway?` } : {}),
     },
   );
 }
@@ -646,11 +733,17 @@ export function deleteDuct(data: NetworkData, id: string): CommandResult<Duct> {
   const duct = ductsOf(data).find((d) => d.id === id);
   if (!duct) return fail('Duct missing', `Duct ${id} was not found.`);
   const cables = ductCableIds(duct).length;
+  const inspections = inspectionsOfTarget(data, 'duct', id);
+  const stretches = segmentsWithout(data, 'duct', id);
   return succeed(
     duct,
-    { ducts: ductsOf(data).filter((d) => d.id !== id) },
     {
-      confirm: `Delete duct ${duct.name}?${cables ? ` It lists ${cables} cable(s); the cables stay, only this duct record goes.` : ''} You can undo this.`,
+      ducts: ductsOf(data).filter((d) => d.id !== id),
+      ...(inspections.length ? { inspections: inspectionsOf(data).filter((i) => !inspections.includes(i)) } : {}),
+      ...stretches.patch,
+    },
+    {
+      confirm: `Delete duct ${duct.name}?${cables ? ` It lists ${cables} cable(s); the cables stay, only this duct record goes.` : ''}${inspections.length ? ` Its ${inspections.length} inspection(s) will also be removed.` : ''}${stretches.count ? ` ${stretches.count} cable stretch(es) will stay but no longer name it.` : ''} You can undo this.`,
       notice: notice('info', 'Duct deleted', duct.name),
       audit: [{ action: 'DUCT_DELETED', details: `Deleted duct ${id} ${duct.name}`, assetId: id, assetType: 'Duct' }],
     },
@@ -905,15 +998,26 @@ export function ospCascadeForEquipment(data: NetworkData, id: string): OspCascad
   const ducts = ductsOf(data).filter((d) => d.fromStructureId === id || d.toStructureId === id);
   const loops = slackLoopsOf(data).filter((l) => l.structureId === id);
   const permissions = permissionsOf(data).filter((p) => p.structureIds.includes(id));
+  // Inspections of the structure and of its spans go with them: they would describe nothing.
+  const inspections = inspectionsOf(data).filter(
+    (i) => ((i.targetType === 'pole' || i.targetType === 'chamber') && i.targetId === id) || (i.targetType === 'span' && spanIds.has(i.targetId)),
+  );
   const patch: NetworkPatch = {};
   if (spans.length) patch.spans = spansOf(data).filter((s) => !spanIds.has(s.id));
+  if (inspections.length) patch.inspections = inspectionsOf(data).filter((i) => !inspections.includes(i));
   if (attachments.length) patch.attachments = attachmentsOf(data).filter((a) => !attachments.includes(a));
   if (ducts.length) {
     patch.ducts = ductsOf(data).map((d) => {
       if (!ducts.includes(d)) return d;
       const next = { ...d };
-      if (next.fromStructureId === id) delete next.fromStructureId;
-      if (next.toStructureId === id) delete next.toStructureId;
+      if (next.fromStructureId === id) {
+        delete next.fromStructureId;
+        delete next.startEntry;
+      }
+      if (next.toStructureId === id) {
+        delete next.toStructureId;
+        delete next.endEntry;
+      }
       return next;
     });
   }
@@ -930,14 +1034,32 @@ export function ospCascadeForEquipment(data: NetworkData, id: string): OspCascad
       p.structureIds.includes(id) ? { ...p, structureIds: p.structureIds.filter((s) => s !== id) } : p,
     );
   }
+  // Network mapping Phase 6: a stretch ending at the structure has lost an end, so it goes; others forget its spans.
+  const endingHere = segmentsOf(data).filter((s) => s.fromStructureId === id || s.toStructureId === id);
+  const onItsSpans = segmentsOf(data).filter((s) => !endingHere.includes(s) && s.spanIds?.some((x) => spanIds.has(x)));
+  if (endingHere.length || onItsSpans.length) {
+    patch.cableSegments = segmentsOf(data)
+      .filter((s) => !endingHere.includes(s))
+      .map((s) => {
+        if (!onItsSpans.includes(s)) return s;
+        const next = { ...s };
+        const left = (s.spanIds ?? []).filter((x) => !spanIds.has(x));
+        if (left.length) next.spanIds = left;
+        else delete next.spanIds;
+        return next;
+      });
+  }
   const parts = [
     spans.length ? `${spans.length} span(s)` : '',
     attachments.length ? `${attachments.length} record(s) of cables carried there` : '',
+    inspections.length ? `${inspections.length} inspection(s)` : '',
+    endingHere.length ? `${endingHere.length} cable stretch(es) ending there` : '',
   ].filter(Boolean);
   const kept = [
     ducts.length ? `${ducts.length} duct(s)` : '',
     loops.length ? `${loops.length} slack loop(s)` : '',
     permissions.length ? `${permissions.length} permission(s)` : '',
+    onItsSpans.length ? `${onItsSpans.length} cable stretch(es) on its spans` : '',
   ].filter(Boolean);
   const summary = [
     parts.length ? `${parts.join(' and ')} will also be removed.` : '',
@@ -963,7 +1085,11 @@ export function ospCascadeForCable(data: NetworkData, id: string): OspCascade {
         ? {
             ...d,
             cableIds: d.cableIds.filter((c) => c !== id),
-            subducts: d.subducts.map((s) => ({ ...s, cableIds: s.cableIds.filter((c) => c !== id) })),
+            subducts: d.subducts.map((s) => ({
+              ...s,
+              cableIds: s.cableIds.filter((c) => c !== id),
+              ...(s.microducts ? { microducts: s.microducts.map((m) => ({ ...m, cableIds: m.cableIds.filter((c) => c !== id) })) } : {}),
+            })),
           }
         : d,
     );
@@ -973,9 +1099,13 @@ export function ospCascadeForCable(data: NetworkData, id: string): OspCascade {
       p.cableIds?.includes(id) ? { ...p, cableIds: p.cableIds.filter((c) => c !== id) } : p,
     );
   }
+  // Network mapping Phase 6: its stretches describe it, so they go with it.
+  const stretches = segmentsOf(data).filter((s) => s.cableId === id);
+  if (stretches.length) patch.cableSegments = segmentsOf(data).filter((s) => s.cableId !== id);
   const removed = [
     attachments.length ? `${attachments.length} record(s) of poles carrying it` : '',
     loops.length ? `${loops.length} slack loop(s)` : '',
+    stretches.length ? `${stretches.length} stretch record(s)` : '',
   ].filter(Boolean);
   const kept = [ducts.length ? `${ducts.length} duct(s)` : '', permissions.length ? `${permissions.length} permission(s)` : ''].filter(Boolean);
   const summary = [
@@ -1006,6 +1136,7 @@ export function findBrokenLinks(data: LinkCheckData): LinkProblem[] {
   const equipment = new Set(data.equipment.map((e) => e.id));
   const cables = new Set(data.cables.map((c) => c.id));
   const spans = new Set((data.spans ?? []).map((s) => s.id));
+  const ducts = new Set((data.ducts ?? []).map((d) => d.id));
   const problems: LinkProblem[] = [];
   const missing = (collection: OspCollection, id: string, missingId: string, what: string) =>
     problems.push({ collection, id, missingId, message: `${what} "${missingId}" does not exist.` });
@@ -1041,15 +1172,33 @@ export function findBrokenLinks(data: LinkCheckData): LinkProblem[] {
     for (const id of p.structureIds) if (!equipment.has(id)) missing('permissions', p.id, id, `Permission ${p.id}: structure`);
     for (const id of p.cableIds ?? []) if (!cables.has(id)) missing('permissions', p.id, id, `Permission ${p.id}: cable`);
   }
+  for (const i of data.inspections ?? []) {
+    const known = i.targetType === 'span' ? spans : i.targetType === 'duct' ? ducts : equipment;
+    if (!known.has(i.targetId)) missing('inspections', i.id, i.targetId, `Inspection ${i.id}: what it inspected`);
+  }
+  // Network mapping Phase 6: a stretch of a cable names its cable, end structures, duct (and way) and spans.
+  if (data.cableSegments?.length) {
+    const ductById = new Map((data.ducts ?? []).map((d) => [d.id, d]));
+    for (const s of data.cableSegments) {
+      if (!cables.has(s.cableId)) missing('cableSegments', s.id, s.cableId, `Cable stretch ${s.id}: its cable`);
+      for (const end of [s.fromStructureId, s.toStructureId]) if (end && !equipment.has(end)) missing('cableSegments', s.id, end, `Cable stretch ${s.id}: its end`);
+      const duct = s.ductId ? ductById.get(s.ductId) : undefined;
+      if (s.ductId && !duct) missing('cableSegments', s.id, s.ductId, `Cable stretch ${s.id}: its duct`);
+      if (duct && s.ductWayId && !duct.subducts.some((w) => w.id === s.ductWayId || (w.microducts ?? []).some((m) => m.id === s.ductWayId))) {
+        missing('cableSegments', s.id, s.ductWayId, `Cable stretch ${s.id}: its way in duct ${duct.id}`);
+      }
+      for (const spanId of s.spanIds ?? []) if (!spans.has(spanId)) missing('cableSegments', s.id, spanId, `Cable stretch ${s.id}: its span`);
+    }
+  }
   return problems;
 }
 
-const LINKED_COLLECTIONS = ['equipment', 'cables', 'spans', 'attachments', 'ducts', 'slackLoops', 'permissions'] as const;
+const LINKED_COLLECTIONS = ['equipment', 'cables', 'spans', 'attachments', 'ducts', 'slackLoops', 'permissions', 'inspections', 'cableSegments'] as const;
 type LinkedCollection = (typeof LINKED_COLLECTIONS)[number];
 
 /** Whether a change set could break an outside-plant link, so the server needs to look. */
 export function changeSetTouchesLinks(changes: ChangeSet): boolean {
-  const osp = ['spans', 'attachments', 'ducts', 'slackLoops', 'permissions'] as const;
+  const osp = ['spans', 'attachments', 'ducts', 'slackLoops', 'permissions', 'inspections', 'cableSegments'] as const;
   const writesOsp = osp.some((name) => (changes.upserts?.[name]?.length ?? 0) > 0 || (changes.deletes?.[name]?.length ?? 0) > 0);
   const deletesParents = (changes.deletes?.equipment?.length ?? 0) > 0 || (changes.deletes?.cables?.length ?? 0) > 0;
   return writesOsp || deletesParents;
@@ -1072,13 +1221,21 @@ export function checkChangeSetLinks(current: LinkCheckData, changes: ChangeSet):
     after[name] = [...byId.values()];
   }
   const upserted = new Set(
-    (['spans', 'attachments', 'ducts', 'slackLoops', 'permissions'] as const).flatMap((name) =>
+    (['spans', 'attachments', 'ducts', 'slackLoops', 'permissions', 'inspections', 'cableSegments'] as const).flatMap((name) =>
       ((changes.upserts?.[name] ?? []) as { id: string }[]).map((r) => `${name}/${r.id}`),
     ),
   );
-  return findBrokenLinks(after as unknown as LinkCheckData).filter(
+  const broken = findBrokenLinks(after as unknown as LinkCheckData).filter(
     (p) => upserted.has(`${p.collection}/${p.id}`) || (p.missingId !== undefined && deleted.has(p.missingId)),
   );
+  // Phase 4: a new cable in a way recorded as blocked is physically impossible. Warnings (damaged, fill) never block here.
+  const storedDucts = new Map((current.ducts ?? []).map((d) => [d.id, d]));
+  const blocked = (changes.upserts?.ducts ?? []).flatMap((duct) =>
+    ductOccupancyIssues(storedDucts.get(duct.id), duct, after.cables as unknown as Cable[])
+      .filter((i) => i.severity === 'error')
+      .map((i): LinkProblem => ({ collection: 'ducts', id: duct.id, message: i.message })),
+  );
+  return [...broken, ...blocked];
 }
 
 /** One plain sentence for a refusal. */

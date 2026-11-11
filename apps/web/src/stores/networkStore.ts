@@ -8,6 +8,7 @@ import {
   type AuditEntry,
   type AuditLog,
   type CatalogComponent,
+  catalogModelUsers,
   type ChangeSet,
   checkChangeAccess,
   COLLECTION_NAMES,
@@ -35,12 +36,14 @@ import {
   type SyncConflict,
   uniqueId,
   type UserRole,
+  validateCatalogEntry,
 } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
-import { browserStorage, readJson, removeKeys, storageKey, writeJson } from '../lib/storage';
+import { cacheHas, cacheRead, cacheRemove, cacheWrite } from '../lib/officeCache';
 import { currentAccount, loginIsOn } from './authStore';
 import { requestConfirm } from './confirmStore';
+import { forgetSyncHistory } from './syncHistoryStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { type SelectedObject, type SelectedObjectType, useUiStore } from './uiStore';
@@ -86,6 +89,16 @@ const COLLECTION_STORAGE_KEYS: Record<CollectionName, string> = {
   monitoringSources: 'monitoring_sources',
   onuReadings: 'onu_readings',
   onuStatuses: 'onu_statuses',
+  deviceStatuses: 'device_statuses',
+  inspections: 'inspections',
+  sites: 'sites',
+  racks: 'racks',
+  cableSegments: 'cable_segments',
+  linkVerifications: 'link_verifications',
+  validationFindings: 'validation_findings',
+  planningScenarios: 'planning_scenarios',
+  opticalBudgetRuns: 'optical_budget_runs',
+  imports: 'imports',
 };
 
 export const MAX_AUDIT_LOGS = 500;
@@ -114,7 +127,30 @@ const DATA_KEYS = [
   'rfElements',
   'rfLinks',
   'rfLevels',
+  'inspections',
+  // Phase 9: sites and racks.
+  'sites',
+  'racks',
+  // Network mapping Phase 6: stretches of cables.
+  'cableSegments',
+  // Network mapping Phase 13: checks of links.
+  'linkVerifications',
+  // Network mapping Phase 15: map check findings (kept, never deleted).
+  'validationFindings',
+  // Network mapping Phase 18: expansion scenarios (plans only).
+  'planningScenarios',
+  // Network mapping Phase 17: stored optical budget runs (history, never changed).
+  'opticalBudgetRuns',
+  // Network mapping Phase 21: import history (undo of the import step removes its record too).
+  'imports',
 ] as const satisfies readonly (keyof NetworkData)[];
+
+/**
+ * Stored history that undo leaves alone: a budget run is never changed or deleted, and a finding's
+ * history only grows, so the server refuses a delete or a rollback of either. Storing one adds no
+ * undo step, and undo/redo keeps these as they are now.
+ */
+const KEPT_BY_UNDO = ['validationFindings', 'opticalBudgetRuns'] as const satisfies readonly (typeof DATA_KEYS)[number][];
 
 const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
   equipment: 'equipment',
@@ -130,6 +166,14 @@ const SELECTION_COLLECTION: Record<SelectedObjectType, keyof NetworkData> = {
 export type Command<T> = (data: NetworkData, ctx: CommandContext) => CommandResult<T>;
 
 /** Settings are for engineers and the administrator once login is on (Phase 9). */
+/** The catalogue is configuration: the same people who change settings change it (Phase 2). */
+function catalogAllowed(): boolean {
+  const account = enforcedAccount();
+  if (!account || roleMay(account.role, 'change_settings')) return true;
+  showToast('error', 'Not allowed for your account', 'Only engineers and the administrator change the equipment catalogue. Nothing was changed.');
+  return false;
+}
+
 function settingsAllowed(): boolean {
   const account = enforcedAccount();
   if (!account || roleMay(account.role, 'change_settings')) return true;
@@ -170,7 +214,10 @@ export interface NetworkState extends NetworkSnapshot {
   /** Swaps in whole collections (restore, reset, server load); changed network data starts a fresh undo history. */
   replaceCollections: (collections: Partial<NetworkSnapshot>, projectStartPoint?: LatLng | null) => void;
   setProjectStartPoint: (point: LatLng | null) => void;
-  addCatalogComponent: (item: CatalogComponent) => void;
+  /** Adds or replaces a catalogue entry. False when refused (permission or validation); nothing changes then. */
+  addCatalogComponent: (item: CatalogComponent) => boolean;
+  /** Removes an entry no item uses. False when refused. */
+  removeCatalogComponent: (id: string) => boolean;
   addGpsRoute: (route: GpsRoute) => void;
   deleteGpsRoute: (id: string) => void;
   /** Inserts or replaces a trip without a toast: active duties save on every location update. */
@@ -202,19 +249,18 @@ const freshHistory = (state: NetworkData): History => ({ stack: [pickData(state)
  * login. Only the sync engine's bookkeeping stays. Call it only when nothing is waiting to be sent.
  */
 export function forgetCachedNetwork(): void {
-  removeKeys([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY]);
+  cacheRemove([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY]);
+  // Phase 19: the device's sync history names records (customers too), so it goes as well.
+  forgetSyncHistory();
 }
 
 /** Discards browser data written by an incompatible earlier release. */
 function ensureStorageVersion(): void {
-  const storage = browserStorage();
-  try {
-    if (!storage || storage.getItem(storageKey(DATA_VERSION_KEY)) === DATA_VERSION) return;
-    removeKeys([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY, SYNC_META_STORAGE_KEY]);
-    storage.setItem(storageKey(DATA_VERSION_KEY), DATA_VERSION);
-  } catch {
-    // Storage unavailable: the bundled sample is used in memory.
-  }
+  // Older releases wrote the bare text "3"; JSON reads it back as the number 3.
+  const stored = cacheRead<unknown>(DATA_VERSION_KEY, null, () => true);
+  if (stored !== null && String(stored) === DATA_VERSION) return;
+  cacheRemove([...Object.values(COLLECTION_STORAGE_KEYS), PROJECT_START_KEY, SYNC_META_STORAGE_KEY]);
+  cacheWrite(DATA_VERSION_KEY, DATA_VERSION);
 }
 
 let loadedFromCache = false;
@@ -222,19 +268,18 @@ let loadedFromCache = false;
 /** Whether the store started from collections cached in this browser rather than the bundled sample. */
 export const wasLoadedFromCache = (): boolean => loadedFromCache;
 
+/**
+ * Phase 19: the cache is IndexedDB when `startOfficeCache` ran first (the app does that in
+ * `main.tsx`), else `localStorage` as before. Either way it is read here, once, synchronously.
+ */
 function loadInitialState(): Pick<NetworkState, CollectionName | 'projectStartPoint'> {
   ensureStorageVersion();
-  try {
-    const storage = browserStorage();
-    loadedFromCache = Object.values(COLLECTION_STORAGE_KEYS).some((key) => storage?.getItem(storageKey(key)) != null);
-  } catch {
-    loadedFromCache = false;
-  }
+  loadedFromCache = Object.values(COLLECTION_STORAGE_KEYS).some((key) => cacheHas(key));
   const sample = createSampleNetwork();
   const collections = Object.fromEntries(
-    COLLECTION_NAMES.map((name) => [name, readJson(COLLECTION_STORAGE_KEYS[name], sample[name], isRecordArray)]),
+    COLLECTION_NAMES.map((name) => [name, cacheRead(COLLECTION_STORAGE_KEYS[name], sample[name], isRecordArray)]),
   ) as NetworkSnapshot;
-  return { ...collections, projectStartPoint: readJson<LatLng | null>(PROJECT_START_KEY, null, isLatLngPair) };
+  return { ...collections, projectStartPoint: cacheRead<LatLng | null>(PROJECT_START_KEY, null, isLatLngPair) };
 }
 
 /** Keeps the inspector pointed at the latest version of the selected record, or clears it once deleted. */
@@ -334,6 +379,12 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       return false;
     }
     const after = applyPatch(before, patch);
+    const changed = DATA_KEYS.filter((key) => patch[key] !== undefined && patch[key] !== before[key]);
+    if (changed.every((key) => (KEPT_BY_UNDO as readonly string[]).includes(key))) {
+      set({ ...patch });
+      syncSelection(before, after);
+      return true;
+    }
     const { stack, index } = state.history;
     const nextStack = [...stack.slice(0, index + 1), after].slice(-MAX_HISTORY);
     set({ ...patch, history: { stack: nextStack, index: nextStack.length - 1 } });
@@ -346,7 +397,8 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     const target = state.history.stack[index];
     if (!target) return false;
     const before = pickData(state);
-    set({ ...target, history: { ...state.history, index } });
+    const kept = Object.fromEntries(KEPT_BY_UNDO.map((key) => [key, state[key]]));
+    set({ ...target, ...kept, history: { ...state.history, index } });
     syncSelection(before, target);
     useTraceStore.getState().clear();
     return true;
@@ -442,8 +494,33 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
     setProjectStartPoint: (projectStartPoint) => set({ projectStartPoint }),
 
     addCatalogComponent: (item) => {
+      if (!catalogAllowed()) return false;
+      const existing = get().catalog;
+      const problem = validateCatalogEntry(existing, item);
+      if (problem) {
+        showToast('error', 'Not saved', problem);
+        return false;
+      }
+      const isNew = !existing.some((c) => c.id === item.id);
       set((s) => ({ catalog: [...s.catalog.filter((c) => c.id !== item.id), item] }));
-      showToast('success', 'Component Type Added', `${item.name} is now in the catalog.`);
+      showToast('success', isNew ? 'Added to the catalogue' : 'Catalogue entry saved', `${item.name} is ${isNew ? 'now in' : 'saved in'} the catalogue.`);
+      get().logAudit({ action: isNew ? 'CATALOG_ADDED' : 'CATALOG_UPDATED', details: `${isNew ? 'Added' : 'Changed'} catalogue entry ${item.name}`, assetId: item.id, assetType: 'System' });
+      return true;
+    },
+
+    removeCatalogComponent: (id) => {
+      if (!catalogAllowed()) return false;
+      const item = get().catalog.find((c) => c.id === id);
+      if (!item) return false;
+      const users = catalogModelUsers(get().equipment, id);
+      if (users.length > 0) {
+        showToast('error', 'Still in use', `${users.length} item(s) on the map are this model (${users.slice(0, 3).map((e) => e.name).join(', ')}${users.length > 3 ? ', …' : ''}). Change them to another model first.`);
+        return false;
+      }
+      set((s) => ({ catalog: s.catalog.filter((c) => c.id !== id) }));
+      showToast('info', 'Removed from the catalogue', `${item.name} was removed. Items placed before keep their details.`);
+      get().logAudit({ action: 'CATALOG_REMOVED', details: `Removed catalogue entry ${item.name}`, assetId: id, assetType: 'System' });
+      return true;
     },
 
     addGpsRoute: (route) => {
@@ -491,12 +568,13 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
   };
 });
 
-// Write-through cache: every changed collection is mirrored to localStorage.
+// Write-through cache: every changed collection is mirrored to the office cache (IndexedDB since
+// Phase 19, `localStorage` when IndexedDB cannot open).
 useNetworkStore.subscribe((state, prev) => {
   for (const name of COLLECTION_NAMES) {
-    if (state[name] !== prev[name]) writeJson(COLLECTION_STORAGE_KEYS[name], state[name]);
+    if (state[name] !== prev[name]) cacheWrite(COLLECTION_STORAGE_KEYS[name], state[name]);
   }
-  if (state.projectStartPoint !== prev.projectStartPoint) writeJson(PROJECT_START_KEY, state.projectStartPoint);
+  if (state.projectStartPoint !== prev.projectStartPoint) cacheWrite(PROJECT_START_KEY, state.projectStartPoint);
 });
 
 export const selectCanUndo = (state: NetworkState): boolean => state.history.index > 0;

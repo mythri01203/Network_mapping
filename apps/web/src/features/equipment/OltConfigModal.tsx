@@ -24,31 +24,38 @@ import {
   buildOltLogicalPorts,
   buildOltPonPorts,
   type CableType,
+  customersOnPonPort,
   type Equipment,
   type EquipmentPort,
   generateOltDescription,
   isCustomerTerminal,
+  MAX_OLT_PON_PORTS,
   type OltConfig,
-PON_TECHNOLOGIES, type PonTechnology,  type SplitterRatio,
+  pickerEntries,
+  PON_TECHNOLOGIES,
+  type PonTechnology,
+  type SplitterRatio,
   STANDARD_PORT_COLORS,
-  validateOltConfig } from '@fibergis/shared';
+  validateOltConfig,
+} from '@fibergis/shared';
 
+import { requestConfirm } from '../../stores/confirmStore';
+import { addSplitter } from '../../stores/fiberActions';
 import { useMapStore } from '../../stores/mapStore';
-import { addSplitter, updateEquipment } from '../../stores/networkActions';
+import { updateEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 
 type ConfigTab = 'basic' | 'tech' | 'ports' | 'colors' | 'splitters' | 'cables' | 'summary';
 
-const SPLITTER_RATIO_PRESETS: { ratio: SplitterRatio; loss: string; outputs: number }[] = [
-  { ratio: '1:2', loss: '3.5 dB', outputs: 2 },
-  { ratio: '1:4', loss: '7.2 dB', outputs: 4 },
-  { ratio: '1:8', loss: '10.5 dB', outputs: 8 },
-  { ratio: '1:16', loss: '14.0 dB', outputs: 16 },
-  { ratio: '1:32', loss: '17.5 dB', outputs: 32 },
-];
+/** Outputs of an equal splitter, read from its ratio ("1:8" → 8). */
+const outputsOf = (ratio: string): number | undefined => {
+  const n = Number(ratio.split(':')[1]);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
 
+/** Phase 10: names offered while typing the make. Any other name can be typed; nothing is chosen for the person. */
 const OLT_MANUFACTURERS = [
   'Syrotech',
   'Huawei',
@@ -60,7 +67,6 @@ const OLT_MANUFACTURERS = [
   'Cisco',
   'Ubiquiti',
   'MikroTik',
-  'Other',
 ];
 
 const CORE_COUNT_PRESETS = [2, 4, 6, 12, 24, 48, 96];
@@ -74,13 +80,19 @@ export const OltConfigModal: React.FC = () => {
     })),
   );
 
-  const { allEquipment, allCables, networkSplitters } = useNetworkStore(
+  const { allEquipment, allCables, networkSplitters, allCustomers, settings } = useNetworkStore(
     useShallow((s) => ({
       allEquipment: s.equipment,
       allCables: s.cables,
       networkSplitters: s.splitters,
+      allCustomers: s.customers,
+      settings: s.settings,
     })),
   );
+  // Phase 23 editable list: the owner's names for the ratios. The ratio values themselves are fixed.
+  const ratioEntries = pickerEntries('splitterRatios', settings);
+  // Makes offered while typing: the common names plus any already written on this network.
+  const makeSuggestions = [...new Set([...OLT_MANUFACTURERS, ...allEquipment.filter((e) => e.type === 'OLT' && e.manufacturer?.trim()).map((e) => e.manufacturer!.trim())])];
 
   const [activeTab, setActiveTab] = useState<ConfigTab>('basic');
 
@@ -92,8 +104,9 @@ export const OltConfigModal: React.FC = () => {
   const [area, setArea] = useState('');
   const [street, setStreet] = useState('');
   const [technology, setTechnology] = useState<PonTechnology>('GPON');
-  const [totalPorts, setTotalPorts] = useState(8);
-  const [customPortCount, setCustomPortCount] = useState<number | ''>('');
+  // Phase 10: any count the person reads off the OLT (such as 12). 0 means not entered yet.
+  const [totalPorts, setTotalPorts] = useState(0);
+  const [portCountText, setPortCountText] = useState('');
   const [portColorMap, setPortColorMap] = useState<Record<string, string>>({});
 
   // Splitters state
@@ -110,7 +123,7 @@ export const OltConfigModal: React.FC = () => {
     }>
   >([]);
 
-  // Splitter form
+  // Splitter proposal form
   const [newSplitterRatio, setNewSplitterRatio] = useState<SplitterRatio>('1:8');
   const [newSplitterPonPort, setNewSplitterPonPort] = useState('PON-01');
   const [newSplitterColor, setNewSplitterColor] = useState('Blue');
@@ -141,13 +154,10 @@ export const OltConfigModal: React.FC = () => {
     // Keep the recorded technology, including XGS-PON and 10G-EPON. GPON is only the shown starting choice.
     setTechnology(olt.technology ?? 'GPON');
 
-    const portCount = olt.totalPorts || olt.ponPorts?.length || 8;
+    // Phase 10: the recorded count, or nothing. No count is assumed for a new OLT.
+    const portCount = olt.ponPorts?.length || olt.totalPorts || 0;
     setTotalPorts(portCount);
-    if (![4, 8, 16, 32].includes(portCount)) {
-      setCustomPortCount(portCount);
-    } else {
-      setCustomPortCount('');
-    }
+    setPortCountText(portCount ? String(portCount) : '');
 
     // Initialize port colors
     const colors: Record<string, string> = { ...(olt.portColorMap || {}) };
@@ -163,26 +173,22 @@ export const OltConfigModal: React.FC = () => {
     if (olt.oltConfig?.splitters) {
       setSplitters(olt.oltConfig.splitters);
     } else {
-      // Find downstream splitters already connected to this OLT
+      // Find downstream splitters already connected to this OLT. The PON port is only what the cable
+      // records as its start port; a port is never guessed from the list order.
       const downstream = allEquipment.filter(
         (e) => e.type.includes('Splitter') && allCables.some((c) => c.startEquipmentId === olt.id && c.endEquipmentId === e.id),
       );
-      if (downstream.length > 0) {
-        setSplitters(
-          downstream
-            .filter((s) => !!s.splitterConfig?.ratio)
-            .map((s, idx) => ({
-            id: s.id,
-            name: s.name,
-            ratio: s.splitterConfig!.ratio as SplitterRatio,
-            inPort: 'IN-01',
-            parentPonPort: `PON-${String(idx + 1).padStart(2, '0')}`,
-            outPortsCount: s.totalPorts || 8,
-          })),
-        );
-      } else {
-        setSplitters([]);
-      }
+      setSplitters(
+        downstream
+          .filter((s) => !!s.splitterConfig?.ratio)
+          .flatMap((s) => {
+            const ratio = s.splitterConfig!.ratio as SplitterRatio;
+            const outs = outputsOf(ratio) ?? s.totalPorts;
+            if (!outs) return [];
+            const startPort = allCables.find((c) => c.startEquipmentId === olt.id && c.endEquipmentId === s.id)?.startPortName;
+            return [{ id: s.id, name: s.name, ratio, inPort: 'IN-01', ...(startPort ? { parentPonPort: startPort } : {}), outPortsCount: outs }];
+          }),
+      );
     }
 
     setActiveTab('basic');
@@ -209,7 +215,7 @@ export const OltConfigModal: React.FC = () => {
           type: c.type,
           coreCount: c.fiberCount,
           colorHex: c.colorHex,
-          ponPort: c.startPortName || 'PON-01',
+          ponPort: c.startPortName || undefined,
           lengthMeters: c.lengthMeters,
         })),
     });
@@ -227,8 +233,10 @@ export const OltConfigModal: React.FC = () => {
     showToast('success', 'Color Scheme Applied', 'Applied TIA-598 standard sequence across all PON ports.');
   };
 
+  /** Phase 10: adds a splitter to the plan only. No splitter record is made until the person confirms one. */
   const handleAddSplitter = () => {
-    const targetRatioPreset = SPLITTER_RATIO_PRESETS.find((p) => p.ratio === newSplitterRatio) || SPLITTER_RATIO_PRESETS[2];
+    const outputs = outputsOf(newSplitterRatio);
+    if (!outputs) return;
     const newId = `SPL-${technology.replace(/\s+/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
     const destination = newSplitterTerminalId ? ` → ${newSplitterTerminalId}` : '';
 
@@ -238,13 +246,30 @@ export const OltConfigModal: React.FC = () => {
       ratio: newSplitterRatio,
       inPort: 'IN-01',
       parentPonPort: newSplitterPonPort,
-      outPortsCount: targetRatioPreset.outputs,
+      outPortsCount: outputs,
       color: newSplitterColor,
       targetEquipmentId: newSplitterTerminalId || undefined,
     };
 
     setSplitters((prev) => [...prev, newSplItem]);
-    showToast('success', 'Splitter Configured', `Added ${newSplitterRatio} splitter attached to ${newSplitterPonPort}`);
+    showToast('info', 'Splitter proposed', `A ${newSplitterRatio} splitter on ${newSplitterPonPort} is in the plan. It is not a record yet: use "Create splitter record" when it is installed.`);
+  };
+
+  /** Phase 10: makes the splitter record for one proposal, after the person confirms. */
+  const handleCreateSplitter = async (proposal: (typeof splitters)[number]) => {
+    const box = allEquipment.find((e) => e.id === proposal.targetEquipmentId);
+    if (!box) {
+      showToast('warning', 'Choose the box first', 'A splitter record needs the terminal box it is installed in. Remove this proposal and add it again with the box.');
+      return;
+    }
+    const yes = await requestConfirm({
+      title: 'Create the splitter record?',
+      message: `This makes splitter ${proposal.id} (${proposal.ratio}) in ${box.name}. Its input fiber is not linked: link it on the splitter in the box once you know which fiber feeds it.`,
+      confirmLabel: 'Create splitter',
+      tone: 'default',
+    });
+    if (!yes) return;
+    await addSplitter({ id: proposal.id, name: proposal.name, terminalBoxId: box.id, ratio: proposal.ratio });
   };
 
   const handleRemoveSplitter = (id: string) => {
@@ -305,11 +330,18 @@ export const OltConfigModal: React.FC = () => {
 
     // Edit the live record: other work may have changed this OLT since the dialog opened.
     const current = allEquipment.find((e) => e.id === olt.id) ?? olt;
+    // Phase 10: customers are counted from their records, not from the stored counter.
     const stranded = current.ponPorts?.find(
-      (p) => p.portNumber > totalPorts && (p.connectedFeederCableId || p.connectedCustomersCount > 0),
+      (p) => p.portNumber > totalPorts && (p.connectedFeederCableId || customersOnPonPort(allCustomers, current.id, p.id).length > 0),
     );
     if (stranded) {
       showToast('error', 'PON Port In Use', `${stranded.id} is still connected, so the OLT needs at least ${stranded.portNumber} ports.`);
+      return false;
+    }
+    const keptIds = new Set(buildOltPonPorts(current, totalPorts).map((p) => p.id));
+    const onCard = current.chassis?.shelves.flatMap((s) => s.slots.flatMap((l) => (l.card?.ponPortIds ?? []).filter((id) => !keptIds.has(id)).map((id) => `${id} (shelf ${s.label} slot ${l.label})`)));
+    if (onCard?.length) {
+      showToast('error', 'PON Port On A Card', `${onCard[0]} is recorded on a card. Take it off the card in "Chassis: shelves, slots and cards" first, or keep more ports.`);
       return false;
     }
 
@@ -335,26 +367,30 @@ export const OltConfigModal: React.FC = () => {
     const updatedOlt: Equipment = {
       ...current,
       name: name.trim() || current.name,
-      manufacturer: manufacturer || undefined,
-      model: model || undefined,
+      manufacturer: manufacturer.trim() || undefined,
+      model: model.trim() || undefined,
       technology,
       totalPorts,
       usedPorts: usedPons,
       availablePorts: totalPorts - usedPons,
       area: area || current.area,
       street: street || current.street,
-      notes: generatedDescription,
+      // Phase 10: the generated description is kept in oltConfig.description; the person's own notes stay.
       portColorMap,
       oltConfig: oltConfigData,
       ponPorts,
       logicalPorts,
     };
 
-    updateEquipment(updatedOlt);
-    splitters
-      .filter((s) => s.targetEquipmentId && !networkSplitters.some((n) => n.id === s.id))
-      .forEach((s) => addSplitter({ id: s.id, name: s.name, terminalBoxId: s.targetEquipmentId!, ratio: s.ratio }));
-    showToast('success', 'OLT Configuration Saved', `Updated ${name} with ${technology} and ${totalPorts} PON ports.`);
+    // Phase 10: saving no longer creates splitter records. Proposals stay in the plan until the
+    // person presses "Create splitter record" on one and confirms.
+    if (!updateEquipment(updatedOlt)) return false;
+    const waiting = splitters.filter((s) => !networkSplitters.some((n) => n.id === s.id)).length;
+    showToast(
+      'success',
+      'OLT Configuration Saved',
+      `Updated ${name} with ${technology} and ${totalPorts} PON ports.${waiting ? ` ${waiting} proposed splitter(s) are not records yet.` : ''}`,
+    );
     return true;
   };
 
@@ -468,19 +504,24 @@ export const OltConfigModal: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Manufacturer</label>
-                  <select
+                  <label htmlFor="olt-make" className="block text-xs font-semibold text-slate-300 mb-1.5">Manufacturer (as on the OLT label)</label>
+                  {/* Phase 10: free text. The list only offers names while typing; blank is "Not recorded". */}
+                  <input
+                    id="olt-make"
+                    type="text"
+                    list="olt-make-suggestions"
+                    data-testid="olt-make"
                     value={manufacturer}
+                    maxLength={80}
                     onChange={(e) => setManufacturer(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-sky-500"
-                  >
-                    <option value="">Not recorded</option>
-                    {OLT_MANUFACTURERS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
+                    placeholder="Not recorded"
+                    className="w-full min-h-12 md:min-h-9 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm md:text-xs text-white placeholder:text-slate-500 outline-none focus:border-sky-500"
+                  />
+                  <datalist id="olt-make-suggestions">
+                    {makeSuggestions.map((m) => (
+                      <option key={m} value={m} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
 
                 <div>
@@ -652,65 +693,50 @@ export const OltConfigModal: React.FC = () => {
           {activeTab === 'ports' && (
             <div className="space-y-4 animate-in fade-in">
               <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                <div>
-                  <span className="block text-xs font-semibold text-slate-200">PON Port Density</span>
-                  <span className="text-[11px] text-slate-400">Select port count or enter a custom value</span>
-                </div>
+                {/* Phase 10: any count, such as 12. Nothing is chosen for the person. */}
+                <label htmlFor="olt-pon-count" className="block">
+                  <span className="block text-xs font-semibold text-slate-200">How many PON ports does this OLT have?</span>
+                  <span className="text-[11px] text-slate-400">Count them on the front of the OLT. Any number from 1 to {MAX_OLT_PON_PORTS}.</span>
+                </label>
 
-                <div className="flex items-center gap-2">
-                  {[4, 8, 16, 32].map((cnt) => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => {
-                        setTotalPorts(cnt);
-                        setCustomPortCount('');
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        totalPorts === cnt && customPortCount === ''
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {cnt} Ports
-                    </button>
-                  ))}
-
-                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
-                    <span className="text-[11px] text-slate-400">Custom:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={128}
-                      value={customPortCount}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        setCustomPortCount(val || '');
-                        if (val > 0) setTotalPorts(val);
-                      }}
-                      placeholder="e.g. 24"
-                      className="w-16 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-center text-white outline-none focus:border-sky-500 font-mono"
-                    />
-                  </div>
-                </div>
+                <input
+                  id="olt-pon-count"
+                  data-testid="olt-pon-count"
+                  type="text"
+                  inputMode="numeric"
+                  value={portCountText}
+                  onChange={(e) => {
+                    const text = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setPortCountText(text);
+                    setTotalPorts(text ? Number(text) : 0);
+                  }}
+                  placeholder="Not recorded"
+                  className="w-32 min-h-12 md:min-h-9 px-3 rounded-lg bg-slate-800 border border-slate-700 text-base md:text-sm text-center text-white outline-none focus:border-sky-500 font-mono"
+                />
+                {totalPorts > MAX_OLT_PON_PORTS && (
+                  <p className="w-full text-xs text-rose-300">More than {MAX_OLT_PON_PORTS} ports is not possible for one OLT here. Check the number.</p>
+                )}
               </div>
 
               {/* Port Table */}
               <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/40">
                 <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 grid grid-cols-12 gap-2 text-[11px] font-semibold uppercase text-slate-400 tracking-wider">
                   <span className="col-span-3">Port Code</span>
-                  <span className="col-span-3">Type & Capacity</span>
+                  <span className="col-span-3">Type & ONU limit</span>
                   <span className="col-span-3">Color Assignment</span>
                   <span className="col-span-3 text-right">Status</span>
                 </div>
 
                 <div className="divide-y divide-slate-800/60 max-h-64 overflow-y-auto">
-                  {Array.from({ length: totalPorts }, (_, i) => {
+                  {totalPorts === 0 && <p className="px-4 py-3 text-xs text-slate-400">Enter the port count above to list the ports.</p>}
+                  {Array.from({ length: Math.min(totalPorts, MAX_OLT_PON_PORTS) }, (_, i) => {
                     const portNumber = i + 1;
                     const pad = String(portNumber).padStart(2, '0');
                     const code = `PON-${pad}`;
                     const assignedColor = portColorMap[code] || STANDARD_PORT_COLORS[i % STANDARD_PORT_COLORS.length].name;
                     const hex = STANDARD_PORT_COLORS.find((c) => c.name === assignedColor)?.hex || '#0284c7';
+                    // Phase 10: the port as recorded, or "New" for a port this save would add.
+                    const recorded = (allEquipment.find((e) => e.id === olt.id) ?? olt).ponPorts?.find((p) => p.portNumber === portNumber);
 
                     return (
                       <div key={code} className="px-4 py-2 grid grid-cols-12 gap-2 items-center text-xs hover:bg-slate-900/40">
@@ -720,7 +746,7 @@ export const OltConfigModal: React.FC = () => {
                         </span>
 
                         <span className="col-span-3 text-slate-300">
-                          {technology} (1:{technology === 'GPON' ? '128' : '64'})
+                          {recorded?.technology ?? technology} · {recorded?.maxOnu !== undefined ? `${recorded.maxOnu} ONUs` : 'limit not recorded'}
                         </span>
 
                         <span className="col-span-3 font-medium text-slate-300 flex items-center gap-1">
@@ -729,8 +755,8 @@ export const OltConfigModal: React.FC = () => {
                         </span>
 
                         <span className="col-span-3 text-right">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-                            Available
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-slate-300 border border-slate-700">
+                            {recorded ? recorded.status : 'New'}
                           </span>
                         </span>
                       </div>
@@ -815,9 +841,9 @@ export const OltConfigModal: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-white flex items-center gap-2">
                     <Split className="w-4 h-4 text-purple-400" />
-                    <span>Attach New Optical Splitter</span>
+                    <span>Propose a splitter</span>
                   </span>
-                  <span className="text-[11px] text-slate-400">Generates IN-01 and OUT-01..N</span>
+                  <span className="text-[11px] text-slate-400">A plan only. No splitter record is made until you create it below.</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -826,13 +852,16 @@ export const OltConfigModal: React.FC = () => {
                     <select
                       value={newSplitterRatio}
                       onChange={(e) => setNewSplitterRatio(e.target.value as SplitterRatio)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-purple-500"
+                      className="w-full min-h-12 md:min-h-9 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-purple-500"
                     >
-                      {SPLITTER_RATIO_PRESETS.map((p) => (
-                        <option key={p.ratio} value={p.ratio}>
-                          {p.ratio} ({p.loss} loss · {p.outputs} outs)
-                        </option>
-                      ))}
+                      {ratioEntries
+                        .filter((r) => outputsOf(r.value))
+                        .map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                            {r.label !== r.value ? ` (${r.value})` : ''} · {outputsOf(r.value)} outputs
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -877,7 +906,7 @@ export const OltConfigModal: React.FC = () => {
                     onChange={(e) => setNewSplitterTerminalId(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white outline-none focus:border-purple-500"
                   >
-                    <option value="">Not installed yet (customers cannot use it)</option>
+                    <option value="">Not decided yet</option>
                     {allEquipment
                       .filter((e) => isCustomerTerminal(e.type))
                       .map((e) => (
@@ -892,10 +921,11 @@ export const OltConfigModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAddSplitter}
-                    className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md"
+                    disabled={totalPorts === 0}
+                    className="min-h-12 md:min-h-9 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Splitter to OLT</span>
+                    <span>Add to the plan</span>
                   </button>
                 </div>
               </div>
@@ -903,19 +933,23 @@ export const OltConfigModal: React.FC = () => {
               {/* Splitters list */}
               <div className="space-y-2">
                 <span className="text-xs font-bold text-slate-300 block">
-                  Configured Splitters ({splitters.length})
+                  Splitter plan ({splitters.length})
                 </span>
 
                 {splitters.length === 0 ? (
                   <p className="text-xs text-slate-500 italic p-4 text-center bg-slate-950/40 rounded-xl border border-slate-800">
-                    No splitters configured for this OLT yet. Add one above.
+                    No splitters planned for this OLT yet. Propose one above.
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {splitters.map((spl) => (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {splitters.map((spl) => {
+                      const isRecord = networkSplitters.some((n) => n.id === spl.id);
+                      const box = spl.targetEquipmentId ? allEquipment.find((e) => e.id === spl.targetEquipmentId) : undefined;
+                      return (
                       <div
                         key={spl.id}
-                        className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between text-xs"
+                        data-testid="olt-splitter-proposal"
+                        className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-[11px] border border-purple-500/30">
@@ -929,21 +963,41 @@ export const OltConfigModal: React.FC = () => {
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-400">
-                              Fed by: <strong className="text-sky-400 font-mono">{spl.parentPonPort}</strong> · {spl.outPortsCount} Output Branches (OUT-01 to OUT-{String(spl.outPortsCount).padStart(2, '0')})
+                              Fed by: <strong className="text-sky-400 font-mono">{spl.parentPonPort ?? 'PON port not recorded'}</strong> · {spl.outPortsCount} Output Branches (OUT-01 to OUT-{String(spl.outPortsCount).padStart(2, '0')})
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              Box: {box ? box.name : spl.targetEquipmentId ? `${spl.targetEquipmentId} (not on the map)` : 'Not decided'} ·{' '}
+                              {isRecord ? <span className="font-semibold text-emerald-400">Splitter record exists</span> : <span className="font-semibold text-amber-300">Proposed only</span>}
                             </div>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSplitter(spl.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
-                          title="Remove Splitter"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {!isRecord && (
+                            <button
+                              type="button"
+                              data-testid="olt-splitter-create"
+                              disabled={!box}
+                              title={box ? undefined : 'Choose the box when proposing it'}
+                              onClick={() => void handleCreateSplitter(spl)}
+                              className="min-h-12 md:min-h-9 px-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 hover:bg-slate-700 disabled:text-slate-500 text-xs font-semibold"
+                            >
+                              Create splitter record
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSplitter(spl.id)}
+                            className="min-h-12 min-w-12 md:min-h-9 md:min-w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                            title="Remove from the plan"
+                            aria-label="Remove from the plan"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1094,7 +1148,7 @@ export const OltConfigModal: React.FC = () => {
                           <div>
                             <div className="font-bold text-white">{c.name}</div>
                             <div className="text-[11px] text-slate-400 font-mono">
-                              {c.id} · {c.fiberCount} Cores · {c.lengthMeters.toFixed(0)}m · Start: {c.startPortName || 'PON-01'}
+                              {c.id} · {c.fiberCount} Cores · {c.lengthMeters.toFixed(0)}m · Start: {c.startPortName || 'port not recorded'}
                             </div>
                           </div>
                         </div>
@@ -1148,8 +1202,11 @@ export const OltConfigModal: React.FC = () => {
               // Reset to initial
               if (olt) {
                 setTechnology(olt.technology ?? 'GPON');
-                setTotalPorts(olt.totalPorts || 8);
+                const recordedCount = olt.ponPorts?.length || olt.totalPorts || 0;
+                setTotalPorts(recordedCount);
+                setPortCountText(recordedCount ? String(recordedCount) : '');
                 setName(olt.name);
+                setManufacturer(olt.manufacturer || '');
                 showToast('info', 'Form Reset', 'Reverted unsaved draft changes.');
               }
             }}

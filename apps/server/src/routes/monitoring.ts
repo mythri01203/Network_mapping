@@ -11,9 +11,10 @@ import {
   type MonitoringSource,
   monitoringSourceKindSchema,
   randomCode,
+  roleMay,
 } from '@fibergis/shared';
 
-import { noStore, requireSystem } from '../auth/access';
+import { auditActorOf, noStore, requireSystem } from '../auth/access';
 import { hashToken } from '../auth/passwords';
 import type { NetworkRepository } from '../db/repository';
 import { badRequest, HttpError, notFound } from '../lib/errors';
@@ -74,6 +75,8 @@ export const monitoringRoutes =
       if (!source) throw notFound(`Monitoring source ${id} is not on record.`);
       return source;
     };
+    /** Phase 23: who the server's audit events name for a source change. */
+    const trace = (request: FastifyRequest) => ({ actor: auditActorOf(request), source: 'monitoring' as const });
     const audit = (request: FastifyRequest, action: string, details: string, assetId: string) => {
       const actor = actorOf(request);
       return { id: `LOG-${randomCode(10)}`, timestamp: formatLogTimestamp(new Date()), user: actor.user, role: actor.role, action, details, assetId, assetType: 'System' as const };
@@ -82,7 +85,7 @@ export const monitoringRoutes =
     app.get('/monitoring/sources', async (request, reply) => {
       noStore(reply);
       const sources = await repository.list('monitoringSources');
-      const admin = request.auth.mode === 'setup' || request.auth.account?.role === 'admin';
+      const admin = request.auth.mode === 'setup' || (!!request.auth.account && roleMay(request.auth.account.role, 'manage_monitoring'));
       return { sources: sources.map((s) => ({ ...s, ...(admin ? { token: tokens.info(s.id) ?? null } : {}) })) };
     });
 
@@ -105,7 +108,7 @@ export const monitoringRoutes =
       if (token) source.tokenCreatedAt = now.toISOString();
       const result = await repository.applyChanges({
         upserts: { monitoringSources: [source], auditLogs: [audit(request, 'MONITORING_SOURCE_ADDED', `${source.name} (${source.kind})${isTest ? ', TEST, switched off until the administrator switches it on' : ''}`, source.id)] },
-      });
+      }, undefined, trace(request));
       return { revision: result.revision, source, ...(token ? { token, tokenNote: 'Shown once. Copy it now: the server keeps only a hash.' } : {}) };
     });
 
@@ -114,7 +117,7 @@ export const monitoringRoutes =
       const body = patchSourceSchema.parse(request.body ?? {});
       const source = { ...(await sourceById(request.params.id)), ...body };
       const changed = Object.keys(body).join(', ') || 'nothing';
-      const result = await repository.applyChanges({ upserts: { monitoringSources: [source], auditLogs: [audit(request, 'MONITORING_SOURCE_CHANGED', `${source.name}: ${changed}${body.enabled !== undefined ? ` (now ${body.enabled ? 'on' : 'off'})` : ''}`, source.id)] } });
+      const result = await repository.applyChanges({ upserts: { monitoringSources: [source], auditLogs: [audit(request, 'MONITORING_SOURCE_CHANGED', `${source.name}: ${changed}${body.enabled !== undefined ? ` (now ${body.enabled ? 'on' : 'off'})` : ''}`, source.id)] } }, undefined, trace(request));
       return { revision: result.revision, source };
     });
 
@@ -124,7 +127,7 @@ export const monitoringRoutes =
       if (source.kind !== 'push') throw badRequest('Only a push source has a token.');
       const now = new Date();
       const token = tokens.issue(source.id, request.auth.account?.id ?? null, now);
-      const result = await repository.applyChanges({ upserts: { monitoringSources: [{ ...source, tokenCreatedAt: now.toISOString() }], auditLogs: [audit(request, 'MONITORING_TOKEN_ISSUED', `New push token for ${source.name}; any older token stops working.`, source.id)] } });
+      const result = await repository.applyChanges({ upserts: { monitoringSources: [{ ...source, tokenCreatedAt: now.toISOString() }], auditLogs: [audit(request, 'MONITORING_TOKEN_ISSUED', `New push token for ${source.name}; any older token stops working.`, source.id)] } }, undefined, trace(request));
       return { revision: result.revision, token, tokenNote: 'Shown once. Copy it now: the server keeps only a hash.' };
     });
 
@@ -133,7 +136,7 @@ export const monitoringRoutes =
       const source = await sourceById(request.params.id);
       const revoked = tokens.revoke(source.id);
       const { tokenCreatedAt: _gone, ...rest } = source;
-      const result = await repository.applyChanges({ upserts: { monitoringSources: [rest], auditLogs: [audit(request, 'MONITORING_TOKEN_REVOKED', `Push token for ${source.name} ${revoked ? 'revoked' : 'was not set'}.`, source.id)] } });
+      const result = await repository.applyChanges({ upserts: { monitoringSources: [rest], auditLogs: [audit(request, 'MONITORING_TOKEN_REVOKED', `Push token for ${source.name} ${revoked ? 'revoked' : 'was not set'}.`, source.id)] } }, undefined, trace(request));
       return { revision: result.revision, revoked };
     });
 
@@ -181,7 +184,8 @@ export const monitoringRoutes =
         if (!source || source.kind !== 'push' || source.isTest) throw new HttpError(401, 'bad_token', 'This token is not for a push source. Nothing was stored.');
         if (!source.enabled) throw new HttpError(409, 'source_off', `${source.name} is switched off. Nothing was stored.`);
         const body = ingestBodySchema.parse(request.body ?? {});
-        return ingestRows(repository, source, body.rows, { user: `Monitoring source ${source.name}`, role: 'Administrator' }, { via: 'push', ...keep });
+        // Phase 20: OLT, card, PON port and interface rows come in `devices`, on the same token.
+        return ingestRows(repository, source, body.rows ?? [], { user: `Monitoring source ${source.name}`, role: 'Administrator' }, { via: 'push', ...keep, ...(body.devices?.length ? { devices: body.devices } : {}) });
       },
     );
   };

@@ -68,7 +68,9 @@ export function CorePathView({ path, showBudget = true }: { path: CorePathResult
                 <span className="tabular-nums font-semibold text-slate-900">{d.budget.totalLossDb.toFixed(2)} dB (estimated)</span>
               </div>
               <p className="mt-0.5 text-slate-600" data-testid={`core-verdict-${d.direction}`}>
-                {LINK_VERDICT_LABELS[d.budget.linkVerdict]} for {d.budget.opticsClass} ({d.budget.classMinLossDb ?? '?'} to {d.budget.classMaxLossDb} dB):{' '}
+                {/* Network mapping Phase 17: no pass or fail on an assumed class or an unknown splitter. */}
+                {d.budget.verdictWithheld ? d.budget.verdictTitle : LINK_VERDICT_LABELS[d.budget.linkVerdict]} for {d.budget.opticsClass}
+                {d.budget.opticsClassRecorded ? '' : ' (assumed)'} ({d.budget.classMinLossDb ?? '?'} to {d.budget.classMaxLossDb} dB):{' '}
                 {d.budget.remainingDb.toFixed(2)} dB left, {d.budget.afterMarginDb.toFixed(2)} dB after the repair margin.
               </p>
               {d.vendor && (

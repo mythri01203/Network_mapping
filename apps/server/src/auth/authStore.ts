@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { type Account, type AccountRole, type AccountSummary, isAccountRole, randomCode } from '@fibergis/shared';
+import { type Account, type AccountRole, type AccountSummary, normalizeAccountRole, randomCode } from '@fibergis/shared';
 
 import { hashToken } from './passwords';
 
@@ -51,7 +51,8 @@ const toUser = (row: Row): StoredUser => ({
   id: String(row.id),
   username: String(row.username),
   displayName: String(row.display_name),
-  role: (isAccountRole(String(row.role)) ? String(row.role) : 'viewer') as AccountRole,
+  // Phase 23: a role written under another name is read as the stored one; anything unknown gets the least rights.
+  role: normalizeAccountRole(row.role) ?? 'viewer',
   active: Number(row.active) === 1,
   mustChangePassword: Number(row.must_change_password) === 1,
   createdAt: String(row.created_at),
@@ -99,6 +100,7 @@ export class SqliteAuthStore {
       removeSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
       removeUserSessions: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
       removeOtherSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?'),
+      removeAllSessions: db.prepare('DELETE FROM sessions'),
       expired: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
     };
     this.activeCount = this.readCount();
@@ -189,6 +191,11 @@ export class SqliteAuthStore {
       this.q.touch.run(now.toISOString(), expiresAt, tokenHash);
     }
     return { tokenHash, account: accountOf(user), mustChangePassword: user.mustChangePassword, expiresAt };
+  }
+
+  /** Phase 23b: everyone in this database is logged out (its organisation was switched off). Accounts stay. */
+  endAllSessions(): void {
+    this.q.removeAllSessions.run();
   }
 
   endSession(tokenHash: string): void {

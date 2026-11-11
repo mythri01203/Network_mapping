@@ -1,25 +1,43 @@
 import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 
-import { type Duct, type Equipment, type LatLng, type SlackLoop, type Span, STRUCTURE_STATUS_LABELS } from '@fibergis/shared';
+import {
+  type Building,
+  type Duct,
+  ductCableIds,
+  type Equipment,
+  OSP_CONDITION_LABELS,
+  type SlackLoop,
+  type Span,
+  spanDrawnMeters,
+  spanLine,
+  STRUCTURE_STATUS_LABELS,
+} from '@fibergis/shared';
 
-import { useMapStore } from '../../../stores/mapStore';
 import { useNetworkStore } from '../../../stores/networkStore';
+import { useOspUiStore } from '../../../stores/ospUiStore';
 import { type SelectedObject, useUiStore } from '../../../stores/uiStore';
+import { SegmentPicker } from '../../cables/SegmentPicker';
+import { OspDrawing } from '../../inspector/osp/OspDrawing';
+import { PoleMoveDialog } from '../../inspector/osp/PoleMoveDialog';
 import { selectFeatureOnClick } from '../leaflet/featureClick';
 import { PANES } from '../leaflet/panes';
 import { useLayerGroup } from '../leaflet/useLayerGroup';
 import { formatDistance, tooltipHtml } from '../markerIcons';
+import { usePonMapStore } from '../pon/ponMapStore';
+import { useLayerShown } from './useVisibleNetwork';
 
 /**
- * Spans, ducts and slack loops. They are structures, so they never use cable colours: spans are thin
- * brown lines (dashed while only proposed), ducts are wide stone-coloured bands, and slack loops
- * are small purple rings on their cable.
+ * Spans, ducts, slack loops and building outlines. They are structures, so they never use cable
+ * colours: spans are thin brown lines (dashed while only proposed) that follow the bends a person
+ * drew, ducts are wide stone-coloured bands (amber while an underground trace shows them), slack
+ * loops are small purple rings on their cable, and building outlines are thin teal shapes.
  */
 
 const SPAN = { color: '#7c2d12', selected: '#1d4ed8' };
-const DUCT = { color: '#78716c', selected: '#1d4ed8' };
+const DUCT = { color: '#78716c', selected: '#1d4ed8', traced: '#d97706' };
 const SLACK = { color: '#7c3aed', selected: '#1d4ed8' };
+const BUILDING = { color: '#0f766e', selected: '#1d4ed8' };
 
 interface Entry<T> {
   record: T;
@@ -32,7 +50,7 @@ function useSync<T extends { id: string }>(
   records: readonly T[],
   build: (record: T) => { layer: L.Path; key: string } | null,
   restyle: (record: T, layer: L.Path) => void,
-  toSelection: (record: T) => SelectedObject,
+  toSelection: (record: T) => SelectedObject | null,
   deps: unknown[],
 ) {
   const entries = useRef(new Map<string, Entry<T>>());
@@ -52,7 +70,8 @@ function useSync<T extends { id: string }>(
       if (existing) group.removeLayer(existing.layer);
       built.layer.on('click', (event) => {
         const latest = current.get(record.id)?.record;
-        if (latest) selectFeatureOnClick(event as L.LeafletMouseEvent, toSelection(latest));
+        const selection = latest ? toSelection(latest) : null;
+        if (selection) selectFeatureOnClick(event as L.LeafletMouseEvent, selection);
       });
       group.addLayer(built.layer);
       current.set(record.id, { record, layer: built.layer, key: built.key });
@@ -67,11 +86,12 @@ function useSync<T extends { id: string }>(
   }, [group, records, ...deps]);
 }
 
-const spanTooltip = (span: Span, from: Equipment, to: Equipment) =>
+const spanTooltip = (span: Span, from: Equipment, to: Equipment, meters: number) =>
   tooltipHtml(`Span ${from.name} – ${to.name}`, [
     STRUCTURE_STATUS_LABELS[span.status],
     span.basis === 'field_sequence' ? 'From the field order: not proof of a cable' : null,
-    `About ${formatDistance(L.latLng(from.lat, from.lng).distanceTo([to.lat, to.lng]))} on the map`,
+    `About ${formatDistance(meters)} on the map${span.routePoints?.length ? ', as drawn' : ', straight line'}`,
+    span.condition ? `Condition: ${OSP_CONDITION_LABELS[span.condition]}` : null,
   ]);
 
 export function OspLayer({ map }: { map: L.Map }) {
@@ -79,14 +99,22 @@ export function OspLayer({ map }: { map: L.Map }) {
   const spans = useNetworkStore((s) => s.spans);
   const ducts = useNetworkStore((s) => s.ducts);
   const slackLoops = useNetworkStore((s) => s.slackLoops);
+  const buildings = useNetworkStore((s) => s.buildings);
   const equipment = useNetworkStore((s) => s.equipment);
-  const layers = useMapStore((s) => s.layers);
+  const showSpans = useLayerShown(map, 'spans');
+  const showDucts = useLayerShown(map, 'ducts');
+  const showLoops = useLayerShown(map, 'slackLoops');
+  const showBuildings = useLayerShown(map, 'buildings');
+  const tracedDuctIds = useOspUiStore((s) => s.tracedDuctIds);
   const selectedKey = useUiStore((s) => (s.selectedObject ? `${s.selectedObject.type}:${s.selectedObject.data.id}` : null));
   const byId = useMemo(() => new Map(equipment.map((e) => [e.id, e])), [equipment]);
+  const traced = useMemo(() => new Set(tracedDuctIds), [tracedDuctIds]);
+  const ponFocus = usePonMapStore((s) => s.focus);
 
-  const visibleSpans = useMemo(() => (layers.spans === false ? [] : spans), [layers.spans, spans]);
-  const visibleDucts = useMemo(() => (layers.ducts === false ? [] : ducts), [layers.ducts, ducts]);
-  const visibleLoops = useMemo(() => (layers.slackLoops === false ? [] : slackLoops), [layers.slackLoops, slackLoops]);
+  const visibleSpans = useMemo(() => (showSpans ? spans : []), [showSpans, spans]);
+  const visibleDucts = useMemo(() => (showDucts ? ducts : []), [showDucts, ducts]);
+  const visibleLoops = useMemo(() => (showLoops ? slackLoops : []), [showLoops, slackLoops]);
+  const outlined = useMemo(() => (showBuildings ? buildings.filter((b) => (b.footprint?.length ?? 0) >= 3) : []), [showBuildings, buildings]);
 
   useSync<Span>(
     group,
@@ -94,27 +122,25 @@ export function OspLayer({ map }: { map: L.Map }) {
     (span) => {
       const from = byId.get(span.fromStructureId);
       const to = byId.get(span.toStructureId);
-      if (!from || !to) return null;
-      const points: LatLng[] = [
-        [from.lat, from.lng],
-        [to.lat, to.lng],
-      ];
+      const points = spanLine(span, equipment);
+      if (!from || !to || !points) return null;
       const line = L.polyline(points, { pane: PANES.structures, lineCap: 'round', className: `osp-span osp-span--${span.status}` });
-      line.bindTooltip(spanTooltip(span, from, to), { sticky: true, opacity: 1, className: 'gis-tooltip' });
-      return { layer: line, key: `${from.lat},${from.lng},${to.lat},${to.lng},${span.status}` };
+      line.bindTooltip(spanTooltip(span, from, to, spanDrawnMeters(span, equipment) ?? 0), { sticky: true, opacity: 1, className: 'gis-tooltip' });
+      return { layer: line, key: `${JSON.stringify(points)},${span.status},${span.condition ?? ''}` };
     },
     (span, layer) => {
       const selected = selectedKey === `span:${span.id}`;
       layer.setStyle({
         color: selected ? SPAN.selected : SPAN.color,
         weight: selected ? 6 : 3,
-        opacity: 0.9,
+        // Spans sit under the cables they carry; with one PON lit up they step back with the rest.
+        opacity: ponFocus ? 0.18 : 0.9,
         // Proposed spans are dashed: the order of capture is not proof that the poles are joined.
         dashArray: span.status === 'proposed' ? '6 7' : span.status === 'planned' ? '2 6' : undefined,
       });
     },
     (span) => ({ type: 'span', data: span }),
-    [byId, selectedKey],
+    [byId, equipment, selectedKey, ponFocus],
   );
 
   useSync<Duct>(
@@ -125,23 +151,25 @@ export function OspLayer({ map }: { map: L.Map }) {
       line.bindTooltip(
         tooltipHtml(duct.name, [
           `Duct · ${STRUCTURE_STATUS_LABELS[duct.status]}`,
-          `${duct.cableIds.length + duct.subducts.reduce((n, s) => n + s.cableIds.length, 0)} cable(s) recorded inside`,
+          `${ductCableIds(duct).length} cable(s) recorded inside`,
+          duct.condition === 'blocked' ? 'Recorded as blocked' : duct.condition === 'damaged' ? 'Recorded as damaged' : null,
         ]),
         { sticky: true, opacity: 1, className: 'gis-tooltip' },
       );
-      return { layer: line, key: JSON.stringify(duct.coordinates) };
+      return { layer: line, key: `${JSON.stringify(duct.coordinates)},${ductCableIds(duct).length},${duct.condition ?? ''}` };
     },
     (duct, layer) => {
       const selected = selectedKey === `duct:${duct.id}`;
+      const isTraced = traced.has(duct.id);
       layer.setStyle({
-        color: selected ? DUCT.selected : DUCT.color,
-        weight: selected ? 12 : 9,
-        opacity: duct.status === 'proposed' || duct.status === 'planned' ? 0.35 : 0.55,
+        color: selected ? DUCT.selected : isTraced ? DUCT.traced : DUCT.color,
+        weight: selected ? 12 : isTraced ? 11 : 9,
+        opacity: isTraced ? 0.85 : duct.status === 'proposed' || duct.status === 'planned' ? 0.35 : 0.55,
         dashArray: duct.status === 'proposed' || duct.status === 'planned' ? '10 6' : undefined,
       });
     },
     (duct) => ({ type: 'duct', data: duct }),
-    [selectedKey],
+    [selectedKey, traced],
   );
 
   useSync<SlackLoop>(
@@ -163,5 +191,32 @@ export function OspLayer({ map }: { map: L.Map }) {
     [selectedKey],
   );
 
-  return null;
+  // Phase 4: building outlines, in addition to the building's point. A tap opens its entry pin.
+  useSync<Building>(
+    group,
+    outlined,
+    (building) => {
+      const shape = L.polygon(building.footprint ?? [], { pane: PANES.structures, className: 'osp-building' });
+      shape.bindTooltip(tooltipHtml(building.name, ['Building outline, as drawn']), { sticky: true, opacity: 1, className: 'gis-tooltip' });
+      return { layer: shape, key: JSON.stringify(building.footprint) };
+    },
+    (building, layer) => {
+      const selected = !!building.entryEquipmentId && selectedKey === `equipment:${building.entryEquipmentId}`;
+      layer.setStyle({ color: selected ? BUILDING.selected : BUILDING.color, weight: selected ? 3 : 2, fillColor: BUILDING.color, fillOpacity: 0.12, opacity: 0.9 });
+    },
+    (building) => {
+      const entry = building.entryEquipmentId ? byId.get(building.entryEquipmentId) : undefined;
+      return entry ? { type: 'equipment', data: entry } : null;
+    },
+    [byId, selectedKey],
+  );
+
+  return (
+    <>
+      <OspDrawing map={map} />
+      {/* Network mapping Phase 6: tapping a cable stretch, and showing one. */}
+      <SegmentPicker map={map} />
+      <PoleMoveDialog />
+    </>
+  );
 }

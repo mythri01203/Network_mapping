@@ -1,4 +1,4 @@
-import { type MonitoringSource, ONU_STATE_LABELS, type OnuReading, type OnuState, type OnuStatus, type ReadingDirection } from '../model/monitoringSchemas';
+import { type DeviceStatus, type MonitoringSource, ONU_STATE_LABELS, type OnuReading, type OnuState, type OnuStatus, type ReadingDirection } from '../model/monitoringSchemas';
 import type { Customer } from '../model/types';
 import { DEFAULT_MONITORING_SETTINGS, type MonitoringSettings } from './monitoringSettings';
 import { DEFAULT_OPTICAL_SETTINGS, type OpticalSettings, RX_BAND_LABELS, type RxBand, rxBandFor } from './opticalSettings';
@@ -15,6 +15,8 @@ export interface MonitoringData {
   monitoringSources?: readonly MonitoringSource[];
   onuReadings?: readonly OnuReading[];
   onuStatuses?: readonly OnuStatus[];
+  /** Phase 20: OLT, card, PON port and uplink rows from a push source. */
+  deviceStatuses?: readonly DeviceStatus[];
 }
 
 /** "just now", "12 min ago", "3 h ago", "2 days ago". */
@@ -60,6 +62,10 @@ function shown(row: { deviceTime: string; sourceId: string; isTest: boolean } | 
   const word = row.isTest ? `TEST · not real${stale ? ' · stale' : ''}` : stale ? 'Stale' : 'Live';
   return { freshness, stale, ageText: age, at: row.deviceTime, source, note: `${word} · ${age} · ${source}` };
 }
+
+/** Phase 20: the same freshness rule for any device row (OLT, card, PON port). Status stale time applies. */
+export const showFreshness = (row: { deviceTime: string; sourceId: string; isTest: boolean } | undefined, data: MonitoringData, settings: MonitoringSettings = DEFAULT_MONITORING_SETTINGS, now = new Date()): ShownValue =>
+  shown(row, data, settings.statusStaleMinutes, now);
 
 export interface ShownStatus extends ShownValue {
   state?: OnuState;
@@ -109,7 +115,7 @@ export function withDeviceRx(customer: Customer, data: MonitoringData): Customer
 export function liveSources(data: MonitoringData, settings: MonitoringSettings = DEFAULT_MONITORING_SETTINGS, now = new Date()): { live: boolean; real: MonitoringSource[]; liveIds: string[]; lastReceivedAt?: string } {
   const real = (data.monitoringSources ?? []).filter((s) => !s.isTest);
   const limit = now.getTime() - settings.statusStaleMinutes * 60_000;
-  const rows = [...(data.onuStatuses ?? []), ...(data.onuReadings ?? [])].filter((r) => !r.isTest && real.some((s) => s.id === r.sourceId));
+  const rows = [...(data.onuStatuses ?? []), ...(data.onuReadings ?? []), ...(data.deviceStatuses ?? [])].filter((r) => !r.isTest && real.some((s) => s.id === r.sourceId));
   const liveIds = [...new Set(rows.filter((r) => Date.parse(r.receivedAt) >= limit && Date.parse(r.deviceTime) >= limit).map((r) => r.sourceId))];
   const lastReceivedAt = rows.reduce<string | undefined>((m, r) => (!m || r.receivedAt > m ? r.receivedAt : m), undefined);
   return { live: liveIds.length > 0, real, liveIds, ...(lastReceivedAt ? { lastReceivedAt } : {}) };

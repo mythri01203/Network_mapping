@@ -100,7 +100,7 @@ const DEFAULT_SEVERITY: Record<AlarmKind, Severity> = {
   other: 'Medium',
 };
 
-const NO_LIVE = 'There is no live connection to the OLT yet, so device alarms cannot be stored. Report what you saw as a person, or make a TEST event.';
+const NO_LIVE = 'Device alarms come only from a monitoring source, through Live status (file import or push). Report what you saw as a person, or make a TEST event.';
 
 /**
  * `fromMonitoring` is set only by `raiseMonitoringAlarms`, which the server runs for rows that came

@@ -21,7 +21,12 @@ export type LossVerdict =
   | 'Too Little Loss'
   | 'High Attenuation / Macro-bend Alert'
   | 'Incomplete'
-  | 'Not Assessed';
+  | 'Not Assessed'
+  /** Network mapping Phase 17: the optics class is not recorded, so no pass or fail is given. */
+  | 'Estimated With Default Class';
+
+/** Network mapping Phase 17: why no pass or fail is given although the parts were added up. */
+export type VerdictWithheld = 'unknown_splitter' | 'default_class';
 
 export interface SplitterLossSpec {
   ratio: string;
@@ -40,6 +45,12 @@ export interface OpticalLossBudgetInput {
   /** Recorded splice loss in total. Used instead of `splicesCount` when given. */
   recordedSpliceLossDb?: number;
   opticsClass?: OpticsClass;
+  /**
+   * Network mapping Phase 17: `false` when the class is not recorded on the port (assumed from the
+   * technology, or not given at all). Then no pass or fail is given: "Estimated with default class".
+   * Left out, the class is taken as chosen, as before.
+   */
+  opticsClassRecorded?: boolean;
   /** The port's real launch power, only when it is on record. */
   oltTxPowerDbm?: number;
   /** A real meter or device reading. Estimates must not be passed here. */
@@ -59,9 +70,14 @@ export interface OpticalLossBudgetResult {
   /** Splitter ratios with no known loss. They are not in the total, so the total is too low. */
   unknownSplitters: string[];
   opticsClass: OpticsClass;
+  /** Network mapping Phase 17: false when the class was assumed, not recorded. */
+  opticsClassRecorded: boolean;
   classMinLossDb?: number;
   classMaxLossDb: number;
+  /** The comparison with the class range. Not a verdict to show when `verdictWithheld` is set. */
   linkVerdict: LinkVerdict;
+  /** Network mapping Phase 17: set when no pass or fail may be shown, and why. */
+  verdictWithheld?: VerdictWithheld;
   remainingDb: number;
   afterMarginDb: number;
   oltTxPowerDbm?: number;
@@ -140,12 +156,28 @@ export function calculateOpticalLossBudget(
   let verdictDescription: string;
   let recommendedAction: string;
   const lossText = `Estimated loss ${totalLossDb.toFixed(2)} dB at ${wavelengthNm} nm against ${opticsClass}`;
+  // Network mapping Phase 17: a class the caller says is not on record, and a splitter whose loss
+  // nothing gives, both stop the pass or fail. The total is still shown, labelled estimated.
+  const opticsClassRecorded = input.opticsClassRecorded ?? true;
+  let verdictWithheld: VerdictWithheld | undefined;
 
-  if (discrepancyDb !== undefined && discrepancyDb < -settings.measuredGapDb) {
+  if (unknownSplitters.length > 0) {
+    verdictWithheld = 'unknown_splitter';
+    verdict = 'Incomplete';
+    verdictTitle = 'Splitter loss not known';
+    verdictDescription = `No loss is recorded for ${unknownSplitters.join(', ')} and no setting gives one, so it is not in the ${totalLossDb.toFixed(2)} dB total. The real loss is higher. No pass or fail is given.`;
+    recommendedAction = 'Record the splitter ratio and its loss from the datasheet.';
+  } else if (discrepancyDb !== undefined && discrepancyDb < -settings.measuredGapDb) {
     verdict = 'High Attenuation / Macro-bend Alert';
     verdictTitle = 'Reading is much weaker than expected';
     verdictDescription = `The measured reading is ${Math.abs(discrepancyDb).toFixed(1)} dB below what this path should give.`;
     recommendedAction = 'Check for a dirty connector, a tight bend, or the wrong path.';
+  } else if (!opticsClassRecorded) {
+    verdictWithheld = 'default_class';
+    verdict = 'Estimated With Default Class';
+    verdictTitle = 'Estimated with default class';
+    verdictDescription = `${lossText} (${budget.minLossDb !== undefined ? `${budget.minLossDb} to ` : 'up to '}${budget.maxLossDb} dB). The port's optics class is not recorded, so ${opticsClass} is only assumed and no pass or fail is given.`;
+    recommendedAction = 'Record the optics class on the PON port, then trace again.';
   } else if (check.verdict === 'too_little_loss') {
     verdict = 'Too Little Loss';
     verdictTitle = 'Too much light expected';
@@ -180,9 +212,11 @@ export function calculateOpticalLossBudget(
     totalLossDb,
     unknownSplitters,
     opticsClass,
+    opticsClassRecorded,
     classMinLossDb: budget.minLossDb,
     classMaxLossDb: budget.maxLossDb,
     linkVerdict: check.verdict,
+    ...(verdictWithheld ? { verdictWithheld } : {}),
     remainingDb: check.remainingDb,
     afterMarginDb: check.afterMarginDb,
     oltTxPowerDbm,

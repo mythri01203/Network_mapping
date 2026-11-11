@@ -171,3 +171,27 @@ describe('restore and monitoring history', () => {
     expect(many.length - rowsToPrune(many, (r) => r.ontId, { keepDays: 90, maxRows: 4 }, now).length).toBe(4);
   });
 });
+
+describe('equipment catalogue (Phase 2)', () => {
+  const entry = { id: 'CAT-ACME-16', type: 'FAT', category: 'Fiber Distribution', name: 'Acme FAT-16', description: '', iconBg: 'bg-blue-700', isCustom: true, manufacturer: 'Acme', model: 'FAT-16', defaultPorts: 16 };
+
+  it('lets an engineer change the catalogue and refuses office staff', async () => {
+    const owner = await admin();
+    const office = await person(owner, 'clerk', 'Clerk', 'office');
+    const engineer = await person(owner, 'eng', 'Engineer', 'engineer');
+    expect((await send('POST', '/changes', { upserts: { catalog: [entry] } }, { cookie: office })).statusCode).toBe(403);
+    expect((await send('POST', '/changes', { upserts: { catalog: [entry] } }, { cookie: engineer })).statusCode).toBe(200);
+  });
+
+  it('refuses an item naming a model that is not on record, and deleting a model in use', async () => {
+    const owner = await admin();
+    expect((await send('POST', '/changes', { upserts: { catalog: [entry] } }, { cookie: owner })).statusCode).toBe(200);
+    const { data } = await repository.getNetwork();
+    const box = data.equipment.find((e) => e.type === 'FAT')!;
+    const missing = await send('POST', '/changes', { upserts: { equipment: [{ ...box, catalogModelId: 'CAT-GONE' }] } }, { cookie: owner });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json().message).toMatch(/names catalogue model CAT-GONE, which is not on record/);
+    expect((await send('POST', '/changes', { upserts: { equipment: [{ ...box, catalogModelId: entry.id }] } }, { cookie: owner })).statusCode).toBe(200);
+    expect((await send('DELETE', `/catalog/${entry.id}`, undefined, { cookie: owner })).statusCode).toBe(409);
+  });
+});

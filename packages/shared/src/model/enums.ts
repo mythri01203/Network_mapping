@@ -121,6 +121,20 @@ export const LOCATION_METHOD_LABELS: Record<LocationMethod, string> = {
   imported: 'Imported from a file (accuracy not known)',
 };
 
+/**
+ * Phase 3: how an item looked when someone last checked it. There is no "unknown": a condition
+ * nobody has recorded is simply absent and shows "Not recorded".
+ */
+export const EQUIPMENT_CONDITIONS = ['good', 'fair', 'poor'] as const;
+export const equipmentConditionSchema = z.enum(EQUIPMENT_CONDITIONS);
+export type EquipmentCondition = z.infer<typeof equipmentConditionSchema>;
+
+export const EQUIPMENT_CONDITION_LABELS: Record<EquipmentCondition, string> = {
+  good: 'Good',
+  fair: 'Fair: needs watching',
+  poor: 'Poor: needs work',
+};
+
 /** Who owns a pole, as far as a field worker can tell. Only the kind is recorded, never the company. */
 export const POLE_OWNER_TYPES = ['telecom', 'electricity', 'unknown'] as const;
 export const poleOwnerTypeSchema = z.enum(POLE_OWNER_TYPES);
@@ -173,6 +187,75 @@ export const LINK_BASIS_LABELS: Record<LinkBasis, string> = {
   as_built_document: 'From an as-built document',
 };
 
+/**
+ * Phase 4: how a span, duct, pole or chamber looked when someone checked it. The same words as an
+ * equipment condition. There is no "unknown": a condition nobody recorded is absent ("Not recorded").
+ */
+export const OSP_CONDITIONS = ['good', 'fair', 'poor'] as const;
+export const ospConditionSchema = z.enum(OSP_CONDITIONS);
+export type OspCondition = z.infer<typeof ospConditionSchema>;
+
+export const OSP_CONDITION_LABELS: Record<OspCondition, string> = {
+  good: 'Good',
+  fair: 'Fair: needs watching',
+  poor: 'Poor: needs work',
+};
+
+/**
+ * Phase 4: whether a cable can still be pulled through a duct, sub-duct or microduct. `blocked`
+ * means nothing more can go in until it is cleared. Absent means nobody has checked.
+ */
+export const WAY_CONDITIONS = ['clear', 'damaged', 'blocked'] as const;
+export const wayConditionSchema = z.enum(WAY_CONDITIONS);
+export type WayCondition = z.infer<typeof wayConditionSchema>;
+
+export const WAY_CONDITION_LABELS: Record<WayCondition, string> = {
+  clear: 'Clear',
+  damaged: 'Damaged: may still take a cable',
+  blocked: 'Blocked: no new cable can go in',
+};
+
+/** Phase 4: what an inspection is about. Poles and chambers are equipment; spans and ducts are their own records. */
+export const INSPECTION_TARGETS = ['pole', 'chamber', 'span', 'duct', 'box'] as const;
+export const inspectionTargetSchema = z.enum(INSPECTION_TARGETS);
+export type InspectionTarget = z.infer<typeof inspectionTargetSchema>;
+
+export const INSPECTION_TARGET_LABELS: Record<InspectionTarget, string> = {
+  pole: 'Pole',
+  chamber: 'Manhole or handhole',
+  span: 'Span',
+  duct: 'Duct',
+  // Phase 19: street boxes and joint closures (FAT, FDT, closures) can be inspected too.
+  box: 'Box or closure',
+};
+
+/**
+ * Phase 19: where a phone capture stands with the office. `awaiting_review`: it waits in the review
+ * queue and is not yet part of the working network. `accepted`: a normal record. `rejected`: kept
+ * out of the working network with the office's reason. Absent: recorded before Phase 19, or not a
+ * phone capture, and treated as a normal record.
+ */
+export const FIELD_REVIEW_STATUSES = ['awaiting_review', 'accepted', 'rejected'] as const;
+export const fieldReviewStatusSchema = z.enum(FIELD_REVIEW_STATUSES);
+export type FieldReviewStatus = z.infer<typeof fieldReviewStatusSchema>;
+
+export const FIELD_REVIEW_STATUS_LABELS: Record<FieldReviewStatus, string> = {
+  awaiting_review: 'Awaiting office review',
+  accepted: 'Accepted by the office',
+  rejected: 'Rejected by the office',
+};
+
+/** Phase 19: one answer on an inspection checklist. `not_checked`: the person could not check it (said so). */
+export const CHECKLIST_ANSWERS = ['ok', 'problem', 'not_checked'] as const;
+export const checklistAnswerSchema = z.enum(CHECKLIST_ANSWERS);
+export type ChecklistAnswer = z.infer<typeof checklistAnswerSchema>;
+
+export const CHECKLIST_ANSWER_LABELS: Record<ChecklistAnswer, string> = {
+  ok: 'OK',
+  problem: 'Problem',
+  not_checked: 'Could not check',
+};
+
 export const PERMISSION_KINDS = ['pole_attachment', 'right_of_way', 'road_cutting', 'building', 'other'] as const;
 export const permissionKindSchema = z.enum(PERMISSION_KINDS);
 export type PermissionKind = z.infer<typeof permissionKindSchema>;
@@ -208,6 +291,14 @@ export const SPLITTER_PORT_STATUSES = ['Available', 'Occupied', 'Reserved', 'Fau
 export const splitterPortStatusSchema = z.enum(SPLITTER_PORT_STATUSES);
 export type SplitterPortStatus = z.infer<typeof splitterPortStatusSchema>;
 
+/**
+ * Phase 11: how the splitters of a PON tree are arranged. Centralised: one splitter level between the
+ * PON port and the customers. Distributed (cascaded): splitters at two or more levels.
+ */
+export const SPLITTER_ARCHITECTURES = ['centralised', 'distributed'] as const;
+export const splitterArchitectureSchema = z.enum(SPLITTER_ARCHITECTURES);
+export type SplitterArchitecture = z.infer<typeof splitterArchitectureSchema>;
+
 export const CLOSURE_TYPES = ['Dome Splice Closure', 'Horizontal In-line', 'Fiber Distribution Hub'] as const;
 
 export const CABLE_TYPES = [
@@ -230,6 +321,39 @@ export const CABLE_INSTALLATION_TYPES = ['Aerial', 'Underground', 'Duct', 'Direc
 export const cableInstallationTypeSchema = z.enum(CABLE_INSTALLATION_TYPES);
 export type CableInstallationType = z.infer<typeof cableInstallationTypeSchema>;
 
+/**
+ * Phase 5: the fibre inside the cable, as on the drum sheet or datasheet. G.65x are ITU-T
+ * single-mode recommendations; OM1 to OM5 are ISO/IEC 11801 multimode categories. Absent: not recorded.
+ */
+export const FIBER_STANDARDS = ['G.652D', 'G.657A1', 'G.657A2', 'G.657B3', 'G.655', 'G.654E', 'OM1', 'OM2', 'OM3', 'OM4', 'OM5', 'other'] as const;
+export const fiberStandardSchema = z.enum(FIBER_STANDARDS);
+export type FiberStandard = z.infer<typeof fiberStandardSchema>;
+
+export const FIBER_MODES = ['single_mode', 'multi_mode'] as const;
+export const fiberModeSchema = z.enum(FIBER_MODES);
+export type FiberMode = z.infer<typeof fiberModeSchema>;
+
+export const FIBER_MODE_LABELS: Record<FiberMode, string> = {
+  single_mode: 'Single-mode',
+  multi_mode: 'Multimode',
+};
+
+/** Phase 5: the outer jacket and armour, as printed or on the datasheet. Absent: not recorded. */
+export const CABLE_SHEATHS = ['PE', 'HDPE', 'LSZH', 'PVC', 'armoured_steel_tape', 'armoured_steel_wire', 'armoured_frp', 'other'] as const;
+export const cableSheathSchema = z.enum(CABLE_SHEATHS);
+export type CableSheath = z.infer<typeof cableSheathSchema>;
+
+export const CABLE_SHEATH_LABELS: Record<CableSheath, string> = {
+  PE: 'PE (polyethylene)',
+  HDPE: 'HDPE',
+  LSZH: 'LSZH (low smoke, zero halogen)',
+  PVC: 'PVC',
+  armoured_steel_tape: 'Armoured: steel tape',
+  armoured_steel_wire: 'Armoured: steel wire',
+  armoured_frp: 'Armoured: glass rods (FRP)',
+  other: 'Other',
+};
+
 export const CABLE_CATEGORIES = ['Fiber', 'Coaxial'] as const;
 
 /**
@@ -247,6 +371,10 @@ export const CORE_STATUSES = [
   'Under Maintenance',
   'Unverified',
   'Unknown',
+  // Phase 7. Faulty: found bad by a test or a fault, with the reason and evidence in the core's
+  // history. Retired: taken out of use for good; it cannot be given a service.
+  'Faulty',
+  'Retired',
 ] as const;
 export const coreStatusSchema = z.enum(CORE_STATUSES);
 export type CoreStatus = z.infer<typeof coreStatusSchema>;
@@ -262,7 +390,14 @@ export const CORE_STATUS_LABELS: Record<CoreStatus, string> = {
   'Under Maintenance': 'Under maintenance',
   Unverified: 'Not checked',
   Unknown: 'Not known',
+  Faulty: 'Faulty',
+  Retired: 'Retired (out of use)',
 };
+
+/** What happened to a core's condition (Phase 7). Kept in the core's history, never deleted. */
+export const CORE_EVENT_ACTIONS = ['marked_faulty', 'marked_repaired', 'retired', 'returned_to_service'] as const;
+export const coreEventActionSchema = z.enum(CORE_EVENT_ACTIONS);
+export type CoreEventAction = z.infer<typeof coreEventActionSchema>;
 
 /** An active assignment either carries a service or holds the core for one. */
 export const CORE_ASSIGNMENT_KINDS = ['in_use', 'reserved'] as const;
@@ -294,6 +429,11 @@ export type CableEntryRole = z.infer<typeof cableEntryRoleSchema>;
 export const ODF_PORT_STATUSES = ['available', 'in_use', 'reserved', 'damaged', 'unknown'] as const;
 export const odfPortStatusSchema = z.enum(ODF_PORT_STATUSES);
 export type OdfPortStatus = z.infer<typeof odfPortStatusSchema>;
+
+/** Phase 9: which way a rack's units are numbered, as written on the rack. Most count from the bottom. */
+export const RACK_NUMBERINGS = ['bottom_up', 'top_down'] as const;
+export const rackNumberingSchema = z.enum(RACK_NUMBERINGS);
+export type RackNumbering = z.infer<typeof rackNumberingSchema>;
 
 export const SPLITTER_KINDS = ['PLC', 'FBT', 'other'] as const;
 export const splitterKindSchema = z.enum(SPLITTER_KINDS);
@@ -561,6 +701,20 @@ export const AUDIT_ASSET_TYPES = [
   'RfElement',
   'RfLink',
   'RfLevel',
+  'Inspection',
+  // Phase 9: sites and racks.
+  'Site',
+  'Rack',
+  // Network mapping Phase 13: a check of one physical link.
+  'LinkCheck',
+  // Network mapping Phase 15: a stored map-check finding.
+  'ValidationFinding',
+  // Network mapping Phase 18: an expansion scenario (a plan, not the built network).
+  'Scenario',
+  // Network mapping Phase 17: a stored optical budget run (history, not a network record).
+  'BudgetRun',
+  // Network mapping Phase 21: one import of a map file (history, for undo by import).
+  'Import',
 ] as const;
 
 /* ------------------------------------------------------------------ */

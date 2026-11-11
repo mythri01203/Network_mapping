@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { type Account, type AccountRole, AUDIT_ROLE_FOR, type AuthMode, type AuthStatus, isAccountRole } from '@fibergis/shared';
+import { type Account, type AccountRole, AUDIT_ROLE_FOR, type AuthMode, type AuthStatus, normalizeAccountRole, type PermissionAction, roleHasAction } from '@fibergis/shared';
 
 import { ApiError, type AuthClient, authClient, describeApiError } from '../api/client';
 import { readJson, writeJson } from '../lib/storage';
@@ -24,8 +24,15 @@ const PEOPLE_KEY = 'auth_people';
 const LAST_KEY = 'auth_last';
 const MAX_PEOPLE = 6;
 
-const isPerson = (v: unknown): v is RememberedPerson =>
-  typeof v === 'object' && v !== null && typeof (v as RememberedPerson).username === 'string' && typeof (v as RememberedPerson).displayName === 'string' && isAccountRole(String((v as RememberedPerson).role));
+/** Phase 23: a role remembered under an older or other spelling is read as the stored name. */
+const isPerson = (v: unknown): v is RememberedPerson => {
+  if (typeof v !== 'object' || v === null) return false;
+  const person = v as RememberedPerson;
+  const role = normalizeAccountRole(person.role);
+  if (typeof person.username !== 'string' || typeof person.displayName !== 'string' || !role) return false;
+  person.role = role;
+  return true;
+};
 
 const isAccount = (v: unknown): v is Account => isPerson(v) && typeof (v as Account).id === 'string';
 
@@ -175,6 +182,20 @@ export function currentAccount(state: Pick<AuthState, 'account' | 'lastAccount' 
   if (state.phase === 'unreachable' || state.phase === 'unknown') return state.mode === 'setup' ? null : state.lastAccount;
   return null;
 }
+
+/**
+ * Phase 23: whether the person here may take an action (export, approve, configure...), by the
+ * same table the server applies. Login off (setup mode): yes, as on the server. Only for showing or
+ * hiding buttons; the server always checks again.
+ */
+export function mayDo(action: PermissionAction, state: Pick<AuthState, 'account' | 'lastAccount' | 'phase' | 'mode'> = useAuthStore.getState()): boolean {
+  if (!loginIsOn(state)) return true;
+  const account = currentAccount(state);
+  return !!account && roleHasAction(account.role, action);
+}
+
+/** The same as `mayDo`, as a hook that follows login and logout. */
+export const useMayDo = (action: PermissionAction): boolean => useAuthStore((s) => mayDo(action, s));
 
 /** True once login is on (the server said so, or this device has logged in before and has no signal). */
 export const loginIsOn = (state: Pick<AuthState, 'mode' | 'lastAccount' | 'phase'> = useAuthStore.getState()): boolean =>

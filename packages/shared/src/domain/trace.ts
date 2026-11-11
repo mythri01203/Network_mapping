@@ -10,6 +10,7 @@ import {
   opticsClassForTechnology,
   rxBandFor,
 } from './opticalSettings';
+import { customersOnPonPort } from './ponUsage';
 import { budgetStatusForBand, rxReadingOf } from './rxReading';
 
 /** Downstream wavelength used for the path loss shown in this trace. */
@@ -323,8 +324,8 @@ class PathBuilder {
     this.plannedCableIds.add(cable.id);
     let status = cableStatus(cable);
     const core = coreNumber ? cable.cores.find((c) => c.coreNumber === coreNumber) : undefined;
-    if (core && (core.status === 'Damaged' || core.status === 'Under Maintenance')) {
-      status = core.status === 'Damaged' ? 'Faulty' : 'Warning';
+    if (core && (core.status === 'Damaged' || core.status === 'Faulty' || core.status === 'Retired' || core.status === 'Under Maintenance')) {
+      status = core.status === 'Under Maintenance' ? 'Warning' : 'Faulty';
       this.warnings.push(`Core ${coreNumber} on ${cable.id} is ${core.status}.`);
     }
     // The colour only when one is on record: a new cable with no scheme has none.
@@ -357,7 +358,8 @@ class PathBuilder {
         const otherCableId = cl.cableAId === cable.id ? cl.cableBId : cl.cableAId;
         if (otherCableId && !this.plannedCableIds.has(otherCableId)) return;
         this.closureIds.add(cl.id);
-        const splices = cl.splices.filter((s) => s.inputCableId === cable.id || s.outputCableId === cable.id);
+        // Splices out of service or entered by mistake (Phase 8) no longer join anything.
+        const splices = cl.splices.filter((s) => !s.retiredAt && s.status !== 'Unused' && (s.inputCableId === cable.id || s.outputCableId === cable.id));
         const avgLoss = splices.length
           ? splices.reduce((sum, s) => sum + (s.spliceLossDb ?? this.settings.fusionSpliceDb), 0) / splices.length
           : this.settings.fusionSpliceDb;
@@ -460,7 +462,7 @@ function buildTrunk(
         type: 'PON',
         id: `${olt.id}/${pon.id}`,
         name: `PON Port ${pon.id}${pon.slotCardPort ? ` (${pon.slotCardPort})` : ''}`,
-        details: `${txPowerDbm !== undefined ? `Tx ${txPowerDbm >= 0 ? '+' : ''}${txPowerDbm} dBm` : 'Tx not recorded'} | ${pon.connectedCustomersCount} customer(s) | ${pon.status}`,
+        details: `${txPowerDbm !== undefined ? `Tx ${txPowerDbm >= 0 ? '+' : ''}${txPowerDbm} dBm` : 'Tx not recorded'} | ${customersOnPonPort(data.customers, olt.id, pon.id).length} customer(s) on record | ${pon.status}`,
         status: pon.status === 'Faulty' ? 'Faulty' : pon.status === 'Active' ? 'Normal' : 'Warning',
       });
     } else if (feederId) {
@@ -609,7 +611,7 @@ export function traceEquipment(
         id: `${eq.id}/${pon.id}`,
         name: `PON Port ${pon.id}`,
         details: feeder
-          ? `${pon.status} | Feeds ${feeder.id} → ${feeder.endEquipmentId || 'unterminated'} | ${pon.connectedCustomersCount} customer(s)`
+          ? `${pon.status} | Feeds ${feeder.id} → ${feeder.endEquipmentId || 'unterminated'} | ${customersOnPonPort(data.customers, eq.id, pon.id).length} customer(s) on record`
           : `${pon.status} | No feeder mapped`,
         status: pon.status === 'Faulty' ? 'Faulty' : pon.connectedFeederCableId && !feeder ? 'Warning' : 'Normal',
       });

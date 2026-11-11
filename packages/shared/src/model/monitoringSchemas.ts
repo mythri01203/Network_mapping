@@ -7,6 +7,7 @@ import { z } from 'zod';
  *   monitoringSources  where readings come from: a file export, a push script, or the TEST simulator
  *   onuReadings        one optical reading as the device reported it, with its own time
  *   onuStatuses        one ONU status (online, offline, LOS, dying gasp, unknown) kept as history
+ *   deviceStatuses     (Phase 20) one OLT, card, PON port or uplink status, push only, kept as history
  *
  * A row is matched to an ONT only by the OLT's ONU address or the serial, exactly as written. A row
  * that matches nothing is kept with `ontId` unset and listed as "not matched"; nothing is guessed.
@@ -118,3 +119,99 @@ export const onuStatusSchema = z.object({
 export type MonitoringSource = z.infer<typeof monitoringSourceSchema>;
 export type OnuReading = z.infer<typeof onuReadingSchema>;
 export type OnuStatus = z.infer<typeof onuStatusSchema>;
+
+/*
+ * Network mapping Phase 20: status of the OLT itself, one of its cards, one PON port or an uplink,
+ * as a push source sent it (`deviceStatuses`). Kept as history like ONU statuses, written only by
+ * the push route. A row is tied to an OLT only by its record id, its serial or its management IP,
+ * exactly as written on one OLT record; a port only by its address exactly as the OLT writes it (or
+ * the port's record id); a card only by its slot label in the recorded chassis. Anything else is
+ * kept as "not matched" with the reason. Nothing is guessed, and no status is made up from ONUs.
+ */
+
+export const DEVICE_TARGETS = ['olt', 'card', 'pon_port', 'interface'] as const;
+export const deviceTargetSchema = z.enum(DEVICE_TARGETS);
+export type DeviceTarget = z.infer<typeof deviceTargetSchema>;
+export const DEVICE_TARGET_LABELS: Record<DeviceTarget, string> = {
+  olt: 'OLT',
+  card: 'Card in a slot',
+  pon_port: 'PON port',
+  interface: 'Uplink or other interface',
+};
+
+/** What the device said about the item. Never worked out by FiberGIS. */
+export const DEVICE_STATES = ['up', 'down', 'degraded', 'unknown'] as const;
+export const deviceStateSchema = z.enum(DEVICE_STATES);
+export type DeviceState = z.infer<typeof deviceStateSchema>;
+export const DEVICE_STATE_LABELS: Record<DeviceState, string> = {
+  up: 'Up',
+  down: 'Down',
+  degraded: 'Degraded',
+  unknown: 'Unknown',
+};
+
+/** How a row was tied to an OLT record. `none`: it matched nothing and is listed, not guessed. */
+export const DEVICE_MATCH_KINDS = ['olt_id', 'olt_serial', 'olt_ip', 'none'] as const;
+export const deviceMatchKindSchema = z.enum(DEVICE_MATCH_KINDS);
+export type DeviceMatchKind = z.infer<typeof deviceMatchKindSchema>;
+
+const deviceCount = z.number().int().min(0).max(100_000);
+
+/** One OLT, card, PON port or interface row as a push script sends it. */
+export const deviceIngestRowSchema = z.strictObject({
+  target: deviceTargetSchema,
+  /** The OLT: its FiberGIS record id, or its serial or management IP exactly as written on the OLT record. */
+  oltId: z.string().trim().max(80).optional(),
+  oltSerial: z.string().trim().max(64).optional(),
+  oltIp: z.string().trim().max(64).optional(),
+  /** PON port: its address exactly as the OLT writes it (such as "gpon 0/5/0"), or its FiberGIS port id. */
+  portAddress: z.string().trim().max(80).optional(),
+  /** Card: the shelf and slot labels exactly as written in the recorded chassis. */
+  shelf: z.string().trim().max(20).optional(),
+  slot: z.string().trim().max(20).optional(),
+  /** Uplink or other interface: its name as the OLT writes it. Kept as written; no record is needed. */
+  interfaceName: z.string().trim().max(80).optional(),
+  /** ISO 8601 with a time zone. */
+  deviceTime: z.string().trim().max(40),
+  state: deviceStateSchema,
+  /** The vendor's own status word, kept as written. */
+  rawState: z.string().trim().max(40).optional(),
+  /** Counts the device itself reported for this item at this time. Absent: not sent. */
+  onuOnline: deviceCount.optional(),
+  onuTotal: deviceCount.optional(),
+  losCount: deviceCount.optional(),
+  alarmCount: deviceCount.optional(),
+});
+export type DeviceIngestRow = z.infer<typeof deviceIngestRowSchema>;
+
+export const deviceStatusSchema = z.object({
+  id: z.string().min(1),
+  target: deviceTargetSchema,
+  /** Set only when the OLT identifier matched one OLT record exactly. */
+  oltId: z.string().min(1).optional(),
+  /** Set only when the port address matched one PON port of that OLT exactly. */
+  ponPortId: z.string().min(1).optional(),
+  /** Set only when the slot matched one slot of that OLT's recorded chassis exactly. */
+  slotId: z.string().min(1).optional(),
+  matchedBy: deviceMatchKindSchema,
+  /** As the script wrote them. Never converted between vendor formats. */
+  oltKey: z.string().max(80),
+  portAddress: z.string().max(80).optional(),
+  shelf: z.string().max(20).optional(),
+  slot: z.string().max(20).optional(),
+  interfaceName: z.string().max(80).optional(),
+  origin: z.literal('device_reported'),
+  sourceId: z.string().min(1),
+  isTest: z.boolean(),
+  deviceTime: z.string(),
+  receivedAt: z.string(),
+  state: deviceStateSchema,
+  rawState: z.string().max(40).optional(),
+  onuOnline: deviceCount.optional(),
+  onuTotal: deviceCount.optional(),
+  losCount: deviceCount.optional(),
+  alarmCount: deviceCount.optional(),
+  /** Why it (or its port or slot) did not match, in plain words. */
+  unmatchedReason: z.string().max(200).optional(),
+});
+export type DeviceStatus = z.infer<typeof deviceStatusSchema>;

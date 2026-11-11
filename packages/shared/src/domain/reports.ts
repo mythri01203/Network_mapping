@@ -1,14 +1,23 @@
 import type { NetworkSnapshot } from '../model/collections';
 import type { Fault, WorkOrder } from '../model/types';
+import { capacityPlanningReports } from './capacityReports';
+import { type CapacitySettings, resolveCapacitySettings } from './capacitySettings';
 import { coreUtilization } from './fiberCommands';
-import { splitterCapacity } from './fiberIndex';
+import type { OspSettings } from './ospSettings';
+import { buildFiberIndex, splitterCapacity } from './fiberIndex';
+import { DEFAULT_OPTICAL_SETTINGS, type OpticalSettings } from './opticalSettings';
+import { resolveMonitoringSettings } from './monitoringSettings';
 import { cableLengths } from './outsidePlant';
+import { ponPortUsage } from './ponUsage';
+import { recordReports } from './recordReports';
+import { SPLITTER_ARCHITECTURE_LABELS, splitProductText, splitterOutputUse, splitterPlaces } from './splitterManagement';
 
 /**
  * Phase 9 reports (section 22 of the master prompt), built only from what the records hold. Every
  * table says how it is worked out. When the times a figure needs are missing, it is not shown:
  * the table says how many records had them instead. TEST events are left out unless asked for.
- * Live monitoring figures need Phase 7, so those reports say "No live connection".
+ * Live monitoring figures come only from what a real monitoring source sent (Phase 7, Phase 20); with
+ * nothing sent, those reports say "No live connection".
  *
  * Reports name records by id and name only: no phone numbers, addresses or other personal data.
  */
@@ -39,8 +48,12 @@ export interface ReportTable {
   rows: Record<string, ReportCell>[];
   /** What is missing or left out. */
   notes: string[];
-  /** True for reports that need a live device connection (Phase 7). */
+  /** True when the report needs device data and no real source sent any inside the stale time. */
   noLiveConnection?: boolean;
+  /** Network mapping Phase 22: the record lists the figures come from, in plain words. */
+  sources?: string[];
+  /** Network mapping Phase 22: the settings (with their values) the report used. Empty: none. */
+  settingsUsed?: string[];
 }
 
 export const NO_LIVE_CONNECTION = 'No live connection';
@@ -101,7 +114,11 @@ const isTestJob = (w: WorkOrder) => w.isTest === true;
 type ReportData = Pick<
   NetworkSnapshot,
   'equipment' | 'cables' | 'splitters' | 'closures' | 'customers' | 'faults' | 'workOrders' | 'spans' | 'ducts' | 'slackLoops' | 'onts' | 'alarms' | 'permissions'
->;
+> &
+  // Network mapping Phase 18: what the capacity planning reports also read, when given.
+  Partial<Pick<NetworkSnapshot, 'attachments' | 'sites' | 'racks' | 'zones' | 'services' | 'settings' | 'planningScenarios'>> &
+  // Network mapping Phase 22: the stored map check findings, when given.
+  Partial<Pick<NetworkSnapshot, 'validationFindings'>>;
 
 function inventoryReport(data: ReportData, filters: ReportFilters): ReportTable {
   const equipment = data.equipment.filter((e) => areaMatches(e.area, filters));
@@ -182,12 +199,16 @@ function coreReport(data: ReportData): ReportTable {
 function capacityReport(data: ReportData): ReportTable {
   const rows: Record<string, ReportCell>[] = [];
   for (const s of data.splitters) {
-    const capacity = splitterCapacity(s);
-    const by = (status: string) => s.outputPorts.filter((p) => p.status === status).length;
-    rows.push({ kind: 'Splitter', id: s.id, name: s.name, where: s.terminalBoxId, capacity, used: by('Occupied'), reserved: by('Reserved'), faulty: by('Faulty'), free: Math.max(0, capacity - by('Occupied') - by('Reserved') - by('Faulty')) });
+    // Phase 11: counted from what is on each output (customers, fibers, cascade splitters), not only
+    // the port's status word. An output with no port record is not counted as free.
+    const { counts } = splitterOutputUse(data, s);
+    rows.push({ kind: 'Splitter', id: s.id, name: s.name, where: s.terminalBoxId, capacity: splitterCapacity(s), used: counts.used, reserved: counts.reserved, faulty: counts.faulty, free: counts.notRecorded ? `${counts.free} (${counts.notRecorded} not recorded)` : counts.free });
   }
   for (const olt of data.equipment.filter((e) => (e.ponPorts ?? []).length > 0)) {
     for (const port of olt.ponPorts ?? []) {
+      // Phase 10: counted from the ONT and customer records, not the stored counter.
+      const usage = ponPortUsage(data, olt.id, port.id);
+      const used = usage?.ontCount ?? 0;
       const limit = port.maxOnu;
       rows.push({
         kind: 'PON port',
@@ -195,20 +216,99 @@ function capacityReport(data: ReportData): ReportTable {
         name: olt.name,
         where: olt.id,
         capacity: limit ?? 'ONU limit not recorded',
-        used: port.connectedCustomersCount,
+        used,
         reserved: '',
         faulty: '',
-        free: limit !== undefined ? Math.max(0, limit - port.connectedCustomersCount) : 'Not known',
+        free: limit !== undefined ? Math.max(0, limit - used) : 'Not known',
       });
     }
   }
   return {
     id: 'capacity',
     title: 'Splitter and PON port capacity',
-    definition: 'Splitter outputs counted from each output record (capacity from the ratio). PON port use is the number of customers recorded on the port; its capacity is the vendor ONU limit when someone recorded it. Live ONU counts need a connection to the OLT.',
+    definition: 'Splitter outputs counted from each output record (capacity from the ratio). PON port use is the number of ONTs on the port, counted from the ONT records and the active customers recorded on the port (a customer with no ONT record counts as one ONT); its capacity is the vendor ONU limit when someone recorded it. Live ONU counts need a connection to the OLT.',
     columns: [col('kind', 'Kind'), col('id', 'Id'), col('name', 'Name'), col('where', 'Box or OLT'), col('capacity', 'Capacity'), col('used', 'Used'), col('reserved', 'Reserved'), col('faulty', 'Faulty'), col('free', 'Free')],
     rows,
     notes: [`Online ONUs per port: ${NO_LIVE_CONNECTION}.`],
+  };
+}
+
+/**
+ * Phase 11: every splitter's outputs from the records, with its level and split product. Ids only,
+ * no customer names.
+ */
+function splitterCapacityReport(data: ReportData, optical: OpticalSettings): ReportTable {
+  const index = buildFiberIndex(data);
+  const places = splitterPlaces(data, { index, settings: optical });
+  let notRecorded = 0;
+  let faultyInUse = 0;
+  let markedOnly = 0;
+  let overLimit = 0;
+  let couplers = 0;
+  const rows: Record<string, ReportCell>[] = data.splitters.map((s) => {
+    const { counts } = splitterOutputUse(data, s);
+    const place = places.get(s.id);
+    notRecorded += counts.notRecorded;
+    faultyInUse += counts.faultyInUse;
+    markedOnly += counts.markedOnly;
+    if (place?.overSplitLimit) overLimit += 1;
+    if (place?.split.couplers) couplers += 1;
+    const level = place?.level !== undefined ? place.level : place && place.levelAtLeast > 1 ? `Not known (at least ${place.levelAtLeast})` : 'Not known';
+    const worked = place?.suggestion.architecture ? SPLITTER_ARCHITECTURE_LABELS[place.suggestion.architecture] : 'Not known';
+    return {
+      id: s.id,
+      name: s.name,
+      where: s.terminalBoxId,
+      ratio: s.couplerRatio ? `coupler ${s.couplerRatio}` : s.ratio,
+      level,
+      arrangement: s.architecture ? `${worked} · recorded: ${SPLITTER_ARCHITECTURE_LABELS[s.architecture.value]}${s.architecture.level !== undefined ? `, level ${s.architecture.level}` : ''}` : worked,
+      split: place ? `${splitProductText(place.split)}${place.overSplitLimit ? ' (above limit)' : ''}` : 'Not known',
+      outputs: counts.capacity,
+      used: counts.used,
+      customers: counts.customers,
+      fibers: counts.fibers,
+      cascade: counts.splitters,
+      free: counts.free,
+      reserved: counts.reserved,
+      faulty: counts.faulty,
+      notRecorded: counts.notRecorded,
+    };
+  });
+  const limit = optical.limits.splitProduct;
+  const notes = [
+    'Level and arrangement are worked out from the recorded links up to the PON port (cascade in a box, splitter output to fiber to splices to splitter input, ODF patch). They are a suggestion, never a guess from position; "recorded" is what a person wrote, with a reason.',
+    `Split = the ratios multiplied from the first splitter down to this one, against the limit of ${limit} in Optical settings. "At least" means the fiber above is not recorded.`,
+    ...(notRecorded > 0 ? [`${notRecorded} output(s) have no port record and nothing linked: "not recorded", not free.`] : []),
+    ...(faultyInUse > 0 ? [`${faultyInUse} faulty output(s) still have something connected; they are counted as faulty.`] : []),
+    ...(markedOnly > 0 ? [`${markedOnly} output(s) are marked in use with nothing linked recorded; they are counted as used.`] : []),
+    ...(overLimit > 0 ? [`${overLimit} splitter(s) are above the split limit. This is a warning only.`] : []),
+    ...(couplers > 0 ? [`${couplers} splitter(s) have an unequal coupler on the way; couplers are not multiplied in.`] : []),
+  ];
+  return {
+    id: 'splitter-capacity',
+    title: 'Splitter outputs: used, free, reserved, faulty',
+    definition:
+      'For each output of each splitter (outputs from the ratio): used = an active customer recorded on it, a drop or lead fiber on the port, or a splitter cascaded from it; faulty and reserved = the mark on the port, with its reason in the port history; free = a port record with nothing on it; not recorded = no port record and nothing linked. Customers, fibers and cascade count the used outputs carrying each.',
+    columns: [
+      col('id', 'Splitter'),
+      col('name', 'Name'),
+      col('where', 'Box'),
+      col('ratio', 'Ratio'),
+      col('level', 'Level'),
+      col('arrangement', 'Arrangement'),
+      col('split', 'Split to here'),
+      col('outputs', 'Outputs'),
+      col('used', 'Used'),
+      col('customers', 'Customers'),
+      col('fibers', 'Drop fibers'),
+      col('cascade', 'Cascade'),
+      col('free', 'Free'),
+      col('reserved', 'Reserved'),
+      col('faulty', 'Faulty'),
+      col('notRecorded', 'Not recorded'),
+    ],
+    rows,
+    notes: rows.length === 0 ? ['No splitter records yet.'] : notes,
   };
 }
 
@@ -221,10 +321,10 @@ function customerReport(data: ReportData, filters: ReportFilters): ReportTable {
   return {
     id: 'customers',
     title: 'Customers and ONTs by status',
-    definition: 'Customer status and ONT record status as recorded by people. Online, offline and LOS need a live connection to the OLT and are not shown.',
+    definition: 'Customer status and ONT record status as recorded by people. Online, offline and LOS are not shown here: they come only from what a monitoring source sent (Live status, and the Live monitoring report).',
     columns: [col('what', 'What'), col('status', 'Status'), col('count', 'Count')],
     rows,
-    notes: [`Online / offline / LOS: ${NO_LIVE_CONNECTION}.`, ...(filters.area?.trim() ? [`Only customers with area "${filters.area.trim()}". ONT records are not filtered by area.`] : [])],
+    notes: ['Online / offline / LOS: see Live status. Only what a monitoring source sent is shown there.', ...(filters.area?.trim() ? [`Only customers with area "${filters.area.trim()}". ONT records are not filtered by area.`] : [])],
   };
 }
 
@@ -325,40 +425,117 @@ function permissionReport(data: ReportData, today: string): ReportTable {
   };
 }
 
-function liveReport(): ReportTable {
+/** What the live report reads, when given. Absent collections count as "nothing sent". */
+export type LiveReportData = Partial<Pick<NetworkSnapshot, 'alarms' | 'settings' | 'monitoringSources' | 'onuReadings' | 'onuStatuses' | 'deviceStatuses' | 'rfLevels'>>;
+
+/**
+ * Network mapping Phase 20: the monitoring framework exists (Phase 7: file import, push, TEST
+ * simulator; Phase 20: OLT, card and PON port rows). Each line says what real sources have sent:
+ * "Live" only when a real (not TEST) row arrived inside the stale time in Monitoring settings,
+ * "Stale" with the time of the newest one, and "No live connection" when nothing real was sent.
+ * Rows are counted, never turned into an availability figure.
+ */
+export function liveMonitoringReport(data: LiveReportData, now = new Date()): ReportTable {
+  const monitoring = resolveMonitoringSettings(data.settings ?? []);
+  const realSources = new Set((data.monitoringSources ?? []).filter((s) => !s.isTest).map((s) => s.id));
+  const real = <T extends { sourceId: string; isTest: boolean }>(rows: readonly T[] | undefined) => (rows ?? []).filter((r) => !r.isTest && realSources.has(r.sourceId));
+  const sentence = (rows: readonly { deviceTime: string }[], staleMinutes: number, what: string): string => {
+    if (rows.length === 0) return NO_LIVE_CONNECTION;
+    const newest = rows.reduce((m, r) => (r.deviceTime > m ? r.deviceTime : m), rows[0].deviceTime);
+    const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(newest)) / 60_000));
+    const age = minutes < 120 ? `${minutes} min ago` : minutes < 2880 ? `${Math.round(minutes / 60)} h ago` : `${Math.round(minutes / 1440)} days ago`;
+    const live = minutes <= staleMinutes;
+    return `${live ? 'Live' : 'Stale'}: ${rows.length} ${what} kept from real sources, newest ${age} (${newest.slice(0, 16).replace('T', ' ')} UTC)`;
+  };
+  const statuses = real(data.onuStatuses);
+  const readings = real(data.onuReadings);
+  const devices = real(data.deviceStatuses);
+  const liveNow = [...statuses, ...devices].some((r) => now.getTime() - Date.parse(r.deviceTime) <= monitoring.statusStaleMinutes * 60_000);
+  const deviceAlarms = (data.alarms ?? []).filter((a) => a.source === 'device_adapter' && !a.isTest);
+  const openDevice = deviceAlarms.filter((a) => a.state !== 'cleared').length;
+  const rfLevels = data.rfLevels ?? [];
   return {
     id: 'live',
-    title: 'Live monitoring: optical readings, alarms from devices, availability',
-    definition: 'These need a live connection to your OLTs (Phase 7). Until then nothing is shown, so no number here can be mistaken for a reading.',
+    title: 'Live monitoring: status, optical readings and alarms from devices',
+    definition: `Counted from what monitoring sources (file import or push) have sent. "Live" only when a real source sent a row in the last ${monitoring.statusStaleMinutes} min (status) or ${monitoring.readingStaleMinutes} min (light readings), as set in Monitoring settings; otherwise "Stale" with the newest time, or "${NO_LIVE_CONNECTION}" when nothing real was sent. TEST rows are left out.`,
     columns: [col('report', 'Report'), col('state', 'State')],
     rows: [
-      { report: 'ONT online / offline / LOS and history', state: NO_LIVE_CONNECTION },
-      { report: 'Optical readings and trends from devices', state: NO_LIVE_CONNECTION },
-      { report: 'Device alarms', state: NO_LIVE_CONNECTION },
-      { report: 'Network availability', state: NO_LIVE_CONNECTION },
-      { report: 'Cable TV (HFC/RF) levels', state: 'Not built (Phase 6)' },
+      { report: 'ONT online / offline / LOS and history', state: sentence(statuses, monitoring.statusStaleMinutes, 'ONU status row(s)') },
+      { report: 'Optical readings from devices (history is a list; no trend charts)', state: sentence(readings, monitoring.readingStaleMinutes, 'light reading(s)') },
+      { report: 'OLT, card and PON port status from devices', state: sentence(devices, monitoring.statusStaleMinutes, 'device status row(s)') },
+      {
+        report: 'Device alarms',
+        state: deviceAlarms.length === 0 ? (realSources.size === 0 ? NO_LIVE_CONNECTION : 'None raised by a monitoring source') : `${openDevice} open, ${deviceAlarms.length - openDevice} cleared (raised by monitoring sources)`,
+      },
+      { report: 'Network availability', state: 'Not worked out: it needs outage start and end times, which status rows alone do not prove' },
+      {
+        report: 'Cable TV (HFC/RF) levels',
+        state: rfLevels.length > 0 ? `${rfLevels.length} level(s) recorded by people with a meter (Cable TV). Not live: no RF monitoring source` : 'None recorded. Levels are recorded by people with a meter (Cable TV); there is no RF monitoring source',
+      },
     ],
-    notes: ['Field light readings are on each customer and in Topology, Readings and lengths; they are meter readings, not live.'],
-    noLiveConnection: true,
+    notes: [
+      'A light reading is not proof that an ONT is online: online, offline and LOS come only from status rows.',
+      'Field light readings are on each customer and in Topology, Readings and lengths; they are meter readings, not live.',
+      ...(realSources.size === 0 ? ['No real monitoring source is set up. The administrator adds one under Live status, Sources.'] : []),
+    ],
+    ...(liveNow ? {} : { noLiveConnection: true }),
   };
 }
 
 /** Every report, in the order the Reports screen shows them. */
-export function buildReports(data: ReportData, filters: ReportFilters = {}, today = new Date().toISOString().slice(0, 10)): ReportTable[] {
+export function buildReports(
+  data: ReportData & LiveReportData,
+  filters: ReportFilters = {},
+  today = new Date().toISOString().slice(0, 10),
+  /** Phase 11: the operator's optical settings, for the split limit. Defaults when not given. */
+  options: { optical?: OpticalSettings; capacity?: CapacitySettings; osp?: OspSettings } = {},
+): ReportTable[] {
   const faults = faultReport(data, filters);
   return [
     inventoryReport(data, filters),
     cableLengthReport(data),
     coreReport(data),
     capacityReport(data),
+    splitterCapacityReport(data, options.optical ?? DEFAULT_OPTICAL_SETTINGS),
+    // Network mapping Phase 18: capacity planning (per element, OLT chassis, zones, demand, planned against built, scenarios).
+    ...capacityPlanningReports(data, {
+      capacity: options.capacity ?? resolveCapacitySettings(data.settings ?? []),
+      settingRecords: data.settings ?? [],
+      ...(options.osp ? { osp: options.osp } : {}),
+      ...(options.optical ? { optical: options.optical } : {}),
+    }),
     customerReport(data, filters),
     faults.summary,
     faults.repair,
     workOrderReport(data, filters),
     permissionReport(data, today),
-    liveReport(),
-  ];
+    // Network mapping Phase 22: the M30 reports that were missing (inventory, OSP, ducts, splicing, ODF, orphans, paths, findings).
+    ...recordReports(data, { filters, today, ...(options.osp ? { osp: options.osp } : {}) }),
+    liveMonitoringReport(data),
+  ].map((t) => (t.sources ? t : { ...t, sources: EARLIER_REPORT_SOURCES[t.id] ?? [] }));
 }
+
+/** Network mapping Phase 22: the record lists each earlier report reads, for the PDF and Excel. */
+const EARLIER_REPORT_SOURCES: Record<string, string[]> = {
+  inventory: ['Network items', 'Spans', 'Ducts', 'Joint closure records'],
+  'cable-length': ['Cables', 'Slack loops'],
+  cores: ['Cables (fibres and their assignments)'],
+  capacity: ['Splitters', 'Network items (OLT PON ports)', 'ONT records', 'Customers (ids only)'],
+  'splitter-capacity': ['Splitters', 'Cables', 'Joint closure records (splices)', 'Network items (ODF ports, OLT PON ports)', 'Customers (ids only)', 'Optical settings (split limit)'],
+  'capacity-use': ['Splitters', 'Network items (OLTs, ODFs, poles)', 'Cables', 'Ducts', 'Cables on poles and spans (attachments)', 'Sites and racks', 'Customers (ids only)', 'ONT records', 'Capacity settings'],
+  'olt-chassis-capacity': ['Network items (OLT chassis and PON ports)', 'ONT records', 'Customers (ids only)', 'Cables', 'Splitters', 'Capacity settings'],
+  'capacity-zones': ['Zones (drawn boundaries)', 'The capacity per element', 'Customers waiting (house position used only to find the zone, never shown)'],
+  'capacity-demand': ['Customers waiting (Pending Installation, by box)', 'Splitters'],
+  'planned-vs-built': ['Network items', 'Cables', 'Spans', 'Ducts', 'Cables on poles and spans (attachments)', 'Customers (ids only)'],
+  'planned-vs-built-capacity': ['The capacity per element'],
+  'capacity-scenarios': ['Planning scenarios', 'The records as they are today'],
+  customers: ['Customers (ids only)', 'ONT records'],
+  faults: ['Faults'],
+  'repair-times': ['Faults'],
+  'work-orders': ['Jobs (work orders)'],
+  permissions: ['Permissions'],
+  live: ['Monitoring sources', 'ONU status rows', 'Light readings from devices', 'Device status rows', 'Alarms', 'Cable TV levels', 'Monitoring settings'],
+};
 
 /** A cell made safe for a spreadsheet: text that starts like a formula is kept as text. */
 const csvCell = (value: ReportCell): string => {

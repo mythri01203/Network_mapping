@@ -6,9 +6,11 @@ import {
   Cable,
   Camera,
   ChartColumn,
+  ClipboardCheck,
   Combine,
   FileText,
   FolderOpen,
+  GitBranch,
   LibraryBig,
   type LucideIcon,
   MapPinPlus,
@@ -32,7 +34,9 @@ import { isFaultOpen, isWorkOrderOpen } from '@fibergis/shared';
 import { cn, MenuItem, MenuLabel, MenuSeparator, Popover } from '../../components/ui';
 import { useBikerStore } from '../../stores/bikerStore';
 import { useNetworkStore } from '../../stores/networkStore';
+import { useTraceStore } from '../../stores/traceStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useValidationStore } from '../../stores/validationActions';
 import type { MainView } from '../mainView';
 import { useActiveView, useOpenView, VIEW_META } from '../views';
 
@@ -86,6 +90,8 @@ export const LeftSidebar: React.FC = () => {
     })),
   );
   const setIsBikerMode = useBikerStore((s) => s.setBikerMode);
+  // Network mapping Phase 15: open map check findings that the last check still finds.
+  const openFindings = useNetworkStore((s) => (s.validationFindings ?? []).filter((f) => f.state === 'open' && f.presence === 'found').length);
 
   const activeView = useActiveView();
   const openView = useOpenView();
@@ -132,6 +138,7 @@ export const LeftSidebar: React.FC = () => {
       label: 'Workspace',
       items: [
         view('map', { simple: true }),
+        view('view3d', { simple: true }),
         view('topology'),
         view('olt_rack'),
         view('inventory', { count: equipments.length, simple: true }),
@@ -163,6 +170,8 @@ export const LeftSidebar: React.FC = () => {
           simple: true,
         }),
         tool('trace', 'Route Trace', Route, () => setModalOpen('fiberTrace', true), { simple: true }),
+        // Network mapping Phase 15: the 12 traces on the one trace engine.
+        tool('networkTrace', 'Network Trace', GitBranch, () => useTraceStore.getState().openPanel()),
         tool('fat', 'Terminal Boxes', Box, () => setModalOpen('terminalBox', true), {
           count: fatCount || undefined,
           simple: true,
@@ -182,6 +191,9 @@ export const LeftSidebar: React.FC = () => {
         tool('monitoring', 'Live status', Wifi, () => setModalOpen('monitoring', true), { simple: true }),
         tool('capacity', 'Capacity', ChartColumn, () => setModalOpen('capacityDashboard', true)),
         tool('reports', 'Reports', FileText, () => setModalOpen('reports', true)),
+        tool('mapCheck', 'Map Check', ClipboardCheck, () => useValidationStore.getState().setOpen(true), {
+          count: openFindings || undefined,
+        }),
         tool('docs', 'Documents', FolderOpen, () => setModalOpen('documents', true), {
           count: documents.length || undefined,
         }),

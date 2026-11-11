@@ -11,6 +11,8 @@ import { useUiStore } from '../../stores/uiStore';
 
 export const DocumentManagerModal: React.FC = () => {
   const documents = useNetworkStore((s) => s.documents);
+  const equipment = useNetworkStore((s) => s.equipment);
+  const cables = useNetworkStore((s) => s.cables);
   const { isDocumentModalOpen, setModalOpen } = useUiStore(
     useShallow((s) => ({ isDocumentModalOpen: s.modals.documents, setModalOpen: s.setModalOpen })),
   );
@@ -55,11 +57,21 @@ export const DocumentManagerModal: React.FC = () => {
       return;
     }
 
+    // Link to the record with this id, whatever kind it is. Never guess from how the id starts, and
+    // never save a link to something that is not on record.
+    const assetId = newAssetId.trim();
+    const linkedEquipment = assetId ? equipment.find((e) => e.id === assetId) : undefined;
+    const linkedCable = assetId && !linkedEquipment ? cables.find((c) => c.id === assetId) : undefined;
+    if (assetId && !linkedEquipment && !linkedCable) {
+      showToast('error', 'Asset not found', `No pin or cable has the ID ${assetId}. Check the ID, or leave it empty.`);
+      return;
+    }
+
     const created = addDocument({
       title: newTitle,
       category: newCategory,
-      equipmentId: newAssetId.startsWith('OLT') || newAssetId.startsWith('FAT') ? newAssetId : undefined,
-      cableId: newAssetId.startsWith('CBL') ? newAssetId : undefined,
+      equipmentId: linkedEquipment?.id,
+      cableId: linkedCable?.id,
     });
     if (!created) return;
 

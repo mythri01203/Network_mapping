@@ -9,11 +9,12 @@ import { useUiStore } from '../../../stores/uiStore';
 import { selectFeatureOnClick } from '../leaflet/featureClick';
 import { type MarkerSpec, useMarkerLayer } from '../leaflet/useMarkerLayer';
 import { faultMarkerIcon, tooltipHtml } from '../markerIcons';
+import { useLayerShown } from './useVisibleNetwork';
 
 /** Open faults at their affected location. Resolved faults stay in the fault log only. */
 export function FaultLayer({ map }: { map: L.Map }) {
   const faults = useNetworkStore((s) => s.faults);
-  const visible = useMapStore((s) => s.layers.faults !== false);
+  const visible = useLayerShown(map, 'faults');
   const opacity = useMapStore((s) => s.layerOpacity.faults ?? 1);
   const selectedId = useUiStore((s) => (s.selectedObject?.type === 'fault' ? s.selectedObject.data.id : null));
 

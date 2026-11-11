@@ -32,7 +32,8 @@ const unsupported = (message: string) => new HttpError(415, 'unsupported_media_t
 
 export interface PhotoRouteOptions {
   /** Folder that holds one file per photo, named by its id. Created on the first upload. */
-  dir: string;
+  /** Phase 23b: or a function giving the request's organisation's folder, read on every use. */
+  dir: string | (() => string);
   maxBytes?: number;
 }
 
@@ -48,6 +49,7 @@ interface PhotoParams {
 export const photoRoutes =
   ({ dir, maxBytes = PHOTO_MAX_BYTES }: PhotoRouteOptions): FastifyPluginAsync =>
   async (app) => {
+    const folder = () => (typeof dir === 'function' ? dir() : dir);
     // Scoped to this plugin: other routes still accept JSON only.
     app.addContentTypeParser(/^image\//, { parseAs: 'buffer', bodyLimit: maxBytes }, (_request, body, done) => {
       done(null, body);
@@ -59,7 +61,7 @@ export const photoRoutes =
 
     const findStored = async (id: string) => {
       for (const [type, spec] of Object.entries(PHOTO_TYPES)) {
-        const path = join(dir, `${id}.${spec.ext}`);
+        const path = join(folder(), `${id}.${spec.ext}`);
         try {
           const info = await stat(path);
           if (info.isFile()) return { path, type, size: info.size };
@@ -88,8 +90,8 @@ export const photoRoutes =
       const stored = await findStored(id);
       if (stored) return reply.code(200).send({ id, url: photoUrl(id), bytes: stored.size, created: false });
 
-      await mkdir(dir, { recursive: true });
-      const target = join(dir, `${id}.${spec.ext}`);
+      await mkdir(folder(), { recursive: true });
+      const target = join(folder(), `${id}.${spec.ext}`);
       const temp = `${target}.${process.pid}-${Date.now()}.part`;
       try {
         // Write then rename, so a half-written file never looks like a stored photo.

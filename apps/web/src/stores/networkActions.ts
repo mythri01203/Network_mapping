@@ -25,7 +25,7 @@ import { ApiError } from '../api/client';
 import { syncEngine, type SyncOutcome } from '../api/syncEngine';
 import { downloadFile } from '../lib/browser';
 import { buildNetworkKml } from '../lib/kml';
-import { currentAccount, loginIsOn } from './authStore';
+import { currentAccount, loginIsOn, mayDo } from './authStore';
 import { requestConfirm } from './confirmStore';
 import { useMapStore } from './mapStore';
 import {
@@ -40,6 +40,8 @@ import { useRestoreStore } from './restoreStore';
 import { showToast } from './toastStore';
 import { useTraceStore } from './traceStore';
 import { useUiStore } from './uiStore';
+import { defaultTraceType, openNetworkTrace } from '../features/trace/networkTraceActions';
+import { currentTraceGraph } from '../features/trace/traceGraph';
 
 const run = <T>(command: Command<T>, options?: CommandOptions) =>
   useNetworkStore.getState().runCommand(command, options);
@@ -49,9 +51,8 @@ const run = <T>(command: Command<T>, options?: CommandOptions) =>
 export const addEquipment = (draft: domain.EquipmentDraft): Equipment | null =>
   run((data, ctx) => domain.createEquipment(data, draft, ctx))?.value ?? null;
 
-export const updateEquipment = (item: Equipment, options?: Pick<CommandOptions, 'silent'>) => {
-  run((data) => domain.updateEquipment(data, item), options);
-};
+export const updateEquipment = (item: Equipment, options?: Pick<CommandOptions, 'silent'>): boolean =>
+  run((data) => domain.updateEquipment(data, item), options) !== null;
 
 /** Deletes equipment after the user confirms; resolves `true` once it is removed. */
 export async function deleteEquipment(id: string, options?: Pick<CommandOptions, 'skipConfirm'>): Promise<boolean> {
@@ -108,16 +109,6 @@ export async function deleteCable(id: string, options?: Pick<CommandOptions, 'sk
   if (trace.cableIds.includes(id)) trace.clear();
   return true;
 }
-
-export const allocateFiberCore = (
-  cableId: string,
-  coreNumber: number,
-  customerId?: string,
-  equipmentId?: string,
-  portName?: string,
-): boolean =>
-  run((data, ctx) => domain.allocateCore(data, { cableId, coreNumber, customerId, equipmentId, portName }, ctx)) !==
-  null;
 
 export const addSplice = (closureId: string, splice: SpliceRecord): boolean =>
   run((data) => domain.addSplice(data, closureId, splice)) !== null;
@@ -181,9 +172,7 @@ export const updateWorkOrderStatus = (workOrderId: string, status: WorkOrder['st
 export const addZone = (draft: domain.ZoneDraft): NetworkZone | null =>
   run((data, ctx) => domain.createZone(data, draft, ctx))?.value ?? null;
 
-export const updateZone = (zone: NetworkZone) => {
-  run((data) => domain.updateZone(data, zone));
-};
+export const updateZone = (zone: NetworkZone): boolean => run((data) => domain.updateZone(data, zone)) !== null;
 
 export const deleteZone = (id: string) => {
   run((data) => domain.deleteZone(data, id));
@@ -196,7 +185,8 @@ export const deleteDocument = (id: string) => {
   run((data) => domain.deleteDocument(data, id));
 };
 
-export const addCatalogComponent = (item: CatalogComponent) => useNetworkStore.getState().addCatalogComponent(item);
+export const addCatalogComponent = (item: CatalogComponent): boolean => useNetworkStore.getState().addCatalogComponent(item);
+export const removeCatalogComponent = (id: string): boolean => useNetworkStore.getState().removeCatalogComponent(id);
 
 export const addGpsRoute = (route: GpsRoute) => useNetworkStore.getState().addGpsRoute(route);
 export const deleteGpsRoute = (id: string) => useNetworkStore.getState().deleteGpsRoute(id);
@@ -206,8 +196,25 @@ export const logAudit = (action: string, details: string, assetId: string, asset
 
 // --- Fiber trace ---------------------------------------------------------------------------------
 
-/** Traces the physical path to an equipment, cable or customer id and opens the trace report. */
+/**
+ * Network mapping Phase 15: traces any id (customer, ONT, item, cable, closure, splitter, fault,
+ * `OLT/PORT`, `CABLE#FIBRE`) with the one trace engine on the recorded fibre links, highlights it on
+ * the map and opens the trace screen. The cable-level route with its loss estimate stays one tap away
+ * there (`traceCableRoute`), for where only cables are recorded.
+ */
 export function traceNetworkPath(targetId: string): boolean {
+  const graph = currentTraceGraph();
+  const point = domain.tracePointFromId(graph, targetId);
+  if (!point) {
+    showToast('warning', 'Trace Not Available', `Nothing on record matches "${targetId}".`);
+    return false;
+  }
+  openNetworkTrace({ type: defaultTraceType(graph, point), from: point });
+  return true;
+}
+
+/** The cable-level route trace (`trace.ts`, cable ends) with its estimated loss, on the route trace screen. */
+export function traceCableRoute(targetId: string): boolean {
   const result = domain.resolveTraceTarget(targetId, getNetworkData(), selectOpticalSettings(useNetworkStore.getState()));
   if (!result || result.nodes.length === 0) {
     showToast('warning', 'Trace Not Available', `No traceable network path was found for "${targetId}".`);
@@ -403,9 +410,15 @@ export async function resetToSampleData(): Promise<boolean> {
 }
 
 export function exportKML() {
-  const { equipment, cables, customers } = getNetworkSnapshot();
+  // Phase 23: saving the network to a file is the export right.
+  if (!mayDo('export')) {
+    showToast('error', 'Not allowed for your account', 'Your account cannot save the network to a file. Ask the office.');
+    return;
+  }
+  const { equipment, cables, customers, ducts, spans, buildings } = getNetworkSnapshot();
   downloadFile(
-    buildNetworkKml({ equipment, cables, customers }),
+    // Network mapping Phase 21: ducts, spans and buildings are in the KML too.
+    buildNetworkKml({ equipment, cables, customers, ducts, spans, buildings }),
     'application/vnd.google-earth.kml+xml',
     `fiber_gis_network_${domain.isoDate()}.kml`,
   );

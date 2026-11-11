@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FTTH 3D: OLT, Switch & Fiber Map</title>
+<style>
+:root{--panel:rgba(255,255,255,.9);--fg:#14202b;--mut:#5a6b7c;--bd:rgba(0,0,0,.14);--acc:#0a8f5a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--panel:rgba(16,22,30,.88);--fg:#e8eef5;--mut:#93a1b3;--bd:rgba(255,255,255,.14);--acc:#3ddc97}}
+:root[data-theme="dark"]{--panel:rgba(16,22,30,.88);--fg:#e8eef5;--mut:#93a1b3;--bd:rgba(255,255,255,.14);--acc:#3ddc97}
+html,body{height:100%;margin:0;background:#0b0f14;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--fg)}
+canvas{display:block;touch-action:none}
+.p{position:fixed;background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;backdrop-filter:blur(8px);font-size:13px}
+#top{top:calc(10px + env(safe-area-inset-top,0px));left:10px;max-width:calc(100% - 20px)}
+#top h1{font-size:14px;margin:0 0 8px;font-weight:600}
+button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--bd);border-radius:8px;padding:5px 10px;margin:2px 2px 0 0;cursor:pointer}
+button:hover,button.on{border-color:var(--acc);color:var(--acc)}
+#map{right:10px;top:calc(10px + env(safe-area-inset-top,0px));width:230px}
+#map b{display:block;margin-bottom:4px}
+#map small,#cap{color:var(--mut);line-height:1.4}
+#cap{left:10px;bottom:calc(10px + env(safe-area-inset-bottom,0px));max-width:420px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+@media(max-width:700px){#map{top:auto;bottom:calc(88px + env(safe-area-inset-bottom,0px));width:auto;left:10px;right:10px}#cap{display:none}}
+</style></head><body>
+<div id="top" class="p"><h1>FTTH network: OLT, switch &amp; fiber map</h1>
+<div id="views"></div>
+<div style="margin-top:4px"><button id="tl" class="on">Labels</button><button id="tp" class="on">Light pulses</button></div></div>
+<div id="map" class="p"><b>PON 1 → 100 houses</b><small>1:4 → 1:4 → 1:8 = 128 ports, 100 used, 28 spare. Split loss ≈ 25 dB, so use Class C+ optics.</small><br>
+<button data-p="">All</button><button data-p="f">Feeder</button><button data-p="s1">1:4 L1</button><button data-p="s2">1:4 L2</button><button data-p="d">1:8 drops</button>
+<div style="margin-top:6px">House # <input id="hn" type="number" min="1" max="100" value="37" style="width:54px;font:inherit;color:var(--fg);background:transparent;border:1px solid var(--bd);border-radius:6px;padding:3px 5px"> <button id="hg">Show fiber</button><br><small>or tap any house</small></div><div id="mi" style="margin-top:6px"></div>
+<small><span class="sw" style="background:#f2c500"></span>OS2 feeder &nbsp;<span class="sw" style="background:#10b5c4"></span>OM3 uplink<br>Drops: 8 colors per FAT (TIA‑598)<br>Cyan pulse = downstream 1490 nm, amber = upstream 1310 nm</small></div>
+<div id="cap" class="p"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const T=THREE;
+const renderer=new T.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
+renderer.toneMapping=T.ACESFilmicToneMapping;renderer.outputEncoding=T.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+const scene=new T.Scene();scene.background=new T.Color(0x0b0f14);scene.fog=new T.Fog(0x0b0f14,120,320);
+const camera=new T.PerspectiveCamera(40,1,.1,500);
+// environment for realistic metal reflections
+const envS=new T.Scene();envS.background=new T.Color(0x1c232b);
+[[0,20,0,30,1,30,3],[-20,8,10,1,12,20,1.6],[20,8,-10,1,12,20,1.3],[0,6,25,30,10,1,1.1]].forEach(([x,y,z,w,h,d,i])=>{const m=new T.Mesh(new T.BoxGeometry(w,h,d),new T.MeshBasicMaterial({color:new T.Color(i,i,i)}));m.position.set(x,y,z);envS.add(m)});
+scene.environment=new T.PMREMGenerator(renderer).fromScene(envS,.04).texture;
+scene.add(new T.HemisphereLight(0xbcd2ff,0x1a1f24,.5));
+const sun=new T.DirectionalLight(0xffffff,1.1);sun.position.set(14,26,22);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-35,right:35,top:35,bottom:-35,near:1,far:90});sun.shadow.bias=-.0005;scene.add(sun);
+const fill=new T.PointLight(0xdfeaff,.7,30);fill.position.set(0,8,8);scene.add(fill);
+// helpers
+const M=(c,m=.4,r=.5,o={})=>new T.MeshStandardMaterial(Object.assign({color:c,metalness:m,roughness:r},o));
+const B=(p,w,h,d,mat,x=0,y=0,z=0)=>{const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;p.add(m);return m};
+const Cy=(p,r,l,mat,x,y,z)=>{const m=new T.Mesh(new T.CylinderGeometry(r,r,l,18),mat);m.position.set(x,y,z);m.rotation.x=Math.PI/2;m.castShadow=true;p.add(m);return m};
+const metal=M(0xa4adb7,.95,.28),dark=M(0x050607,0,.95),chassis=M(0x2c343c,.75,.38),face=M(0x1b2127,.6,.45),gold=M(0xd4af37,1,.25);
+const leds=[],fibers=[];
+function led(p,x,y,z,col,mode=0,side=false){const mt=new T.MeshStandardMaterial({color:0x111111,emissive:col,emissiveIntensity:2});const m=new T.Mesh(new T.BoxGeometry(.05,.05,.02),mt);m.position.set(x,y,z);if(side)m.rotation.y=Math.PI/2;p.add(m);leds.push({mt,mode,ph:Math.random()*9})}
+function tex(t,cw,ch,fs,fg,bg){const c=document.createElement('canvas');c.width=cw;c.height=ch;const g=c.getContext('2d');if(bg){g.fillStyle=bg;g.fillRect(0,0,cw,ch);g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=3;g.strokeRect(2,2,cw-4,ch-4)}g.fillStyle=fg;g.font='600 '+fs+'px system-ui,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(t,cw/2,ch/2);const x=new T.CanvasTexture(c);x.encoding=T.sRGBEncoding;x.anisotropy=4;return x}
+function plate(p,t,w,h,x,y,z,fg='#cfd8e0'){const m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex(t,256,Math.round(256*h/w),Math.round(256*h/w*.7),fg,null),transparent:true}));m.position.set(x,y,z);p.add(m)}
+const tagG=new T.Group();scene.add(tagG);
+function tag(t,x,y,z,s=.8){const sp=new T.Sprite(new T.SpriteMaterial({map:tex(t,512,128,46,'#fff','rgba(10,16,22,.85)'),depthTest:false,transparent:true}));sp.position.set(x,y,z);sp.scale.set(4*s,s,1);sp.renderOrder=9;tagG.add(sp)}
+function sfp(p,x,y,zf,plug){B(p,.44,.28,.3,metal,x,y,zf-.09);B(p,.36,.2,.01,dark,x,y,zf+.062);
+ if(plug==1){B(p,.2,.18,.32,M(0x22a84a,.1,.45),x,y,zf+.2);Cy(p,.045,.4,M(0x1b1b1b,0,.7),x,y,zf+.52)}
+ else if(plug==2){const a=M(0x10b5c4,.1,.4);B(p,.34,.18,.3,a,x,y,zf+.2);[-.08,.08].forEach(o=>Cy(p,.035,.35,a,x+o,y,zf+.5))}
+ else B(p,.3,.15,.07,M(0x2a5fd0,0,.8),x,y,zf+.09)}
+function fib(pts,col,ids,r=.045,pulse=true){const cv=new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(...p)),false,'centripetal');const mt=M(col,0,.35,{transparent:true});const m=new T.Mesh(new T.TubeGeometry(cv,Math.max(60,pts.length*24),r,8),mt);m.castShadow=true;scene.add(m);const f={cv,mt,ids,len:cv.getLength(),p:[]};if(pulse)f.p=[0,1].map(i=>{const s=new T.Mesh(pg,i?pa:pc);scene.add(s);return s});fibers.push(f)}
+const pg=new T.SphereGeometry(.1,10,10),pc=new T.MeshBasicMaterial({color:0x7ee6ff}),pa=new T.MeshBasicMaterial({color:0xffb347});
+// ground + room
+const gr=new T.Mesh(new T.PlaneGeometry(300,300),M(0x2a3b25,0,.95));gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;scene.add(gr);
+const grid=new T.GridHelper(300,150,0x34462e,0x2e3f29);grid.position.y=.01;scene.add(grid);
+B(scene,12,.12,14,M(0x3b434c,.2,.6),0,-.04,1);
+// rack
+const rack=new T.Group();scene.add(rack);const rm=M(0x14181c,.8,.4);
+[[-3,-2.1],[3,-2.1],[-3,2.1],[3,2.1]].forEach(([x,z])=>B(rack,.2,12.4,.2,rm,x,6.2,z));
+B(rack,6.4,.15,4.6,rm,0,12.4,0);B(rack,6.4,.15,4.6,rm,0,.1,0);
+[-3.1,3.1].forEach(x=>B(rack,.04,12,4.2,M(0x9fb4c8,.2,.1,{transparent:true,opacity:.1}),x,6.2,0).castShadow=false);
+// UPS + blanks
+B(rack,5.6,2.4,3.4,M(0x23292f,.6,.5),0,1.4,0);B(rack,5.8,2.4,.06,face,0,1.4,1.75);plate(rack,'UPS / RECTIFIER 48V',3,.3,-.8,1.9,1.79);B(rack,1.2,.4,.02,M(0x0a2a1f,0,.2,{emissive:0x1fbf7a,emissiveIntensity:.6}),1.8,1.4,1.79);
+[3.4,4.2,10.6,11.4].forEach(y=>{B(rack,5.8,.78,.04,M(0x16191c,.4,.7),0,y,1.82);for(let i=0;i<2;i++)Cy(rack,.05,.02,metal,-2.75+i*5.5,y,1.85)});
+// cable manager
+B(rack,5.8,.78,.5,M(0x1a1f24,.5,.6),0,5.4,1.6);for(let i=0;i<14;i++)B(rack,.18,.5,.1,dark,-2.5+i*.4,5.4,1.86);
+// ===== OLT =====
+const olt=new T.Group();olt.position.set(0,9,0);scene.add(olt);
+B(olt,5.4,2.4,3.6,chassis);B(olt,5.8,2.4,.06,M(0x3a444e,.7,.35),0,0,1.8);
+[-2.75,2.75].forEach(x=>{B(olt,.08,.7,.25,metal,x-.1*Math.sign(x),0,1.95);[.85,-.85].forEach(y=>Cy(olt,.06,.04,metal,x,y,1.84))});
+const zf=1.89;
+for(let i=0;i<4;i++){const x=-2.25+i*.7;B(olt,.62,2.3,.06,face,x,0,1.86);
+ [.8,.27,-.27,-.8].forEach((y,k)=>{if(i<2){sfp(olt,x,y,zf,i==0&&k==0?1:0);led(olt,x-.27,y+.1,zf+.07,k==0&&i==0?0x2bff72:0x2a2a2a,k==0&&i==0?1:0)}});
+ plate(olt,i<2?'GPON '+(i+1):'BLANK',.5,.1,x,-1.06,zf+.01)}
+[.65,1.35].forEach((x,i)=>{B(olt,.62,2.3,.06,M(0x232b33,.6,.45),x,0,1.86);sfp(olt,x,.75,zf,i==0?2:0);sfp(olt,x,.2,zf,0);
+ B(olt,.3,.22,.1,metal,x,-.4,zf);B(olt,.24,.14,.01,dark,x,-.4,zf+.055);B(olt,.16,.015,.008,gold,x,-.44,zf+.06);
+ led(olt,x-.2,-.8,zf+.04,0x2bff72,0);led(olt,x,-.8,zf+.04,0xffb000,1);led(olt,x+.2,-.8,zf+.04,0x2bff72,1);plate(olt,i?'CTRL B':'CTRL A',.5,.1,x,-1.05,zf+.01)});
+B(olt,.9,2.3,.06,face,2.2,0,1.86);const fans=[];
+[.6,-.6].forEach(y=>{Cy(olt,.4,.02,dark,2.2,y,1.89);const t=new T.Mesh(new T.TorusGeometry(.42,.03,8,32),metal);t.position.set(2.2,y,1.9);olt.add(t);
+ [.28,.15].forEach(r=>{const q=new T.Mesh(new T.TorusGeometry(r,.012,6,32),metal);q.position.set(2.2,y,1.9);olt.add(q)});
+ for(let k=0;k<4;k++){const s=B(olt,.84,.014,.014,metal,2.2,y,1.9);s.rotation.z=k*Math.PI/4}
+ const fg=new T.Group();fg.position.set(2.2,y,1.84);for(let k=0;k<7;k++){const a=k/7*Math.PI*2,b=B(fg,.26,.07,.012,M(0x222,.2,.5),Math.cos(a)*.2,Math.sin(a)*.2,0);b.rotation.z=a;b.rotation.x=.5}
+ Cy(fg,.07,.05,metal,0,0,0);olt.add(fg);fans.push(fg)});
+// ===== Switch =====
+const sw=new T.Group();sw.position.set(0,6.4,0);scene.add(sw);
+B(sw,5.4,.8,3.2,chassis,0,0,.2);B(sw,5.8,.8,.06,M(0x3a444e,.7,.35),0,0,1.8);B(sw,5.4,.76,.04,face,0,0,1.82);
+[-2.75,2.75].forEach(x=>Cy(sw,.06,.04,metal,x,0,1.84));
+const sz=1.84,pl=[0,1,4];
+for(let r=0;r<2;r++)for(let i=0;i<12;i++){const x=-2.35+i*.3,y=r?-.2:.2;B(sw,.26,.18,.12,metal,x,y,sz-.03);B(sw,.2,.12,.01,dark,x,y,sz+.031);B(sw,.16,.015,.008,gold,x,y-.04,sz+.037);
+ led(sw,x-.08,y+.075,sz+.04,0x2bff72,i%3?1:0);led(sw,x+.08,y+.075,sz+.04,0xffb000,i%4==0?1:2);
+ if(r==0&&pl.includes(i)){B(sw,.2,.14,.22,M(0xd8dde2,0,.3),x,y,sz+.13);B(sw,.22,.16,.18,M(0x1f5fff,0,.5),x,y,sz+.3);
+  fib([[x,y,sz+.5],[x,y,sz+.75],[x-.08,y-.35,sz+.95],[x-.08,5.75,sz+.95]].map(a=>[a[0],a[1]+6.4,a[2]]),0x1f5fff,['net'],.035,false)}}
+[[1.7,.2,2],[2.2,.2,0],[1.7,-.2,0],[2.2,-.2,0]].forEach(([x,y,pg2])=>sfp(sw,x,y,sz,pg2));
+led(sw,1.2,.2,sz+.03,0x2bff72,0);led(sw,1.2,0,sz+.03,0x2bff72,1);led(sw,1.2,-.2,sz+.03,0xffb000,2);plate(sw,'SFP+ 1-4',.8,.1,1.95,0,sz+.01);
+// uplink switch -> OLT (aqua LC duplex)
+fib([[1.7,6.6,2.55],[1.7,6.8,3.1],[1.4,8.2,3.4],[.65,9.4,3.2],[.65,9.75,2.85],[.65,9.75,2.58]],0x10b5c4,['up'],.05);
+// ===== Outdoor: 100 houses on PON 1, 1:4 + 1:4 + 1:8 cascade =====
+function ctex(w,h,fn,rep){const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'),w,h);const x=new T.CanvasTexture(c);x.wrapS=x.wrapT=T.RepeatWrapping;x.encoding=T.sRGBEncoding;x.anisotropy=8;if(rep)x.repeat.set(...rep);return x}
+const stucco=ctex(128,128,(g,w,h)=>{g.fillStyle='#d8cfbd';g.fillRect(0,0,w,h);for(let i=0;i<1800;i++){g.fillStyle=i%2?'rgba(255,255,255,.07)':'rgba(80,70,50,.07)';g.fillRect(Math.random()*w,Math.random()*h,2,2)}},[2,1]);
+const tiles=ctex(128,128,(g,w,h)=>{for(let r=0;r<8;r++)for(let c=0;c<9;c++){g.fillStyle='hsl(12,'+(42+Math.random()*12)+'%,'+(28+Math.random()*9)+'%)';g.fillRect(c*16+(r%2)*8-8,r*16,15,14)}},[.5,.5]);
+const woodM=M(0x5b4630,0,.95),insM=M(0xc9d3da,.2,.3),wireM=M(0x101010,.2,.6),steelM=M(0x8b949c,.9,.35),asp=M(0x23262a,0,.9);
+function wire(a,b,sag,m=wireM,r=.03){const A=new T.Vector3(...a),Bv=new T.Vector3(...b),c=A.clone().lerp(Bv,.5);c.y-=sag;const w=new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([A,c,Bv]),20,r,6),m);w.castShadow=true;scene.add(w)}
+function arm(x,z,y,aZ){B(scene,aZ?.16:2.4,.16,aZ?2.4:.16,woodM,x,y,z);return[-.9,0,.9].map(o=>{const px=aZ?x:x+o,pz=aZ?z+o:z;const i=new T.Mesh(new T.CylinderGeometry(.05,.08,.28,10),insM);i.position.set(px,y+.22,pz);scene.add(i);return[px,y+.36,pz]})}
+function pole(x,z){const p=new T.Mesh(new T.CylinderGeometry(.14,.22,10,12),woodM);p.position.set(x,5,z);p.castShadow=true;scene.add(p)}
+function pwr(ps,aZ,y){const a=ps.map(([x,z])=>arm(x,z,y,aZ));for(let j=0;j<a.length-1;j++)for(let i=0;i<3;i++)wire(a[j][i],a[j+1][i],.4)}
+function span(ps,ox,oz,y){const o=[];ps.forEach((p,i)=>{if(i){const q=ps[i-1];o.push([(p[0]+q[0])/2+ox,y-.4,(p[1]+q[1])/2+oz])}o.push([p[0]+ox,y,p[1]+oz])});return o}
+function closure(x,y,z,lab){const g=new T.Group();g.position.set(x,y,z);scene.add(g);const m=M(0x1d2226,.3,.55);
+ g.add(Object.assign(new T.Mesh(new T.CylinderGeometry(.26,.26,.9,20),m),{castShadow:true}));
+ [1,-1].forEach(s=>{const d=new T.Mesh(new T.SphereGeometry(.26,20,10,0,Math.PI*2,0,Math.PI/2),m);d.position.y=.45*s;if(s<0)d.rotation.x=Math.PI;g.add(d)});
+ const t=new T.Mesh(new T.TorusGeometry(.265,.025,6,24),steelM);t.rotation.x=Math.PI/2;t.position.y=.2;g.add(t);plate(g,lab,.4,.16,0,0,.27,'#9fd4ff')}
+function fat(x,y,z){const g=new T.Group();g.position.set(x,y,z);scene.add(g);B(g,1,.45,.3,M(0x6b747c,.4,.5));B(g,.95,.03,.32,steelM,0,.06,0);
+ for(let i=0;i<8;i++){const p=new T.Mesh(new T.CylinderGeometry(.035,.045,.1,10),M(0x22a84a,.1,.5));p.position.set(-.4+i*.115,-.27,0);g.add(p)}plate(g,'FAT 1:8',.5,.12,0,.1,.155)}
+const CN=[24,38,52,66],RZ=[-15,-5,5,15],NF=[4,4,4,1],feeder=[[8,5.5],[13,-8],[18,-22]],bb=[[18,-22],...CN.map(x=>[x,-22])];
+const DC=[0x1f5fff,0xff7a1a,0x22a84a,0x7a4a2a,0x708090,0xf5f5f5,0xe02b2b,0x222222],H=[];
+feeder.forEach(p=>pole(...p));bb.slice(1).forEach(p=>pole(...p));pwr(feeder,true,9.7);pwr(bb,true,9.7);
+closure(18.6,5.4,-22,'1:4 L1');
+CN.forEach((cx,k)=>{
+ const col=[[cx,-22],...RZ.slice(0,NF[k]).map(z=>[cx,z+1.5])];closure(cx+.6,5.4,-22,'1:4 L2');pwr(col,false,9.2);
+ fib([[18.6,4.95,-22],[18.8,5.6,-21.7],...span(bb.slice(0,k+2),0,.45,6.35-.12*k),[cx+.55,6,-21.9]],0xf2c500,['p1','s1'],.035);
+ for(let j=0;j<NF[k];j++){const cz=RZ[j],pz=cz+1.5,n=NF[k]==1?4:8;pole(cx,pz);fat(cx+.7,5,pz);B(scene,14,.04,3.2,asp,cx,.03,cz);
+  fib([[cx+.6,4.95,-22],[cx+.5,5.6,-21.8],...span(col.slice(0,j+2),.5,0,6.3-.1*j),[cx+.6,5.5,pz],[cx+.7,5.23,pz]],0xf2c500,['p1','s2'],.03);
+  for(let i=0;i<n;i++){const side=i<4?-1:1,c=i%4,hx=cx-4.8+3.2*c,hz=cz+side*2.85,ox=hx+(side<0?1:-1),fz=hz-side*1.1,sx=cx+.3+.115*i;
+   H.push({hx,hz,yaw:side<0?0:Math.PI,k,j,i});
+   fib([[sx,4.7,pz],[(sx+ox)/2,3.2,(pz+fz)/2],[ox,2.1,fz],[ox,1.25,fz]],DC[i],['p1','d'],.025,false);H[H.length-1].f=fibers[fibers.length-1]}}});
+// 100 houses (instanced)
+const gl=M(0x9ccbe8,.9,.05,{transparent:true,opacity:.6,emissive:0xffc46b,emissiveIntensity:.35});
+const ledM=new T.MeshStandardMaterial({color:0x111111,emissive:0x2bff72,emissiveIntensity:2});leds.push({mt:ledM,mode:1,ph:0});
+const rsh=new T.Shape();rsh.moveTo(-1.35,0);rsh.lineTo(1.35,0);rsh.lineTo(0,1);rsh.closePath();
+const rgeo=new T.ExtrudeGeometry(rsh,{depth:2.7,bevelEnabled:false});rgeo.translate(0,0,-1.35);rgeo.rotateY(Math.PI/2);
+const N=H.length,im=(g,m)=>{const x=new T.InstancedMesh(g,m,N);x.frustumCulled=false;scene.add(x);return x};
+const wl=im(new T.BoxGeometry(2.4,1.8,2.2),M(0xffffff,0,.95,{map:stucco})),rf=im(rgeo,[M(0xe8e0d0,0,.95,{map:stucco}),M(0xffffff,0,.85,{map:tiles})]),
+ dr=im(new T.BoxGeometry(.45,.95,.06),M(0x4a2e1c,.1,.6)),wn=im(new T.BoxGeometry(.55,.5,.05),gl),ot=im(new T.BoxGeometry(.12,.18,.05),M(0xf2f2f2,.1,.35)),ld=im(new T.BoxGeometry(.05,.05,.02),ledM);
+const dm=new T.Object3D(),cw=new T.Color();
+const put=(m,i,x,y,z,yw)=>{dm.position.set(x,y,z);dm.rotation.y=yw;dm.updateMatrix();m.setMatrixAt(i,dm.matrix)};
+H.forEach((h,i)=>{const c=Math.cos(h.yaw),s=Math.sin(h.yaw),L=(m,lx,ly,lz)=>put(m,i,h.hx+lx*c+lz*s,ly,h.hz-lx*s+lz*c,h.yaw);
+ put(wl,i,h.hx,1.05,h.hz,h.yaw);put(rf,i,h.hx,1.95,h.hz,h.yaw);L(dr,-.55,.63,1.12);L(wn,.45,1.2,1.12);L(ot,1,.9,1.14);L(ld,1,.98,1.17);
+ wl.setColorAt(i,cw.setHSL((i*.137)%1,.22,.86));rf.setColorAt(i,cw.setHex([0xffffff,0xd9c5bd,0xbfc7cf,0xe8d2b8][i%4]))});
+[wl,rf,dr,wn,ot,ld].forEach(m=>m.instanceMatrix.needsUpdate=true);wl.instanceColor.needsUpdate=rf.instanceColor.needsUpdate=true;
+function tree(x,z,s=1){const t=new T.Mesh(new T.CylinderGeometry(.15*s,.22*s,2*s,8),M(0x4a3524,0,.9));t.position.set(x,s,z);scene.add(t);const f=new T.Mesh(new T.IcosahedronGeometry(1.4*s,1),M(0x2f5a2e,0,.9,{flatShading:true}));f.position.set(x,3*s,z);scene.add(f)}
+for(let z=-28;z<=28;z+=8)[15,74,80].forEach((x,q)=>tree(x,z+q*2,1+((z+x)%3+3)%3*.1));
+// feeder: OLT PON 1 -> pole line -> FDT-1
+fib([[-2.25,9.8,2.55],[-2.25,9.8,3.2],[-1,10.4,4.4],[3,9.7,5.7],...span(feeder,0,.45,6.4),[18.45,6.15,-21.9]],0xf2c500,['p1','f'],.05);
+// splitter box cutaways (inside view)
+function tb(pts,col,r=.022){const m=new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(...p))),40,r,6),M(col,0,.35));scene.add(m)}
+function fdt(x,z,n,title){const w=n>4?4.4:2.8,gm=M(0x7d8791,.6,.45),g=new T.Group();g.position.set(x,0,z);scene.add(g);const P=(a,b,c)=>[x+a,b,z+c],yl=0xf2c500;
+ B(g,.3,1,.3,steelM,0,.5,-.3);B(g,w,3,.1,M(0x4f575f,.5,.55),0,2.5,-.5);[-1,1].forEach(s=>B(g,.1,3,1,gm,s*w/2,2.5,0));B(g,w,.1,1,gm,0,4,0);B(g,w,.1,1,gm,0,1,0);
+ B(g,w*.8,.8,.04,M(0xdfe3e6,.2,.5),0,3.4,-.42);const co=new T.Mesh(new T.TorusGeometry(.28,.02,8,24),M(yl,0,.4));co.position.set(-w*.2,3.4,-.39);g.add(co);plate(g,'splice tray',.8,.12,w*.18,3.4,-.39,'#445');
+ B(g,1.2,.5,.16,M(0x2f6fa8,.2,.4),0,2.55,-.3);plate(g,'1:'+n+' PLC splitter',1.1,.2,0,2.55,-.215,'#fff');
+ const ix=-w/2+.4;B(g,.14,.16,.22,M(yl,.1,.5),ix,1.6,-.2);plate(g,'IN',.2,.1,ix,1.4,-.08,'#fff');
+ tb([P(ix,1.7,-.3),P(ix,2.4,-.38),P(-w*.2-.28,3.4,-.38)],yl);tb([P(-w*.2+.28,3.4,-.38),P(-.4,3,-.34),P(-.35,2.8,-.3)],yl);
+ for(let i=0;i<n;i++){const ax=-w/2+1+i*(w-1.4)/(n-1),px=-.5+i*(1/(n-1)),c=DC[i];B(g,.14,.16,.22,M(0x22a84a,.1,.5),ax,1.6,-.2);plate(g,''+(i+1),.14,.1,ax,1.4,-.08,'#fff');
+  tb([P(px,2.3,-.3),P(px,2,-.28),P(ax,1.85,-.22),P(ax,1.7,-.2)],c);tb([P(ax,1.5,-.15),P(ax,1.2,.2),P(ax,.9,.5),P(ax,.1,.9)],c,.03)}
+ tag(title,x,4.8,z,.7)}
+fdt(-8,16,4,'Stage 1: 1:4 splitter (FDT-1)');fdt(-1.5,16,4,'Stage 2: 1:4 splitter (FDT-2, 4 boxes)');fdt(7.5,16,8,'Stage 3: 1:8 splitter (FAT, 13 boxes)');
+// labels
+tag('OLT chassis (8‑port GPON)',5.6,9,2.2);tag('Aggregation switch 24p + SFP+',5.8,6.4,2.2);tag('UPS / rectifier',5.2,1.4,2.2,.7);
+tag('PON 1/1/1 → 100 houses',-5.6,9.8,3,.7);tag('OM3 uplink',2.6,7.6,3.4,.6);tag('Feeder on utility poles',9,11.5,-1,.7);
+tag('FDT-1 (1:4)',18.6,8,-22,.6);CN.forEach((x,k)=>tag('FDT-2.'+(k+1)+' (1:4)',x+.6,8,-22,.6));tag('FAT (1:8) on pole',24.7,7,-3.5,.6);tag('100 houses · 128 ports (28 spare)',45,8,-30,.9);
+// ===== per-house fiber lookup + inside-house cutaway =====
+const FC=['Blue','Orange','Green','Brown','Slate','White','Red','Black'];
+H.forEach((h,i)=>{const sp=new T.Sprite(new T.SpriteMaterial({map:tex(''+(i+1),96,40,28,'#fff','rgba(10,16,22,.8)'),transparent:true}));sp.position.set(h.hx,3.7,h.hz);sp.scale.set(1.4,.58,1);tagG.add(sp)});
+const mk=new T.Mesh(new T.CylinderGeometry(.1,.1,8,8),new T.MeshBasicMaterial({color:0xffe066}));mk.visible=false;scene.add(mk);
+function pick(n){n=Math.max(1,Math.min(100,n|0||1));const h=H[n-1];
+ fibers.forEach(f=>{const on=!f.ids.includes('d')||f===h.f;f.on=on;f.mt.opacity=on?1:.06;f.mt.emissive.setHex(f===h.f?0x555555:0)});
+ mk.position.set(h.hx,4,h.hz);mk.visible=true;document.getElementById('hn').value=n;
+ document.getElementById('mi').innerHTML='<b>House '+n+'</b><small>PON 1/1/1 → FDT-1 output '+(h.k+1)+' → FDT-2.'+(h.k+1)+' output '+(h.j+1)+' → FAT-'+(h.k*4+h.j+1)+' port '+(h.i+1)+' (<b style="display:inline">'+FC[h.i]+'</b> drop fiber)</small>';
+ tt.set(h.hx,1.5,h.hz);tp.set(h.hx+5,5,h.hz+(h.yaw?-10:10))}
+document.getElementById('hg').onclick=()=>pick(+document.getElementById('hn').value);
+const rc=new T.Raycaster(),mv=new T.Vector2();let dn=null;
+renderer.domElement.addEventListener('pointerdown',e=>dn=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('click',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>5)return;mv.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);rc.setFromCamera(mv,camera);const r=rc.intersectObject(wl)[0];if(r&&r.instanceId!=null)pick(r.instanceId+1)});
+function inside(){const x0=-18,z0=16,g=new T.Group();g.position.set(x0,0,z0);scene.add(g);const P=(a,b,c)=>[x0+a,b,z0+c],wm=M(0xffffff,0,.95,{map:stucco}),wd=M(0x6b4a2f,0,.6);
+ B(g,7.6,.2,4.6,M(0x8a6d4b,0,.7),0,.1,0);B(g,7.2,3.4,.15,wm,0,1.9,-2);B(g,.15,3.4,4,wm,-3.6,1.9,0);B(g,.15,3.4,4,wm,3.6,1.9,0);
+ B(g,7.6,.1,4.6,M(0xe8e0d0,0,.9,{transparent:true,opacity:.15}),0,3.65,0).castShadow=false;
+ tb([P(-9,5.4,.3),P(-6,4.3,.3),P(-3.9,3.4,.3),P(-3.85,2.6,.3),P(-3.6,2.2,.3),P(-3.4,2,.3),P(-3.42,1.6,.3)],0x7a4a2a,.035);B(g,.2,.14,.2,steelM,-3.85,3.4,.3);
+ B(g,.12,.3,.4,M(0xffffff,0,.4),-3.45,1.4,.3);B(g,.1,.08,.1,M(0x22a84a,.1,.5),-3.38,1.3,.3);
+ B(g,2.8,.08,1.1,wd,-.8,1,.3);[[-2,-.15],[.4,-.15],[-2,.75],[.4,.75]].forEach(([a,c])=>B(g,.08,.96,.08,wd,a,.5,c));
+ B(g,.95,.22,.6,M(0xf4f4f4,.1,.3),-1.7,1.15,.3);B(g,.1,.1,.02,M(0x22a84a,.1,.5),-2.05,1.12,.61);
+ for(let i=0;i<4;i++){B(g,.09,.08,.02,dark,-1.8+i*.12,1.12,.61);led(g,-2+i*.14,1.23,.61,i==0?0x2bff72:i==1?0x2bff72:0xffb000,i<2?0:1)}
+ tb([P(-3.38,1.3,.3),P(-3.1,1.1,.5),P(-2.6,1.08,.85),P(-2.05,1.12,.68)],0xf2c500,.025);
+ B(g,.8,.12,.5,M(0x1a1d21,.3,.4),.7,1.1,.3);[-.3,.3].forEach(o=>B(g,.03,.55,.03,dark,.7+o,1.4,.1));led(g,.45,1.12,.56,0x2bff72,1);
+ tb([P(-1.8,1.12,.65),P(-1.4,.95,1),P(-.1,.98,.9),P(.3,1.08,.58)],0x1f5fff,.02);
+ B(g,2.4,1.3,.08,dark,1.9,2.2,-1.9);B(g,2.3,1.2,.02,M(0x103a6a,0,.2,{emissive:0x2a6fd0,emissiveIntensity:.8}),1.9,2.2,-1.84);tb([P(.9,1.1,.3),P(1.4,1,-.9),P(1.6,1.6,-1.8)],0x1f5fff,.02);
+ tag('Inside a house (cutaway)',x0,4.7,z0,.8);tag('Aerial drop: 1 fiber (Brown, FAT port 4)',x0-6.2,5.2,z0+.3,.65);tag('Wall box (ATB) + SC/APC',x0-3,2.7,z0+.3,.55);
+ tag('Yellow patch cord',x0-2.7,.45,z0+1.3,.5);tag('ONT (GPON)',x0-1.7,1.8,z0+.3,.55);tag('Wi‑Fi router',x0+.7,1.95,z0+.3,.5);tag('Smart TV (LAN)',x0+1.9,3.4,z0-1.9,.5)}
+inside();
+// mapping UI
+const maps={f:['Feeder: PON 1 → FDT-1','1 fiber to the first 1:4 splitter'],s1:['L1 → L2: 4 fibers','FDT-1 (1:4) → four FDT-2 (1:4)'],s2:['L2 → L3: 13 fibers','FDT-2 (1:4) → FAT (1:8) boxes'],d:['Drops: 100 houses','12 FATs × 8 + 1 FAT × 4']};
+const caps={ov:'PON 1 of an 8-port OLT feeds 100 houses through a 1:4, 1:4 and 1:8 splitter cascade on utility poles. Drag to orbit, right-drag to pan, scroll to zoom.',olt:'8-port GPON OLT: two 4-port line cards (PON 1 patched with a green SC/APC), two control cards and a fan tray.',sw:'Aggregation switch uplinked to the OLT with an aqua OM3 LC duplex fiber.',box:'Inside the boxes: yellow input pigtail, splice tray, PLC splitter module, then pigtails to green SC/APC adapters and colored drop cables. Stage 1: 1:4, stage 2: 1:4, stage 3: 1:8.',pole:'The feeder is lashed along the pole line from the OLT to FDT-1, then 4 fibers run to the FDT-2 closures.',fat:'FAT (1:8) on a pole: 8 colored drops run to the eaves of 8 houses, then down to each ONT.',home:'Inside one house: aerial drop (brown fiber, FAT port 4) → wall box with SC/APC → yellow patch cord → ONT → LAN cables to the Wi‑Fi router and TV.',vil:'100 houses: 12 FATs × 8 houses + 1 FAT × 4 houses = 100, one color per drop (TIA‑598).'};
+const V={ov:['Overview',[35,2,-2],[38,62,88]],olt:['OLT',[0,9,1.8],[1.5,10.2,8.5]],sw:['Switch',[.6,6.4,1.8],[1,7.2,6]],box:['Splitter boxes',[0,2.6,16],[0,5.5,35]],pole:['Poles / feeder',[13,6,-8],[0,16,16]],fat:['FAT & drops',[25,3.2,-3.5],[31,8,7]],vil:['100 houses',[45,1,-2],[45,44,40]],home:['Inside house',[-18,1.8,16],[-17,4.5,26]]};
+const tt=new T.Vector3(...V.ov[1]),tp=new T.Vector3(...V.ov[2]),tgt=tt.clone(),pos=tp.clone();
+const vb=document.getElementById('views'),cap=document.getElementById('cap');
+function view(k){tt.set(...V[k][1]);tp.set(...V[k][2]);cap.textContent=caps[k];[...vb.children].forEach(b=>b.classList.toggle('on',b.dataset.k==k))}
+Object.keys(V).forEach(k=>{const b=document.createElement('button');b.textContent=V[k][0];b.dataset.k=k;b.onclick=()=>view(k);vb.appendChild(b)});view('ov');
+function hi(id){mk.visible=false;fibers.forEach(f=>{const on=!id||f.ids.includes(id);f.on=on;f.mt.opacity=on?1:.1;f.mt.emissive.setHex(on&&id?0x222222:0)});
+ document.getElementById('mi').innerHTML=id?'<b>'+maps[id][0]+'</b><small>'+maps[id][1]+'</small>':'';
+ document.querySelectorAll('#map button').forEach(b=>b.classList.toggle('on',(b.dataset.p||'')==(id||'')))}
+document.querySelectorAll('#map button').forEach(b=>b.onclick=()=>hi(b.dataset.p));hi('');
+let showP=true;
+document.getElementById('tl').onclick=e=>{tagG.visible=!tagG.visible;e.target.classList.toggle('on',tagG.visible)};
+document.getElementById('tp').onclick=e=>{showP=!showP;e.target.classList.toggle('on',showP)};
+// controls
+const el=renderer.domElement,ptrs=new Map();let pd=0;
+const off=()=>tp.clone().sub(tt),pdist=()=>{const a=[...ptrs.values()];return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1};
+function zoom(f){const o=off();const l=Math.min(180,Math.max(2.5,o.length()*f));o.setLength(l);tp.copy(tt).add(o);pos.copy(tp)}
+function rot(dx,dy){const s=new T.Spherical().setFromVector3(off());s.theta-=dx*.006;s.phi=Math.min(3,Math.max(.1,s.phi-dy*.006));tp.copy(tt).add(new T.Vector3().setFromSpherical(s));pos.copy(tp)}
+function pan(dx,dy){const k=off().length()*.0016,m=camera.matrix.elements;const v=new T.Vector3(m[0],m[1],m[2]).multiplyScalar(-dx*k).add(new T.Vector3(m[4],m[5],m[6]).multiplyScalar(dy*k));tt.add(v);tp.add(v);tgt.copy(tt);pos.copy(tp)}
+el.addEventListener('pointerdown',e=>{el.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,b:e.button,s:e.shiftKey});if(ptrs.size==2)pd=pdist()});
+el.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+ if(ptrs.size==2){const d=pdist();zoom(pd/d);pd=d;return}if(p.b==2||p.s)pan(dx,dy);else rot(dx,dy)});
+['pointerup','pointercancel'].forEach(n=>el.addEventListener(n,e=>ptrs.delete(e.pointerId)));
+el.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(e.deltaY*.001))},{passive:false});
+el.addEventListener('contextmenu',e=>e.preventDefault());
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+const clk=new T.Clock();
+(function loop(){requestAnimationFrame(loop);const t=clk.getElapsedTime();
+ tgt.lerp(tt,.06);pos.lerp(tp,.06);camera.position.copy(pos);camera.lookAt(tgt);camera.updateMatrix();
+ leds.forEach(l=>{l.mt.emissiveIntensity=l.mode==0?2:l.mode==1?(Math.sin(t*9+l.ph)>0?2.4:.25):(Math.sin(t*2+l.ph)>0?2:.6)});
+ fans.forEach((f,i)=>f.rotation.z=t*(i?-14:14));
+ fibers.forEach(f=>{const v=showP&&f.on!==false;f.p.forEach(m=>m.visible=v);if(v&&f.p.length){const u=(t*6/f.len)%1;f.p[0].position.copy(f.cv.getPointAt(u));f.p[1].position.copy(f.cv.getPointAt(1-((u+.5)%1)))}});
+ renderer.render(scene,camera)})();
+</script></body></html>

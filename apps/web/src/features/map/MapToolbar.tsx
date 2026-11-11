@@ -7,6 +7,7 @@ import {
   CornerUpLeft,
   Crosshair,
   GripVertical,
+  Keyboard,
   LayoutGrid,
   type LucideIcon,
   MousePointer2,
@@ -35,8 +36,10 @@ import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/netw
 import { useUiStore } from '../../stores/uiStore';
 import { cableStyle } from '../../theme/network';
 import { BUILT_IN_COMPONENTS } from '../catalog/componentCatalog';
-import { formatDistance } from './markerIcons';
+import { SelectToolsButton } from '../selection/SelectionMenus';
+import { formatArea, formatDistance } from './markerIcons';
 import { placementTemplate } from './placement';
+import { usePlacementDialog } from './placementDialogStore';
 
 const CABLE_TYPES: { type: CableType; hint: string }[] = [
   { type: 'Main Feeder Fiber', hint: 'OLT → FDMS backbone' },
@@ -521,6 +524,8 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
           active={activeTool === 'select'}
           onClick={selectTool}
         />
+        {/* Phase 16: choose several (tap, box, lasso, area, zone, by a value, saved). */}
+        {activeTool === 'select' && <SelectToolsButton />}
 
         <Divider />
 
@@ -612,6 +617,8 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
 
 export interface MapModeBarProps {
   distanceMeters: number;
+  /** Area of the closed shape (measuring with 3 or more points, or a zone boundary). */
+  areaSqMeters?: number;
   snapTargetName?: string | null;
   autoPole: boolean;
   onAutoPoleChange: (v: boolean) => void;
@@ -622,6 +629,7 @@ export interface MapModeBarProps {
 
 export function MapModeBar({
   distanceMeters,
+  areaSqMeters = 0,
   snapTargetName,
   autoPole,
   onAutoPoleChange,
@@ -652,8 +660,10 @@ export function MapModeBar({
   );
 
   const active = activeTool === 'draw_cable' || activeTool === 'measure' || activeTool === 'add_equipment';
-  const keys = useRef({ onCancel, onFinish, activeTool, points: activeDrawingPoints.length });
-  keys.current = { onCancel, onFinish, activeTool, points: activeDrawingPoints.length };
+  // A zone boundary needs three points to enclose anything; a line needs two.
+  const minPoints = drawTarget === 'zone' ? 3 : 2;
+  const keys = useRef({ onCancel, onFinish, activeTool, points: activeDrawingPoints.length, minPoints });
+  keys.current = { onCancel, onFinish, activeTool, points: activeDrawingPoints.length, minPoints };
 
   useEffect(() => {
     if (!active) return;
@@ -663,7 +673,7 @@ export function MapModeBar({
       if (e.key === 'Escape') {
         e.preventDefault();
         k.onCancel();
-      } else if (e.key === 'Enter' && k.activeTool === 'draw_cable' && k.points >= 2) {
+      } else if (e.key === 'Enter' && k.activeTool === 'draw_cable' && k.points >= k.minPoints) {
         e.preventDefault();
         k.onFinish();
       }
@@ -696,7 +706,14 @@ export function MapModeBar({
           )}
           <div className="leading-tight">
             <div className="text-[13px] font-semibold">
-              {activeTool === 'draw_cable' && (drawTarget === 'duct' ? 'Duct (underground)' : selectedCableTypeToDraw)}
+              {activeTool === 'draw_cable' &&
+                (drawTarget === 'duct'
+                  ? 'Duct (underground)'
+                  : drawTarget === 'zone'
+                    ? 'Zone boundary'
+                    : drawTarget === 'placement_line'
+                      ? `Line for placing ${selectedEquipmentTypeToAdd ?? 'items'}`
+                      : selectedCableTypeToDraw)}
               {activeTool === 'measure' && 'Measure distance'}
               {activeTool === 'add_equipment' && `Place ${selectedEquipmentTypeToAdd}`}
             </div>
@@ -706,8 +723,14 @@ export function MapModeBar({
                 : activeTool === 'add_equipment'
                 ? 'Tap the place on the map'
                 : points === 0
-                  ? 'Tap the map to start. Tap a pin to join it.'
-                  : `${points} point${points === 1 ? '' : 's'} · ${formatDistance(distanceMeters)}`}
+                  ? drawTarget === 'zone' && activeTool === 'draw_cable'
+                    ? 'Tap the map around the zone. The last point joins the first.'
+                    : drawTarget === 'placement_line' && activeTool === 'draw_cable'
+                      ? 'Tap along where the items go, then Finish. The line is not saved.'
+                      : 'Tap the map to start. Tap a pin to join it.'
+                  : drawTarget === 'zone' && activeTool === 'draw_cable'
+                    ? `${points} point${points === 1 ? '' : 's'}${points >= 3 ? ` · area ${formatArea(areaSqMeters)}` : ' · tap at least 3'}`
+                    : `${points} point${points === 1 ? '' : 's'} · ${formatDistance(distanceMeters)}${activeTool === 'measure' && points >= 3 ? ` · area ${formatArea(areaSqMeters)} (closed shape)` : ''}`}
             </div>
           </div>
         </div>
@@ -719,7 +742,7 @@ export function MapModeBar({
         )}
 
         <div className="no-scrollbar flex items-center gap-1 overflow-x-auto md:overflow-visible md:border-l md:border-white/10 md:pl-2">
-          {activeTool === 'draw_cable' && drawTarget !== 'duct' && (
+          {activeTool === 'draw_cable' && drawTarget === 'cable' && (
             <>
               <button
                 type="button"
@@ -733,6 +756,35 @@ export function MapModeBar({
                 <Switch checked={autoPole} onChange={onAutoPoleChange} size="sm" />
                 Auto-pole
               </label>
+            </>
+          )}
+          {activeTool === 'add_equipment' && (
+            <>
+              {/* Phase 3: other ways to place the chosen item. Each still asks "same one?". */}
+              <button
+                type="button"
+                onClick={() => usePlacementDialog.getState().open({ kind: 'typed' })}
+                className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')}
+                data-testid="place-by-typing"
+              >
+                <Keyboard className="h-4 w-4" /> Type position
+              </button>
+              <button
+                type="button"
+                onClick={() => usePlacementDialog.getState().open({ kind: 'structure' })}
+                className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')}
+                data-testid="place-at-structure"
+              >
+                <UtilityPole className="h-4 w-4" /> At a pole
+              </button>
+              <button
+                type="button"
+                onClick={() => useMapStore.getState().startPlacementLine()}
+                className={cn(darkBtn, 'text-slate-200 hover:bg-white/10')}
+                data-testid="place-along-line"
+              >
+                <Spline className="h-4 w-4" /> Along a line
+              </button>
             </>
           )}
           {activeTool !== 'add_equipment' && (
@@ -754,14 +806,14 @@ export function MapModeBar({
               className={cn(darkBtn, 'text-rose-300 hover:bg-rose-500/20 hover:text-rose-200')}
               title="Clear all points of the current drawn line"
             >
-              <Trash2 className="h-4 w-4" /> {drawTarget === 'duct' ? 'Clear line' : 'Clear wire'}
+              <Trash2 className="h-4 w-4" /> {drawTarget === 'duct' || drawTarget === 'placement_line' ? 'Clear line' : drawTarget === 'zone' ? 'Clear boundary' : 'Clear wire'}
             </button>
           )}
           {activeTool === 'draw_cable' && (
             <button
               type="button"
               onClick={onFinish}
-              disabled={activeDrawingPoints.length < 2}
+              disabled={activeDrawingPoints.length < minPoints}
               className={cn(darkBtn, 'order-first bg-blue-600 text-white hover:bg-blue-500 md:order-none')}
             >
               <Check className="h-4 w-4" /> Finish <Shortcut dark>↵</Shortcut>

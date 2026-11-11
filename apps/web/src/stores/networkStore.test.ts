@@ -156,6 +156,28 @@ describe('undo / redo', () => {
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
+  it('leaves stored budget runs and map check findings alone: no undo step, and undo keeps them', () => {
+    // The server refuses a delete or rollback of either, so undo must never try one.
+    const run = { id: 'OBR-T1' } as never;
+    const finding = { id: 'VF-T1', state: 'acknowledged' } as never;
+    const store = (patch: Record<string, unknown>) =>
+      useNetworkStore.getState().runCommand(() => ({ ok: true, value: null, patch, audit: [] }) as never);
+
+    actions.addEquipment(draft);
+    expect(useNetworkStore.getState().history.index).toBe(1);
+    store({ opticalBudgetRuns: [run] });
+    store({ validationFindings: [finding] });
+    expect(useNetworkStore.getState().history.index).toBe(1);
+
+    useNetworkStore.getState().undo();
+    const state = useNetworkStore.getState();
+    expect(state.equipment.some((e) => e.name === draft.name)).toBe(false);
+    expect(state.opticalBudgetRuns).toEqual([run]);
+    expect(state.validationFindings).toEqual([finding]);
+    useNetworkStore.getState().redo();
+    expect(useNetworkStore.getState().opticalBudgetRuns).toEqual([run]);
+  });
+
   it('drops the redo branch on a new change and caps the stack', () => {
     actions.addEquipment(draft);
     useNetworkStore.getState().undo();

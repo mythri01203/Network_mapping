@@ -14,15 +14,22 @@ describe('zones', () => {
     });
   });
 
-  it('draws a placeholder boundary around the network anchor', () => {
+  it('makes up no boundary, area or counts for a zone created without them', () => {
     const result = createZone(smallNetwork(), { name: 'North', areaCode: 'N1' }, ctx);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.id).toMatch(/^ZONE-[0-9A-HJKMNP-TV-Z]{10}$/);
-    expect(result.value).toMatchObject({ status: 'Expansion', coverageSqKm: 2.5 });
-    expect(result.value.boundaryCoords).toHaveLength(4);
-    const lats = result.value.boundaryCoords.map(([lat]) => lat);
-    expect(Math.min(...lats)).toBeCloseTo(17.4 - 0.0035);
-    expect(Math.max(...lats)).toBeCloseTo(17.4 + 0.0035);
+    expect(result.value).toMatchObject({ status: 'Expansion', coverageSqKm: 0, fatCount: 0, feederCableCount: 0 });
+    expect(result.value.boundaryCoords).toEqual([]);
+  });
+
+  it('keeps a boundary that was drawn', () => {
+    const boundary: [number, number][] = [
+      [17.4, 78.4],
+      [17.41, 78.4],
+      [17.41, 78.41],
+    ];
+    const result = createZone(smallNetwork(), { name: 'North', areaCode: 'N1', boundaryCoords: boundary }, ctx);
+    expect(result.ok && result.value.boundaryCoords).toEqual(boundary);
   });
 
   it('rejects duplicate ids and supports update and delete', () => {

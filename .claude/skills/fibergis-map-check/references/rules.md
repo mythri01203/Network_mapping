@@ -158,6 +158,12 @@ These run on `monitoringSources`, `onuReadings` and `onuStatuses`. Messages use 
 | `monitoring-stale-online` | Check these | An ONT's newest real status is "online" but older than `monitoring.statusStaleMinutes` (default 15), so it may not be online now | Data truth (proposed limit) |
 | `monitoring-unmatched-rows` | Good to know | Rows from a source matched no ONT record (count per source). They are kept and shown on nobody | Data truth |
 
+## In the app (network mapping Phase 15)
+
+- The server runs this script with the operator's own limits from the settings records (`checkLimitsFrom` in `packages/shared/src/domain/validationSettings.ts`), not only `DEFAULT_LIMITS`. ONT levels come from the optical settings. `DEFAULT_LIMITS` stay the defaults when the script is run by hand.
+- The app adds geometry rules (`geometryRules.ts`): `route-self-intersects`, `route-extra-point`, `cable-end-gap` (replaces `cable-end-far` in the app, so one problem is listed once), `asset-outside-zones` and `route-duplicate`. All only warn.
+- What a run finds is stored as findings (`validationFindings`). Each finding can be marked fine or fixed, with a note, and is marked "no longer found", never deleted. Customer names in this script's sentences are replaced by their id before storing. See `docs/NETWORK_VALIDATION.md`.
+
 ## Ideas not yet built
 
 Mostly blocked by the data model:

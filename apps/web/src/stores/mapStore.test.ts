@@ -64,3 +64,58 @@ describe('mapStore', () => {
     expect(store.getState().measuringPoints).toEqual([]);
   });
 });
+
+describe('layer settings and saved views (Phase 1)', () => {
+  it('moves an equipment layer up and down, and keeps new layers in the saved order', async () => {
+    localStorage.setItem('fiber_gis_map_prefs', JSON.stringify({ state: { equipmentOrder: ['poles', 'olt'] }, version: 1 }));
+    const { DEFAULT_EQUIPMENT_ORDER } = await import('./mapStore');
+    const store = await loadStore();
+    const order = store.getState().equipmentOrder;
+    expect(order.slice(0, 2)).toEqual(['poles', 'olt']);
+    expect([...order].sort()).toEqual([...DEFAULT_EQUIPMENT_ORDER].sort());
+    store.getState().moveEquipmentLayer('olt', -1);
+    expect(store.getState().equipmentOrder.slice(0, 2)).toEqual(['olt', 'poles']);
+    store.getState().moveEquipmentLayer('olt', -1);
+    expect(store.getState().equipmentOrder[0]).toBe('olt');
+  });
+
+  it('sets and clears a layer zoom, and applies a saved view with its place', async () => {
+    const store = await loadStore();
+    store.getState().setLayerMinZoom('poles', 16);
+    expect(store.getState().layerMinZoom).toEqual({ poles: 16, spans: 17 });
+    // Poles and spans start from street zoom; "always" is kept as 0 so the default does not return.
+    store.getState().setLayerMinZoom('poles', null);
+    expect(store.getState().layerMinZoom).toEqual({ poles: 0, spans: 17 });
+    store.getState().setLayerMinZoom('fat', 15);
+    store.getState().setLayerMinZoom('fat', null);
+    expect(store.getState().layerMinZoom).toEqual({ poles: 0, spans: 17 });
+    const s = store.getState();
+    store.getState().saveView({
+      id: 'VIEW-1',
+      name: 'Ward 12',
+      ownerId: 'u1',
+      createdAt: '2026-11-10T00:00:00.000Z',
+      viewport: { lat: 12.9, lng: 77.6, zoom: 15 },
+      layers: { ...s.layers, poles: false },
+      layerOpacity: s.layerOpacity,
+      layerMinZoom: { fat: 15 },
+      layerLabels: s.layerLabels,
+      labelMinZoom: 18,
+      equipmentOrder: s.equipmentOrder,
+    });
+    store.getState().applyView(store.getState().savedViews[0]);
+    const after = store.getState();
+    expect(after.layers.poles).toBe(false);
+    expect(after.layerMinZoom).toEqual({ fat: 15 });
+    expect(after.labelMinZoom).toBe(18);
+    expect(after.flyToTarget).toEqual({ lat: 12.9, lng: 77.6, zoom: 15 });
+  });
+
+  it('draws a zone boundary as its own kind of line, forgotten when the tool changes', async () => {
+    const store = await loadStore();
+    store.getState().startZoneBoundary('ZONE-1');
+    expect(store.getState()).toMatchObject({ activeTool: 'draw_cable', drawTarget: 'zone', zoneDrawId: 'ZONE-1' });
+    store.getState().setActiveTool('select');
+    expect(store.getState()).toMatchObject({ drawTarget: 'cable', zoneDrawId: null });
+  });
+});

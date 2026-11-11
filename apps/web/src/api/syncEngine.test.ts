@@ -35,9 +35,13 @@ type Records = Record<CollectionName, { id: string }[]>;
  * In-memory stand-in for the API server with the same revision rules. With `versioned`, it also
  * keeps a version per record and refuses stale edits, like the Phase 8 server.
  */
-function createFakeServer({ versioned = false } = {}) {
+function createFakeServer({ versioned = false, incremental = true } = {}) {
   let revision = 1;
   let data = createSampleNetwork() as unknown as Records;
+  /** Phase 24: the revision each record was last stored or deleted at, and how far back that reaches. */
+  const changeLog = new Map<string, { revision: number; deleted: boolean }>();
+  let floor = 1;
+  const mark = (name: string, id: string, at: number, deleted: boolean) => changeLog.set(JSON.stringify([name, id]), { revision: at, deleted });
   let outage: Error | null = null;
   let refusal: ApiError | null = null;
   /** Records the server refuses one by one, like a validation failure on a single record. */
@@ -89,11 +93,13 @@ function createFakeServer({ versioned = false } = {}) {
         else data[name].push(structuredClone(record));
         versions.set(`${name}/${record.id}`, revision + 1);
         (written[name] ??= {})[record.id] = revision + 1;
+        mark(name, record.id, revision + 1, false);
         upserted += 1;
       }
     }
     for (const [name, ids] of Object.entries(changes.deletes ?? {}) as [CollectionName, string[]][]) {
       const before = data[name].length;
+      for (const id of ids) if (data[name].some((item) => item.id === id)) mark(name, id, revision + 1, true);
       data[name] = data[name].filter((item) => !ids.includes(item.id));
       deleted += before - data[name].length;
     }
@@ -112,11 +118,33 @@ function createFakeServer({ versioned = false } = {}) {
       const v = versionsMap();
       return v ? { revision, data: snapshot(), versions: v } : { revision, data: snapshot() };
     }),
+    ...(incremental
+      ? {
+          getChanges: vi.fn<NonNullable<ApiClient['getChanges']>>(async (since) => {
+            await available();
+            if (since > revision || since < floor) return { revision, since, reload: true as const, reason: 'too old' };
+            const upserts: Record<string, { id: string }[]> = {};
+            const deletes: Record<string, string[]> = {};
+            const changed: Record<string, Record<string, number>> = {};
+            for (const [key, entry] of changeLog) {
+              if (entry.revision <= since) continue;
+              const [name, id] = JSON.parse(key) as [CollectionName, string];
+              const record = data[name].find((r) => r.id === id);
+              if (entry.deleted || !record) (deletes[name] ??= []).push(id);
+              else (changed[name] ??= {})[id] = versionOf(name, id);
+            }
+            // Stored order, as the server sends it.
+            for (const [name, byId] of Object.entries(changed)) upserts[name] = structuredClone(data[name as CollectionName].filter((r) => r.id in byId));
+            return { revision, since, upserts: upserts as never, deletes, versions: changed };
+          }),
+        }
+      : {}),
     applyChanges,
     reset: vi.fn(async () => {
       await available();
       data = { ...(createSampleNetwork() as unknown as Records), catalog: data.catalog };
       revision += 1;
+      floor = revision;
       return { revision };
     }),
     restore: vi.fn(async (backup) => {
@@ -124,6 +152,7 @@ function createFakeServer({ versioned = false } = {}) {
       const restored = Object.keys(backup.collections) as CollectionName[];
       for (const name of restored) data[name] = structuredClone(backup.collections[name] as { id: string }[]);
       revision += 1;
+      floor = revision;
       return { revision, restored };
     }),
     route: vi.fn(),
@@ -154,6 +183,18 @@ function createFakeServer({ versioned = false } = {}) {
       else data[name].push(record);
       revision += 1;
       versions.set(`${name}/${record.id}`, revision);
+      mark(name, record.id, revision, false);
+    },
+    /** Another client deletes a record. */
+    deleteElsewhere: (name: CollectionName, id: string) => {
+      data[name] = data[name].filter((item) => item.id !== id);
+      revision += 1;
+      versions.delete(`${name}/${id}`);
+      mark(name, id, revision, true);
+    },
+    /** The server's change history no longer reaches back (a restore elsewhere, a long time away). */
+    forgetHistory: () => {
+      floor = revision + 1;
     },
   };
 }
@@ -600,5 +641,77 @@ describe('offline edits that clash (Phase 8, example E)', () => {
     await idle();
     expect(server.applyChanges.mock.calls.every(([c]) => c.expect === undefined)).toBe(true);
     expect(serverEquipment(first.id).name).toBe('Mine');
+  });
+});
+
+describe('incremental sync (Phase 24)', () => {
+  it('a poll fetches only what changed, not the whole network', async () => {
+    await startEngine();
+    expect(server.client.getNetwork).toHaveBeenCalledTimes(1);
+    const other = server.records('cables')[0];
+    server.editElsewhere('cables', { ...other, name: 'Changed elsewhere' } as { id: string });
+    const gone = server.records('customers')[0].id;
+    server.deleteElsewhere('customers', gone);
+    server.editElsewhere('zones', { ...server.records('zones')[0], id: 'ZONE-NEW', name: 'New zone' } as { id: string });
+    await vi.advanceTimersByTimeAsync(POLL);
+    await idle();
+    expect(server.client.getNetwork).toHaveBeenCalledTimes(1);
+    expect(server.client.getChanges).toHaveBeenCalledWith(server.revision - 3);
+    const state = useNetworkStore.getState();
+    expect(state.cables[0].name).toBe('Changed elsewhere');
+    expect(state.customers.some((c) => c.id === gone)).toBe(false);
+    expect(state.zones.at(-1)?.id).toBe('ZONE-NEW');
+    expect(useSyncStore.getState()).toMatchObject({ phase: 'synced', revision: server.revision });
+    // The result is what a whole load would give.
+    expect(getNetworkSnapshot()).toEqual(structuredClone(await server.client.getNetwork()).data);
+  });
+
+  it('keeps an unsent local edit over a change from elsewhere, as a whole load does', async () => {
+    server = createFakeServer({ versioned: true });
+    await startEngine();
+    const [first] = server.records('equipment');
+    server.goDown();
+    renameFirstEquipment('Mine, not sent yet');
+    server.comeBack();
+    server.editElsewhere('equipment', { ...first, name: 'Theirs' } as { id: string });
+    await vi.advanceTimersByTimeAsync(RETRY * 4);
+    await idle();
+    // Held as a conflict (both kept), never overwritten silently.
+    expect(useNetworkStore.getState().equipment[0].name).toBe('Mine, not sent yet');
+  });
+
+  it('loads the whole network when the history does not reach back', async () => {
+    await startEngine();
+    server.forgetHistory();
+    server.editElsewhere('cables', { ...server.records('cables')[0], name: 'After a restore' } as { id: string });
+    await vi.advanceTimersByTimeAsync(POLL);
+    await idle();
+    expect(server.client.getChanges).toHaveBeenCalled();
+    expect(server.client.getNetwork).toHaveBeenCalledTimes(2);
+    expect(useNetworkStore.getState().cables[0].name).toBe('After a restore');
+  });
+
+  it('with an older server (no change route) it loads the whole network, as before', async () => {
+    server = createFakeServer({ incremental: false });
+    await startEngine();
+    server.editElsewhere('cables', { ...server.records('cables')[0], name: 'Old server' } as { id: string });
+    await vi.advanceTimersByTimeAsync(POLL);
+    await idle();
+    expect(server.client.getNetwork).toHaveBeenCalledTimes(2);
+    expect(useNetworkStore.getState().cables[0].name).toBe('Old server');
+  });
+
+  it('a server that answers the change route with "not found" is asked for the whole network from then on', async () => {
+    await startEngine();
+    vi.mocked(server.client.getChanges!).mockRejectedValue(new ApiError(404, 'not_found', 'Unknown collection "changes".'));
+    server.editElsewhere('cables', { ...server.records('cables')[0], name: 'One' } as { id: string });
+    await vi.advanceTimersByTimeAsync(POLL);
+    await idle();
+    server.editElsewhere('cables', { ...server.records('cables')[0], name: 'Two' } as { id: string });
+    await vi.advanceTimersByTimeAsync(POLL);
+    await idle();
+    expect(server.client.getChanges).toHaveBeenCalledTimes(1);
+    expect(server.client.getNetwork).toHaveBeenCalledTimes(3);
+    expect(useNetworkStore.getState().cables[0].name).toBe('Two');
   });
 });

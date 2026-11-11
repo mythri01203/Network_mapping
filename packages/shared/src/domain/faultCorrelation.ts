@@ -19,15 +19,24 @@ import { RF_KIND_INFO } from './rfTree';
  * Evidence-based grouping of alarms (Phase 8). Alarms reported on customers are grouped by the
  * element their recorded fiber paths share, and the result is always a suspicion: the screen says
  * how many customers behind the element are reported down, how sure that makes it and what is not
- * recorded. It never claims a cut. There is no live OLT connection, so a customer with no alarm is
- * not proven to be working; the wording says "no alarm", never "up". TEST alarms and real alarms
- * are never mixed in one group.
+ * recorded. It never claims a cut. Alarms come from people, the field, TEST events and (Phase 7,
+ * Phase 20) monitoring sources, but only for what a source actually sent: a customer with no alarm
+ * is not proven to be working, so the wording says "no alarm", never "up". TEST alarms and real
+ * alarms are never mixed in one group.
  */
 
 /** Alarm kinds that say a customer has lost service. */
 export const CUSTOMER_DOWN_KINDS: readonly AlarmKind[] = ['ont_los', 'ont_offline', 'low_power'];
 
 export const isOpenAlarm = (a: Pick<Alarm, 'state'>): boolean => a.state !== 'cleared';
+
+/** Said with every customer group. True with or without a monitoring source. */
+export const NO_ALARM_IS_NOT_UP =
+  'A customer with no alarm is not proven to be working: alarms come only from what a monitoring source sent or a person reported.';
+
+/** Who reported an alarm, in plain words, for the evidence lines. */
+const reportedWords = (a: Pick<Alarm, 'source'>): string =>
+  a.source === 'test' ? 'TEST' : a.source === 'device_adapter' ? 'reported by a monitoring source' : a.source === 'field_report' ? 'reported from the field' : 'reported by a person';
 
 export interface Suspicion {
   key: string;
@@ -155,7 +164,7 @@ function customerGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTes
   }
   const common = [
     ...(isTest ? ['These are TEST events, not real alarms.'] : []),
-    'No live connection to the OLT: a customer with no alarm is not proven to be working.',
+    NO_ALARM_IS_NOT_UP,
   ];
   const span = Math.round(minutesBetween(windowStart, group.at(-1)!.firstSeenAt));
   const timing = `The alarms started within ${span} minute(s) of each other (window ${s.correlationWindowMinutes} min, in settings).`;
@@ -325,7 +334,7 @@ function oltGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTest: bo
     if (a.element.type !== 'olt' || a.kind !== 'olt_unreachable') continue;
     const el: NetworkElementRef = { type: 'olt', id: a.element.id };
     const impact = affectedByElement(ix, el);
-    out.push(suspicionFromReport(ix, el, [a], impact.affected.length, isTest, [`${elementLabel(ix.data, el)} was reported not reachable (${a.source === 'test' ? 'TEST' : 'reported by a person'}).`, ...common]));
+    out.push(suspicionFromReport(ix, el, [a], impact.affected.length, isTest, [`${elementLabel(ix.data, el)} was reported not reachable (${reportedWords(a)}).`, ...common]));
   }
   for (const [oltId, alarms] of byOlt) {
     const olt = ix.data.equipment.find((e) => e.id === oltId);
@@ -344,7 +353,7 @@ function oltGroups(ix: ImpactIndex, group: Alarm[], s: FaultSettings, isTest: bo
     }
     for (const a of alarms) {
       const el: NetworkElementRef = { type: 'pon_port', id: oltId, ponPortId: a.element.ponPortId };
-      out.push(suspicionFromReport(ix, el, [a], affectedByElement(ix, el).affected.length, isTest, [`${elementLabel(ix.data, el)} reports a fault (${a.source === 'test' ? 'TEST' : 'reported by a person'}).`, ...common]));
+      out.push(suspicionFromReport(ix, el, [a], affectedByElement(ix, el).affected.length, isTest, [`${elementLabel(ix.data, el)} reports a fault (${reportedWords(a)}).`, ...common]));
     }
   }
   return out;

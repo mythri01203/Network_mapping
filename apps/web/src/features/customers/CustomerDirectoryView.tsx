@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { Download, MapPin, PlusCircle, Radio, Route, Search } from 'lucide-react';
+import { Download, EyeOff, GitCompareArrows, MapPin, PlusCircle, Radio, Route, Search } from 'lucide-react';
 
-import { type Customer, hasRecordedLocation, rxReadingOf } from '@fibergis/shared';
+import { type Customer, rxReadingOf } from '@fibergis/shared';
 
 import { useShowOnMap } from '../../app/views';
+import { useMayDo } from '../../stores/authStore';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { CustomerPathCheck } from './CustomerPathCheck';
+import { housePositionNote, isGpsHidden as gpsHidden } from './personalData';
 
 export const CustomerDirectoryView: React.FC = () => {
+  // Phase 23: saving lists to a file is the export right.
+  const mayExport = useMayDo('export');
+  // Phase 12: fixing paths from the fibre links changes customer records.
+  const mayEdit = useMayDo('edit');
+  const [pathCheckOpen, setPathCheckOpen] = useState(false);
   const customers = useNetworkStore((s) => s.customers);
   const optical = useNetworkStore(selectOpticalSettings);
   const setModalOpen = useUiStore((s) => s.setModalOpen);
@@ -104,7 +112,8 @@ export const CustomerDirectoryView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden select-none">
       {/* Top Header */}
-      <div className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-xs z-10">
+      {/* Grows on a phone so the buttons wrap below the title instead of spilling over the page. */}
+      <div className="min-h-16 bg-white border-b border-slate-200 px-4 py-3 md:px-6 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-xs z-10">
         <div>
           <h2 className="text-base font-bold text-slate-800">Customer & Subscriber Directory</h2>
           <p className="text-xs text-slate-500">
@@ -112,7 +121,17 @@ export const CustomerDirectoryView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {mayEdit && (
+            <button
+              onClick={() => setPathCheckOpen(true)}
+              data-testid="open-path-check"
+              className="flex min-h-12 items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+            >
+              <GitCompareArrows className="w-3.5 h-3.5 text-slate-500" />
+              <span>Check customer paths</span>
+            </button>
+          )}
           <button
             onClick={() => setModalOpen('onuFleet', true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
@@ -123,6 +142,7 @@ export const CustomerDirectoryView: React.FC = () => {
 
           <button
             onClick={handleExportCSV}
+            hidden={!mayExport}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
@@ -276,9 +296,17 @@ export const CustomerDirectoryView: React.FC = () => {
                     <td className="py-3 px-4">
                       <div className="font-mono text-slate-700 font-semibold">{c.ontSerialNumber || 'Not recorded'}</div>
                       <div className="text-[10px] text-slate-400 font-mono">{c.ipAddress || 'IP not recorded'}</div>
-                      {!hasRecordedLocation(c) && (
-                        <div className="text-[10px] font-semibold text-amber-700">House location not recorded</div>
-                      )}
+                      {(() => {
+                        const note = housePositionNote(c);
+                        if (!note) return null;
+                        return note.hidden ? (
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+                            <EyeOff className="h-3 w-3" /> {note.text}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] font-semibold text-amber-700">{note.text}</div>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
@@ -313,6 +341,7 @@ export const CustomerDirectoryView: React.FC = () => {
                         </button>
 
                         <button
+                          disabled={gpsHidden(c)}
                           onClick={() => handleLocateOnMap(c)}
                           className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                           title="Locate Customer on Map"
@@ -328,6 +357,7 @@ export const CustomerDirectoryView: React.FC = () => {
           </table>
         </div>
       </div>
+      <CustomerPathCheck open={pathCheckOpen} onClose={() => setPathCheckOpen(false)} />
     </div>
   );
 };

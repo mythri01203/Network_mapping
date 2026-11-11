@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 
 import { AgentTrackingRuntime } from '../features/agent-tracking/AgentTrackingRuntime';
 import { AuthGate, SetupBanner, ViewerBanner } from '../features/auth/AuthGate';
+import { WelcomeGuide } from '../features/learn/WelcomeGuide';
 import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
 import { ModalHost } from './ModalHost';
@@ -18,6 +19,8 @@ const lazyView = <K extends string>(load: () => Promise<Record<K, React.Componen
 
 // Full-screen views are loaded on first visit to keep the map's initial load small.
 const VIEW_COMPONENTS: Record<Exclude<MainView, 'map'>, React.ComponentType> = {
+  // The 3D view carries three.js; it is its own chunk so the 2D map bundle does not grow.
+  view3d: lazyView(() => import('../features/view3d/View3DView'), 'View3DView'),
   topology: lazyView(() => import('../features/topology/NetworkTopologyView'), 'NetworkTopologyView'),
   olt_rack: lazyView(() => import('../features/olt-rack/OLTRackView'), 'OLTRackView'),
   inventory: lazyView(() => import('../features/inventory/EquipmentInventoryView'), 'EquipmentInventoryView'),
@@ -59,6 +62,7 @@ const AppContent: React.FC = () => {
     return (
       <>
         <Suspense fallback={<ViewFallback />}>{jobs ? <JobsApp /> : <CaptureApp />}</Suspense>
+        <WelcomeGuide />
         <ConflictChoiceHost />
         <ConfirmDialogHost />
         <ToastNotifications />
@@ -85,6 +89,7 @@ const AppContent: React.FC = () => {
       </div>
       <AgentTrackingRuntime />
       <ModalHost />
+      <WelcomeGuide />
       <ConflictChoiceHost />
       <ConfirmDialogHost />
       <ToastNotifications />

@@ -3,6 +3,7 @@ import {
   GitMerge,
   type LucideIcon,
   MapPin,
+  MoreHorizontal,
   MousePointerClick,
   PanelRightClose,
   PanelRightOpen,
@@ -19,7 +20,9 @@ import { STRUCTURE_STATUS_LABELS } from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { Badge, CableIcon, cn, EmptyState, equipmentIcon, IconButton, StatusBadge } from '../../components/ui';
+import { useSelectionStore } from '../../stores/selectionStore';
 import { type SelectedObject, selectionLabel, useUiStore } from '../../stores/uiStore';
+import { keyForSelection } from '../selection/selectionModel';
 import { CableInspector } from './CableInspector';
 import { ClosureInspector } from './ClosureInspector';
 import { CustomerInspector } from './CustomerInspector';
@@ -247,6 +250,17 @@ export function PropertiesPanel() {
                 onClick={() => openKnowledge(selection.data.type)}
               />
             )}
+            {/* Phase 16: open, zoom, trace, select connected, copy id; the same menu as a right-click. */}
+            <IconButton
+              icon={MoreHorizontal}
+              label="More actions"
+              size="sm"
+              className="max-md:h-[48px] max-md:w-[48px]"
+              onClick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                useSelectionStore.getState().openMenu({ key: keyForSelection(selection), x: r.left - 220, y: r.bottom + 4 });
+              }}
+            />
             <IconButton
               icon={X}
               label="Clear selection"

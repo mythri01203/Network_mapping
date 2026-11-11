@@ -6,13 +6,14 @@ import {
   ChevronUp,
   History,
   Route,
+  Sheet,
   TableProperties,
   TriangleAlert,
   X,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { coreIdentity, type CoreStatus, effectiveCoreStatus } from '@fibergis/shared';
+import { completeCores, CORE_STATUS_LABELS, coreIdentity, type CoreStatus, effectiveCoreStatus } from '@fibergis/shared';
 
 import {
   Badge,
@@ -27,12 +28,14 @@ import {
   Tabs,
 } from '../../components/ui';
 import { useMapStore } from '../../stores/mapStore';
-import { allocateFiberCore } from '../../stores/networkActions';
 import { selectColorSchemes, useNetworkStore } from '../../stores/networkStore';
+import { useSelectionStore } from '../../stores/selectionStore';
 import { useTraceStore } from '../../stores/traceStore';
 import { useUiStore } from '../../stores/uiStore';
+import { AttributeTable } from '../table/AttributeTable';
 
-type Tab = 'cores' | 'trace' | 'audit';
+// Phase 16: 'table' is the real attribute table; 'cores' (once mislabelled "Attribute table") is the cable's fibre table.
+type Tab = 'cores' | 'trace' | 'audit' | 'table';
 
 const CORE_FILTERS: Array<'All' | CoreStatus> = [
   'All',
@@ -40,6 +43,8 @@ const CORE_FILTERS: Array<'All' | CoreStatus> = [
   'In Use',
   'Reserved',
   'Damaged',
+  'Faulty',
+  'Retired',
   'Under Maintenance',
   'Unverified',
 ];
@@ -71,9 +76,22 @@ export const BottomInfoPanel: React.FC = () => {
     [cables, selectedCableId],
   );
 
+  // Choosing a cable shows its cores, unless the attribute table is open (it follows the map itself).
   useEffect(() => {
-    if (selectedCableId) setActiveTab('cores');
+    if (selectedCableId) setActiveTab((t) => (t === 'table' ? t : 'cores'));
   }, [selectedCableId]);
+
+  // Phase 16: "Table" from the map's selection bar or the search box opens the attribute table.
+  const tableRequest = useSelectionStore((s) => s.tableRequest);
+  const tableTall = useSelectionStore((s) => s.tableTall);
+  const [seenTableRequest, setSeenTableRequest] = useState(tableRequest);
+  if (tableRequest !== seenTableRequest) {
+    setSeenTableRequest(tableRequest);
+    if (tableRequest) setActiveTab('table');
+  }
+  useEffect(() => {
+    if (tableRequest) setPanelOpen('bottom', true);
+  }, [tableRequest, setPanelOpen]);
 
   const traceKey = activeTraceSummary?.targetId ?? (activeTracePath ? activeTracePath.length : null);
   useEffect(() => {
@@ -83,32 +101,46 @@ export const BottomInfoPanel: React.FC = () => {
   const equipmentName = (id?: string) => (id ? (equipments.find((e) => e.id === id)?.name ?? id) : undefined);
   const customerName = (id?: string) => (id ? (customers.find((c) => c.id === id)?.name ?? id) : undefined);
 
-  const allocationTargetId = cable ? cable.endEquipmentId || cable.startEquipmentId : undefined;
-  const allocationTargetName = equipmentName(allocationTargetId);
-
+  // Every fiber of the cable (ones with no record yet count as available), each with its shown state.
+  const allCores = useMemo(() => (cable ? completeCores(cable) : []), [cable]);
   const coreStats = useMemo(() => {
-    const cores = cable?.cores ?? [];
+    const states = allCores.map((c) => effectiveCoreStatus(c));
     return {
-      total: cores.length,
-      inUse: cores.filter((c) => c.status === 'In Use').length,
-      available: cores.filter((c) => c.status === 'Available').length,
-      damaged: cores.filter((c) => c.status === 'Damaged').length,
+      total: allCores.length,
+      inUse: states.filter((s) => s === 'In Use').length,
+      available: states.filter((s) => s === 'Available').length,
+      damaged: states.filter((s) => s === 'Damaged' || s === 'Faulty').length,
     };
-  }, [cable]);
+  }, [allCores]);
 
   const schemes = useNetworkStore(selectColorSchemes);
-  const filteredCores = (cable?.cores ?? []).filter((core) => coreFilter === 'All' || effectiveCoreStatus(core) === coreFilter);
+  const filteredCores = allCores.filter((core) => coreFilter === 'All' || effectiveCoreStatus(core) === coreFilter);
 
   if (!isBottomPanelOpen) {
     return (
       <div className="hidden h-8 shrink-0 items-center gap-3 border-t border-slate-200 bg-white px-3 text-xs md:flex">
         <button
           type="button"
-          onClick={() => setPanelOpen('bottom', true)}
+          onClick={() => {
+            setActiveTab((t) => (t === 'table' ? 'cores' : t));
+            setPanelOpen('bottom', true);
+          }}
           className="flex items-center gap-2 font-medium text-slate-600 hover:text-slate-900"
         >
           <ChevronUp size={14} className="text-slate-400" />
           <TableProperties size={14} className="text-slate-400" />
+          Cores
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('table');
+            setPanelOpen('bottom', true);
+          }}
+          className="flex items-center gap-2 font-medium text-slate-600 hover:text-slate-900"
+          data-testid="open-attribute-table"
+        >
+          <Sheet size={14} className="text-slate-400" />
           Attribute table
         </button>
         <span className="h-3.5 w-px bg-slate-200" />
@@ -134,8 +166,11 @@ export const BottomInfoPanel: React.FC = () => {
 
   return (
     <section
-      className="fixed inset-x-0 bottom-0 top-12 z-[1050] flex flex-col bg-white md:static md:z-auto md:h-72 md:shrink-0 md:border-t md:border-slate-200"
-      aria-label="Attribute table"
+      className={cn(
+        'fixed inset-x-0 bottom-0 top-12 z-[1050] flex flex-col bg-white md:static md:z-auto md:shrink-0 md:border-t md:border-slate-200',
+        activeTab === 'table' && tableTall ? 'md:h-[60vh]' : 'md:h-72',
+      )}
+      aria-label={activeTab === 'table' ? 'Attribute table' : 'Cores, trace and activity'}
     >
       {/* Header */}
       <div className="flex h-10 shrink-0 items-center gap-3 border-b border-slate-200 pl-2 pr-2">
@@ -145,7 +180,8 @@ export const BottomInfoPanel: React.FC = () => {
           value={activeTab}
           onChange={setActiveTab}
           items={[
-            { id: 'cores', label: 'Fiber cores', icon: TableProperties, count: cable ? cable.cores.length : undefined },
+            { id: 'cores', label: 'Cores', icon: TableProperties, count: cable ? allCores.length : undefined },
+            { id: 'table', label: 'Attribute table', icon: Sheet },
             { id: 'trace', label: 'Trace', icon: Route, count: activeTracePath ? activeTracePath.length : undefined },
             { id: 'audit', label: 'Activity', icon: History },
           ]}
@@ -170,7 +206,7 @@ export const BottomInfoPanel: React.FC = () => {
             >
               {CORE_FILTERS.map((s) => (
                 <option key={s} value={s}>
-                  {s === 'All' ? 'All statuses' : s}
+                  {s === 'All' ? 'All statuses' : CORE_STATUS_LABELS[s]}
                 </option>
               ))}
             </Select>
@@ -188,6 +224,7 @@ export const BottomInfoPanel: React.FC = () => {
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-auto">
+        {activeTab === 'table' && <AttributeTable />}
         {activeTab === 'cores' &&
           (!cable ? (
             <EmptyState
@@ -216,12 +253,14 @@ export const BottomInfoPanel: React.FC = () => {
                     </span>
                   </>
                 )}
+                {/* Giving a fiber a use is done where the use is recorded, never by guessing the far end. */}
+                <span className="ml-auto shrink-0">To give a fiber a use, open Fibers in the cable panel.</span>
               </div>
               {filteredCores.length === 0 ? (
                 <EmptyState
                   compact
                   title="No cores match this filter"
-                  description={`No ${coreFilter.toLowerCase()} cores on this cable.`}
+                  description={`No ${coreFilter === 'All' ? '' : `${CORE_STATUS_LABELS[coreFilter].toLowerCase()} `}cores on this cable.`}
                 />
               ) : (
                 <table className="ui-table">
@@ -235,7 +274,6 @@ export const BottomInfoPanel: React.FC = () => {
                       <th>Port</th>
                       <th className="text-right">Loss</th>
                       <th>Remarks</th>
-                      <th className="w-28 text-right" aria-label="Actions" />
                     </tr>
                   </thead>
                   <tbody>
@@ -267,7 +305,7 @@ export const BottomInfoPanel: React.FC = () => {
                             </span>
                           </td>
                           <td className="tabular text-slate-500">
-                            {identity?.tubeNumber !== undefined ? `T${identity.tubeNumber}/${identity.fiberInTube}` : 'â€”'}
+                            {identity?.tubeNumber !== undefined ? `T${identity.tubeNumber}/${identity.fiberInTube}` : 'Not recorded'}
                           </td>
                           <td>
                             <StatusBadge status={effectiveCoreStatus(core)} />
@@ -281,26 +319,6 @@ export const BottomInfoPanel: React.FC = () => {
                           </td>
                           <td className="max-w-[260px] truncate text-slate-500" title={core.remarks}>
                             {core.remarks || '—'}
-                          </td>
-                          <td className="text-right">
-                            {core.status === 'Available' ? (
-                              <Button
-                                size="xs"
-                                variant="secondary"
-                                disabled={!allocationTargetId}
-                                title={
-                                  allocationTargetId
-                                    ? `Allocate core ${core.coreNumber} to ${allocationTargetName}`
-                                    : 'This cable is not terminated on any equipment'
-                                }
-                                onClick={() =>
-                                  allocationTargetId &&
-                                  allocateFiberCore(cable.id, core.coreNumber, undefined, allocationTargetId)
-                                }
-                              >
-                                Allocate
-                              </Button>
-                            ) : null}
                           </td>
                         </tr>
                       );

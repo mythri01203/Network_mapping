@@ -1,34 +1,53 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
+  Cable as CableLucide,
   Check,
   ChevronDown,
   CircleHelp,
+  Clock,
   CornerDownLeft,
   Download,
+  Filter,
+  GitMerge,
   Globe,
+  Hexagon,
   Layers,
   type LucideIcon,
+  Map as MapLucide,
   Menu,
+  Plug,
+  Radio,
   Redo2,
+  Repeat,
   RotateCcw,
   Search,
+  Split,
   TriangleAlert,
   Undo2,
   Upload,
   UserRound,
+  UtilityPole,
   Waypoints,
   X,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ACCOUNT_ROLE_LABELS, isFaultOpen, type UserRole } from '@fibergis/shared';
+import {
+  ACCOUNT_ROLE_LABELS,
+  isFaultOpen,
+  SEARCH_KIND_LABELS,
+  SEARCH_MAX_LIMIT,
+  type SearchHit,
+  searchHitKey,
+  type SearchKind,
+  searchNetwork,
+  type UserRole,
+} from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import {
-  cableColor,
-  CableIcon,
   cn,
   equipmentIcon,
   IconButton,
@@ -37,33 +56,49 @@ import {
   MenuSeparator,
   Popover,
 } from '../../components/ui';
+import { selectionOwnerId, zoomToKeys } from '../../features/selection/selectionActions';
+import { countByCollection, parseKey, recordIndex, selectionFor } from '../../features/selection/selectionModel';
+import { layerForCollection } from '../../features/table/tableLayers';
 import { currentAccount, useAuthStore } from '../../stores/authStore';
 import { useMapStore } from '../../stores/mapStore';
 import { backupSystem, exportKML, resetToSampleData, restoreSystem } from '../../stores/networkActions';
-import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
-import type { SelectedObject } from '../../stores/uiStore';
+import { getNetworkSnapshot, selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
+import { useSearchStore } from '../../stores/searchStore';
+import { useSelectionStore } from '../../stores/selectionStore';
+import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
-import { useActiveView, useShowOnMap, VIEW_META } from '../views';
-import { SyncStatus } from './SyncStatus';
+import { useActiveView, useOpenView, useShowOnMap, VIEW_META } from '../views';
+import { MapModeSwitch } from './MapModeSwitch';
+import { AreaSearchNote, SyncStatus } from './SyncStatus';
 
-type ResultKind = 'equipment' | 'cable' | 'customer' | 'fault';
-
+/** Phase 16: one hit of the shared search, as the search box lists it. */
 interface SearchResult {
-  kind: ResultKind;
-  id: string;
-  label: string;
-  meta: string;
+  hit: SearchHit;
   icon: LucideIcon;
-  color?: string;
-  selection: SelectedObject;
+  meta: string;
 }
 
-const KIND_LABEL: Record<ResultKind, string> = {
-  equipment: 'Equipment',
-  cable: 'Cables',
-  customer: 'Customers',
-  fault: 'Faults',
+const KIND_ICON: Record<SearchKind, LucideIcon> = {
+  equipment: Waypoints,
+  pole: UtilityPole,
+  cable: CableLucide,
+  core: CableLucide,
+  customer: UserRound,
+  ont: Radio,
+  fault: TriangleAlert,
+  splitter: Split,
+  closure: GitMerge,
+  duct: Waypoints,
+  span: Waypoints,
+  zone: Hexagon,
+  ponPort: Plug,
+  odfPort: Plug,
+  building: MapLucide,
+  slackLoop: Repeat,
 };
+
+/** Hits shown in the box; "Show all" takes every hit. */
+const SHOWN_HITS = 40;
 
 const ROLES: UserRole[] = ['Administrator', 'Network Engineer', 'Network Operator', 'Field Technician', 'Supervisor'];
 
@@ -72,8 +107,6 @@ const NETWORK_MODES: Array<{ id: 'All' | 'Fiber' | 'CableTV'; label: string }> =
   { id: 'Fiber', label: 'Fiber' },
   { id: 'CableTV', label: 'CATV' },
 ];
-
-const matches = (value: string | undefined | null, q: string) => !!value && value.toLowerCase().includes(q);
 
 const roleInitials = (role: string) =>
   role
@@ -84,11 +117,8 @@ const roleInitials = (role: string) =>
     .toUpperCase();
 
 export const TopNavBar: React.FC = () => {
-  const { equipments, cables, customers, faults, undo, redo, canUndo, canRedo } = useNetworkStore(
+  const { faults, undo, redo, canUndo, canRedo } = useNetworkStore(
     useShallow((s) => ({
-      equipments: s.equipment,
-      cables: s.cables,
-      customers: s.customers,
       faults: s.faults,
       undo: s.undo,
       redo: s.redo,
@@ -122,63 +152,41 @@ export const TopNavBar: React.FC = () => {
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
+  // Phase 16: the shared search (the same as the server's GET /search) over what this device holds.
+  const searchable = useNetworkStore(
+    useShallow((s) => ({
+      equipment: s.equipment,
+      cables: s.cables,
+      customers: s.customers,
+      faults: s.faults,
+      splitters: s.splitters,
+      closures: s.closures,
+      ducts: s.ducts,
+      spans: s.spans,
+      zones: s.zones,
+      onts: s.onts,
+      buildings: s.buildings,
+      slackLoops: s.slackLoops,
+    })),
+  );
+  const openView = useOpenView();
+  const ownerId = selectionOwnerId();
+  const allRecent = useSearchStore((s) => s.recent);
+  const recent = useMemo(() => allRecent.filter((r) => r.ownerId === ownerId), [allRecent, ownerId]);
+  // Typing stays quick on a big network: the search follows a moment behind.
+  const deferredQuery = useDeferredValue(query);
+  const found = useMemo(() => searchNetwork(searchable, deferredQuery, { limit: SHOWN_HITS }), [searchable, deferredQuery]);
   const results = useMemo<SearchResult[]>(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    const eq = equipments
-      .filter((e) => matches(e.id, q) || matches(e.name, q) || matches(e.area, q))
-      .slice(0, 5)
-      .map<SearchResult>((e) => ({
-        kind: 'equipment',
-        id: e.id,
-        label: e.name,
-        meta: [e.type, e.area].filter(Boolean).join(' · '),
-        icon: equipmentIcon(e.type),
-        selection: { type: 'equipment', data: e },
-      }));
-    const cb = cables
-      .filter((c) => matches(c.id, q) || matches(c.name, q))
-      .slice(0, 4)
-      .map<SearchResult>((c) => ({
-        kind: 'cable',
-        id: c.id,
-        label: c.name,
-        meta: `${c.type} · ${Math.round(c.lengthMeters || 0).toLocaleString()} m`,
-        icon: CableIcon,
-        color: cableColor(c.type),
-        selection: { type: 'cable', data: c },
-      }));
-    const cu = customers
-      .filter(
-        (c) =>
-          matches(c.id, q) ||
-          matches(c.name, q) ||
-          matches(c.ontSerialNumber, q) ||
-          matches(c.ipAddress, q) ||
-          matches(c.address, q),
-      )
-      .slice(0, 5)
-      .map<SearchResult>((c) => ({
-        kind: 'customer',
-        id: c.id,
-        label: c.name,
-        meta: [c.ontSerialNumber && `ONT ${c.ontSerialNumber}`, c.plan].filter(Boolean).join(' · '),
-        icon: UserRound,
-        selection: { type: 'customer', data: c },
-      }));
-    const ft = faults
-      .filter((f) => matches(f.id, q) || matches(f.title, q))
-      .slice(0, 3)
-      .map<SearchResult>((f) => ({
-        kind: 'fault',
-        id: f.id,
-        label: f.title,
-        meta: `${f.severity} · ${f.status}`,
-        icon: TriangleAlert,
-        selection: { type: 'fault', data: f },
-      }));
-    return [...eq, ...cb, ...cu, ...ft];
-  }, [query, equipments, cables, customers, faults]);
+    const byId = new Map(searchable.equipment.map((e) => [e.id, e]));
+    return found.hits.map((hit) => {
+      const record = hit.kind === 'equipment' ? byId.get(hit.id) : undefined;
+      return {
+        hit,
+        icon: record ? equipmentIcon(record.type) : KIND_ICON[hit.kind],
+        meta: [hit.matched.field !== 'ID' && hit.matched.field !== 'Name' ? `${hit.matched.field}: ${hit.matched.value}` : null, hit.detail].filter(Boolean).join(' · '),
+      };
+    });
+  }, [found, searchable.equipment]);
 
   useEffect(() => setActiveIndex(0), [query]);
 
@@ -226,11 +234,69 @@ export const TopNavBar: React.FC = () => {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  const selectResult = (r: SearchResult) => {
-    showOnMap(r.selection);
+  const closeSearch = () => {
+    useSearchStore.getState().remember(ownerId, query);
     setQuery('');
     setOpen(false);
     inputRef.current?.blur();
+  };
+
+  /** Opens one hit: its record in the inspector and on the map. A fibre opens its cable, a port its box. */
+  const selectResult = (r: SearchResult) => {
+    const { hit } = r;
+    const data = getNetworkSnapshot();
+    const index = recordIndex(data);
+    const parsed = parseKey(searchHitKey(hit));
+    let record = parsed ? index.get(parsed.collection, parsed.id) : undefined;
+    let collection = parsed?.collection;
+    if (collection === 'splitters' && record) {
+      const box = index.get('equipment', (record as { id: string; terminalBoxId?: string }).terminalBoxId ?? '');
+      if (box) {
+        collection = 'equipment';
+        record = box;
+      }
+    } else if (collection === 'onts') {
+      const customer = data.customers.find((c) => c.ontId === hit.id);
+      if (customer) {
+        collection = 'customers';
+        record = customer;
+      }
+    }
+    const selection = collection && record ? selectionFor(collection, record) : null;
+    if (selection) {
+      showOnMap(selection);
+      // A fibre: the cable's cores show below the map.
+      if (hit.kind === 'core') useUiStore.getState().setPanelOpen('bottom', true);
+    } else if (parsed && record) {
+      useSelectionStore.getState().setKeys([searchHitKey(hit)], 'replace');
+      openView('map');
+      zoomToKeys([searchHitKey(hit)]);
+    } else {
+      showToast('info', 'No place to show', `${hit.label} has no record on the map to open.`);
+    }
+    closeSearch();
+  };
+
+  /** Phase 16: every hit chosen together, shown on the map and in the attribute table. */
+  const showAllResults = () => {
+    const all: SearchHit[] = [];
+    for (let offset = 0; offset < found.total; offset += SEARCH_MAX_LIMIT) {
+      all.push(...searchNetwork(searchable, query, { limit: SEARCH_MAX_LIMIT, offset }).hits);
+    }
+    const keys = [...new Set(all.map(searchHitKey))];
+    const selection = useSelectionStore.getState();
+    selection.setKeys(keys, 'replace');
+    openView('map');
+    zoomToKeys(keys);
+    const top = [...countByCollection(keys).entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    selection.openTable({ onlySelected: true, ...(top ? { layerId: layerForCollection(top).id } : {}) });
+    closeSearch();
+  };
+
+  const openFilterBuilder = () => {
+    openView('map');
+    useSelectionStore.getState().openTable({ filters: true, onlySelected: false });
+    setOpen(false);
   };
 
   const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -266,9 +332,10 @@ export const TopNavBar: React.FC = () => {
 
   const activeFaultsCount = faults.filter((f) => isFaultOpen(f) && !f.isTest).length;
   const view = VIEW_META[activeView];
-  const showDropdown = open && query.trim().length > 0;
+  const typing = query.trim().length > 0;
+  const showDropdown = open && (typing || recent.length > 0);
 
-  let lastKind: ResultKind | null = null;
+  let lastKind: SearchKind | null = null;
 
   return (
     <header className="ui-topbar relative z-[1100] flex h-12 shrink-0 items-center gap-2 border-b border-slate-950 bg-slate-900 pl-1 pr-1 text-slate-300 md:gap-3 md:pl-3 md:pr-2">
@@ -306,6 +373,8 @@ export const TopNavBar: React.FC = () => {
         </div>
       </div>
 
+      <MapModeSwitch />
+
       {/* Global search */}
       <div ref={searchBoxRef} className="relative mx-auto w-full max-w-xl min-w-0 flex-1">
         <div
@@ -334,7 +403,7 @@ export const TopNavBar: React.FC = () => {
             placeholder={
               uiMode === 'simple'
                 ? 'Search boxes, cables, customers…'
-                : 'Search equipment, cables, customers, ONT serial or IP…'
+                : 'Search names, ids, serial, model, tag, pole no., cable/fibre, port…'
             }
             className={cn(
               'h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none',
@@ -371,18 +440,48 @@ export const TopNavBar: React.FC = () => {
             role="listbox"
             className="animate-pop-in absolute left-0 right-0 top-full mt-1.5 max-h-[70vh] overflow-y-auto rounded-xl border border-slate-200/80 bg-white py-1 text-slate-700 shadow-[var(--shadow-overlay)]"
           >
-            {results.length === 0 ? (
+            {typing && <AreaSearchNote query={deferredQuery} />}
+            {!typing ? (
+              <>
+                <MenuLabel>Recent searches (this device)</MenuLabel>
+                {recent.map((r) => (
+                  <button
+                    key={r.at}
+                    type="button"
+                    onClick={() => {
+                      setQuery(r.query);
+                      inputRef.current?.focus();
+                    }}
+                    className="flex min-h-[44px] w-full items-center gap-3 px-3 text-left text-[13px] text-slate-700 hover:bg-slate-100 md:min-h-8"
+                  >
+                    <Clock size={14} className="shrink-0 text-slate-400" />
+                    <span className="truncate">{r.query}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => useSearchStore.getState().forgetRecent(ownerId)}
+                  className="mt-1 flex min-h-[44px] w-full items-center border-t border-slate-100 px-3 text-left text-[12px] text-slate-500 hover:text-slate-800 md:min-h-8"
+                >
+                  Forget recent searches
+                </button>
+              </>
+            ) : results.length === 0 ? (
               <div className="px-4 py-6 text-center text-[13px] text-slate-500">
                 No results for <span className="font-medium text-slate-800">"{query.trim()}"</span>
+                <button type="button" onClick={openFilterBuilder} className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 font-medium text-blue-700">
+                  <Filter size={14} /> Use the filter builder instead
+                </button>
               </div>
             ) : (
               results.map((r, i) => {
-                const header = r.kind !== lastKind ? KIND_LABEL[r.kind] : null;
-                lastKind = r.kind;
+                const header = r.hit.kind !== lastKind ? SEARCH_KIND_LABELS[r.hit.kind] : null;
+                lastKind = r.hit.kind;
                 const Icon = r.icon;
                 const active = i === activeIndex;
+                const record = r.hit.kind === 'equipment' ? searchable.equipment.find((e) => e.id === r.hit.id) : undefined;
                 return (
-                  <React.Fragment key={`${r.kind}-${r.id}`}>
+                  <React.Fragment key={`${r.hit.kind}-${r.hit.id}-${r.hit.part ?? ''}`}>
                     {header && <MenuLabel>{header}</MenuLabel>}
                     <button
                       type="button"
@@ -390,27 +489,26 @@ export const TopNavBar: React.FC = () => {
                       aria-selected={active}
                       onMouseEnter={() => setActiveIndex(i)}
                       onClick={() => selectResult(r)}
-                      className={cn('flex w-full items-center gap-3 px-3 py-1.5 text-left', active && 'bg-slate-100')}
+                      className={cn('flex min-h-[48px] w-full items-center gap-3 px-3 py-1.5 text-left md:min-h-0', active && 'bg-slate-100')}
                     >
                       <span
                         className={cn(
                           'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border',
-                          r.kind === 'fault'
+                          r.hit.kind === 'fault'
                             ? 'border-red-200 bg-red-50 text-red-600'
                             : 'border-slate-200 bg-slate-50 text-slate-500',
                         )}
-                        style={r.color ? { color: r.color } : undefined}
                       >
-                        {r.selection?.type === 'equipment' ? (
-                          <EquipmentIllustration type={r.selection.data.type} size={22} />
+                        {record ? (
+                          <EquipmentIllustration type={record.type} size={22} />
                         ) : (
                           <Icon size={15} strokeWidth={1.9} />
                         )}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
-                          <span className="truncate text-[13px] font-medium text-slate-900">{r.label}</span>
-                          <span className="shrink-0 font-mono text-[11px] text-slate-400">{r.id}</span>
+                          <span className="truncate text-[13px] font-medium text-slate-900">{r.hit.label}</span>
+                          <span className="shrink-0 font-mono text-[11px] text-slate-400">{r.hit.id}</span>
                         </span>
                         {r.meta && <span className="block truncate text-xs text-slate-500">{r.meta}</span>}
                       </span>
@@ -420,11 +518,29 @@ export const TopNavBar: React.FC = () => {
                 );
               })
             )}
-            {results.length > 0 && (
-              <div className="mt-1 flex items-center gap-3 border-t border-slate-100 px-3 pb-0.5 pt-1.5 text-[11px] text-slate-400">
-                <span>↑↓ to navigate</span>
-                <span>Enter to open on map</span>
-                <span>Esc to close</span>
+            {typing && results.length > 0 && (
+              <div className="mt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={showAllResults}
+                  data-testid="search-show-all"
+                  className="flex min-h-[48px] w-full items-center gap-2 px-3 text-left text-[13px] font-semibold text-blue-700 hover:bg-blue-50 md:min-h-9"
+                >
+                  <Layers size={14} /> Show all {found.total.toLocaleString()} on the map and in the table
+                </button>
+                <button
+                  type="button"
+                  onClick={openFilterBuilder}
+                  className="flex min-h-[48px] w-full items-center gap-2 px-3 text-left text-[13px] text-slate-600 hover:bg-slate-100 md:min-h-9"
+                >
+                  <Filter size={14} /> Filter builder (field, is, value)…
+                </button>
+                <div className="hidden items-center gap-3 px-3 pb-0.5 pt-1 text-[11px] text-slate-400 md:flex">
+                  <span>{found.total > results.length ? `Best ${results.length} of ${found.total.toLocaleString()}` : `${found.total} found`}</span>
+                  <span>↑↓ to navigate</span>
+                  <span>Enter to open on map</span>
+                  <span>Esc to close</span>
+                </div>
               </div>
             )}
           </div>
@@ -618,7 +734,7 @@ export const TopNavBar: React.FC = () => {
               />
               <MenuItem
                 icon={Upload}
-                label="Import KML or KMZ…"
+                label="Import or export a map file…"
                 hint="preview first"
                 onClick={() => {
                   useUiStore.getState().setModalOpen('kmlImport', true);

@@ -31,3 +31,39 @@ describe('polylineLengthMeters', () => {
     ).toBeCloseTo(leg * 2, 6);
   });
 });
+
+describe('area, bounds and screen scale (Phase 1)', () => {
+  it('works out the area of a closed ring, whichever way it is drawn', async () => {
+    const { polygonAreaSqMeters } = await import('../src/domain/geo');
+    // About 111 m x 111 m near the equator: close to 12 300 m².
+    const square: [number, number][] = [
+      [0, 0],
+      [0, 0.001],
+      [0.001, 0.001],
+      [0.001, 0],
+    ];
+    const area = polygonAreaSqMeters(square);
+    expect(area).toBeGreaterThan(12_000);
+    expect(area).toBeLessThan(12_600);
+    expect(polygonAreaSqMeters([...square].reverse())).toBeCloseTo(area, 6);
+    expect(polygonAreaSqMeters(square.slice(0, 2))).toBe(0);
+  });
+
+  it('gives the box around points, or null for none', async () => {
+    const { boundsOf } = await import('../src/domain/geo');
+    expect(boundsOf([])).toBeNull();
+    expect(
+      boundsOf([
+        [12.9, 77.6],
+        [12.95, 77.5],
+        [12.92, 77.7],
+      ]),
+    ).toEqual({ south: 12.9, west: 77.5, north: 12.95, east: 77.7 });
+  });
+
+  it('halves the ground per pixel with each zoom level', async () => {
+    const { metersPerPixel } = await import('../src/domain/geo');
+    expect(metersPerPixel(0, 0)).toBeCloseTo(156_543, 0);
+    expect(metersPerPixel(12.97, 17) / metersPerPixel(12.97, 18)).toBeCloseTo(2, 9);
+  });
+});

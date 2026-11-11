@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Camera, GitMerge, HardHat, Kanban, List, PlusCircle, Search } from 'lucide-react';
 
-import { fieldFollowUps, resolveFieldSettings, WORK_ORDER_STATUS_LABELS, type WorkOrder } from '@fibergis/shared';
+import { fieldFollowUps, isAwaitingReview, resolveFieldSettings, WORK_ORDER_STATUS_LABELS, type WorkOrder } from '@fibergis/shared';
 
 import { addWorkOrder, updateWorkOrderStatus } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { FieldReviewPanel } from '../field-review/FieldReviewPanel';
 import { FieldFollowUpPanel } from './FieldFollowUpPanel';
 import { SyncConflictsPanel } from './SyncConflictsPanel';
 
@@ -15,8 +16,13 @@ export const OperationsHubView: React.FC = () => {
   const equipment = useNetworkStore((s) => s.equipment);
   const faults = useNetworkStore((s) => s.faults);
   const settings = useNetworkStore((s) => s.settings);
+  // Phase 19: captures waiting for review count too (each item once).
   const fieldCount = useMemo(
-    () => fieldFollowUps({ equipment, faults }, resolveFieldSettings(settings).gps).length,
+    () =>
+      new Set([
+        ...fieldFollowUps({ equipment, faults }, resolveFieldSettings(settings).gps).map((i) => `${i.collection}/${i.id}`),
+        ...equipment.filter(isAwaitingReview).map((e) => `equipment/${e.id}`),
+      ]).size,
     [equipment, faults, settings],
   );
   const showToast = useToastStore((s) => s.show);
@@ -232,7 +238,10 @@ export const OperationsHubView: React.FC = () => {
       {/* Main Workspace (Kanban or List) */}
       <div className="flex-1 overflow-auto p-4">
         {viewMode === 'field' ? (
-          <FieldFollowUpPanel />
+          <div className="space-y-6">
+            <FieldReviewPanel />
+            <FieldFollowUpPanel />
+          </div>
         ) : viewMode === 'conflicts' ? (
           <SyncConflictsPanel />
         ) : viewMode === 'kanban' ? (

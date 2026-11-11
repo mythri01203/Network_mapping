@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { EquipmentCategory, EquipmentType } from '@fibergis/shared';
+import type { Equipment, EquipmentCategory, EquipmentType } from '@fibergis/shared';
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
@@ -30,13 +30,14 @@ import { useMapStore } from '../../stores/mapStore';
 import { addCatalogComponent } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
+import { placementTemplate } from './placement';
 
 export interface ToolboxItem {
   id: string;
   name: string;
   type: EquipmentType;
   category: EquipmentCategory;
-  defaultPorts: number;
+  defaultPorts?: number;
   description: string;
   icon: React.ElementType;
   iconBg: string;
@@ -215,6 +216,12 @@ export const EquipmentToolbox: React.FC = () => {
   const [customDescription, setCustomDescription] = useState('');
   const [customColor, setCustomColor] = useState('bg-indigo-600');
 
+  // A stored catalogue entry places as itself (a product model links); a built-in item gives its kind and ports.
+  const templateFor = (item: ToolboxItem): Partial<Equipment> => {
+    const stored = catalog.find((c) => c.id === item.id);
+    return placementTemplate(stored ?? { id: item.id, type: item.type, category: item.category, defaultPorts: item.defaultPorts });
+  };
+
   // Merge default toolbox items with custom components from database
   const allItems = useMemo<ToolboxItem[]>(() => {
     const customItems: ToolboxItem[] = catalog.map((c) => ({
@@ -222,7 +229,7 @@ export const EquipmentToolbox: React.FC = () => {
       name: c.name,
       type: (c.type as EquipmentType) || 'Outdoor Splitter',
       category: (c.category as EquipmentCategory) || 'Fiber Distribution',
-      defaultPorts: c.defaultPorts ?? 8,
+      defaultPorts: c.defaultPorts,
       description: c.description || 'Custom network equipment',
       icon: Sparkles,
       iconBg: c.iconBg || 'bg-indigo-600',
@@ -247,11 +254,7 @@ export const EquipmentToolbox: React.FC = () => {
 
   const handleDragStart = (e: React.DragEvent, item: ToolboxItem) => {
     e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, item.type);
-    const isPole = item.type.includes('Pole');
-    e.dataTransfer.setData(
-      'text/plain',
-      JSON.stringify({ type: item.type, ...(isPole ? {} : { name: item.name }), totalPorts: item.defaultPorts }),
-    );
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: item.type, ...templateFor(item) }));
     e.dataTransfer.effectAllowed = 'copy';
   };
 
@@ -259,13 +262,8 @@ export const EquipmentToolbox: React.FC = () => {
     setActiveTool('add_equipment');
     setEquipmentTypeToAdd(item.type);
     const isPole = item.type.includes('Pole');
-    // Poles leave out the name so each one gets the next number.
-    setEquipmentDraftTemplate({
-      ...(isPole ? {} : { name: item.name }),
-      totalPorts: item.defaultPorts,
-      category: item.category,
-      notes: item.description,
-    });
+    // Phase 2: no shared name (each item gets its own number) and no product text as notes.
+    setEquipmentDraftTemplate(templateFor(item));
     if (window.innerWidth < 768) setIsOpen(false);
     showToast(
       'info',

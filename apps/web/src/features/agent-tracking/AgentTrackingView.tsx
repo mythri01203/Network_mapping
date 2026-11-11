@@ -7,6 +7,7 @@ import { type AgentTrip, agentTripTimeline, summarizeAgentTrip, type TrackedAsse
 import { downloadFile } from '../../lib/browser';
 import { readJson, writeJson } from '../../lib/storage';
 import { type GpsBlockReason, useAgentTrackingStore } from '../../stores/agentTrackingStore';
+import { useMayDo } from '../../stores/authStore';
 import { requestConfirm } from '../../stores/confirmStore';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
@@ -203,6 +204,8 @@ function DutyCard({ assets, agentNames }: { assets: readonly TrackedAsset[]; age
 }
 
 export const AgentTrackingView: React.FC = () => {
+  // Phase 23: saving a report to a file is the export right.
+  const mayExport = useMayDo('export');
   const { trips, equipment, customers, workOrders } = useNetworkStore(
     useShallow((s) => ({
       trips: s.agentTrips,
@@ -293,6 +296,7 @@ export const AgentTrackingView: React.FC = () => {
               <button
                 type="button"
                 disabled={visibleTrips.length === 0}
+                hidden={!mayExport}
                 onClick={() => downloadFile(buildAgentReportCsv(visibleTrips, assets), 'text/csv', `${exportName}.csv`)}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >

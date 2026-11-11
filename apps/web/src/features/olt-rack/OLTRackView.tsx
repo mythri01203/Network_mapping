@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GitFork, MapPin, Radio, Server } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { buildOltPonPorts } from '@fibergis/shared';
+import { buildOltPonPorts, ponCapacityText, ponPortPlace, ponPortUsage } from '@fibergis/shared';
 
 import { useOpenView } from '../../app/views';
 import { useMapStore } from '../../stores/mapStore';
@@ -10,11 +10,45 @@ import { traceNetworkPath } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { PON_TECHNOLOGY_SPECS } from '../inspector/ponTechnology';
+import { SitesRacksView } from './SitesRacksView';
+import { type RackScreenTab, takeRequestedTab } from './sitesTab';
+
+/**
+ * The OLT Rack screen. Phase 9: two parts, the OLT's PON ports and Sites and racks (site and rack
+ * records with a drawing of each rack). Sites and racks opens even when no OLT is on the map yet.
+ */
+export const OLTRackView: React.FC = () => {
+  const [tab, setTab] = useState<RackScreenTab>(() => takeRequestedTab() ?? 'ports');
+  const tabs: { id: RackScreenTab; label: string }[] = [
+    { id: 'ports', label: 'OLT PON ports' },
+    { id: 'sites', label: 'Sites and racks' },
+  ];
+  return (
+    <div className="flex h-full flex-1 flex-col overflow-hidden">
+      <div role="tablist" aria-label="OLT Rack" className="flex shrink-0 gap-1 border-b border-slate-800 bg-slate-950 px-3" data-testid="olt-rack-tabs">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            data-testid={`olt-rack-tab-${t.id}`}
+            onClick={() => setTab(t.id)}
+            className={`-mb-px min-h-12 border-b-2 px-3 text-[14px] font-semibold md:min-h-10 md:text-[13px] ${tab === t.id ? 'border-blue-400 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'ports' ? <PonPortsPanel /> : <SitesRacksView />}
+    </div>
+  );
+};
 
 /** The OLT's own PON ports as recorded. Nothing here is generated: blanks say "Not recorded". */
-export const OLTRackView: React.FC = () => {
-  const { equipments, cables, customers, splitters } = useNetworkStore(
-    useShallow((s) => ({ equipments: s.equipment, cables: s.cables, customers: s.customers, splitters: s.splitters })),
+const PonPortsPanel: React.FC = () => {
+  const { equipments, cables, customers, splitters, onts, services } = useNetworkStore(
+    useShallow((s) => ({ equipments: s.equipment, cables: s.cables, customers: s.customers, splitters: s.splitters, onts: s.onts, services: s.services })),
   );
   const flyToLocation = useMapStore((s) => s.flyTo);
   const setModalOpen = useUiStore((s) => s.setModalOpen);
@@ -38,11 +72,14 @@ export const OLTRackView: React.FC = () => {
     );
   }
 
+  // Phase 10: counts come from the customer, ONT and service records (disconnected customers are not counted).
+  const usageData = { equipment: [{ ...currentOlt, ponPorts: buildOltPonPorts(currentOlt) }], customers, onts, services };
   const ponPorts = buildOltPonPorts(currentOlt).map((pon) => {
     const feeder = pon.connectedFeederCableId ? cables.find((c) => c.id === pon.connectedFeederCableId) : undefined;
     const splitter = pon.connectedSplitterId ? splitters.find((s) => s.id === pon.connectedSplitterId) : undefined;
-    const subscribers = customers.filter((c) => c.oltId === currentOlt.id && c.ponPort === pon.id).length;
-    return { pon, feeder, splitter, subscribers };
+    const usage = ponPortUsage(usageData, currentOlt.id, pon.id);
+    const subscribers = usage?.customers.length ?? 0;
+    return { pon, feeder, splitter, subscribers, usage, place: ponPortPlace(currentOlt, pon.id) };
   });
   const selected = ponPorts.find((p) => p.pon.portNumber === selectedPonPort) ?? ponPorts[0];
   const technology = selected?.pon.technology ?? currentOlt.technology;
@@ -182,7 +219,11 @@ export const OLTRackView: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Optics class:</span>
-                    <span className="font-mono text-slate-200">Not recorded</span>
+                    <span className="font-mono text-slate-200">{selected.pon.opticsClass ?? 'Not recorded'}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-400">On card:</span>
+                    <span className="text-right font-mono text-slate-200">{selected.place?.text ?? 'Not recorded'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Splitter:</span>
@@ -205,9 +246,26 @@ export const OLTRackView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex justify-between">
-                  <span className="text-slate-400">Customers on this port:</span>
-                  <span className="font-bold text-white">{selected.subscribers}</span>
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-2" data-testid="olt-rack-usage">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Customers on this port:</span>
+                    <span className="font-bold text-white">{selected.subscribers}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ONTs:</span>
+                    <span className="font-bold text-white">{selected.usage?.ontCount ?? 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Services running:</span>
+                    <span className="font-bold text-white">{selected.usage?.services.length ?? 0}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-400">Capacity:</span>
+                    <span className={`text-right font-bold ${selected.usage?.overLimit ? 'text-rose-400' : 'text-white'}`}>
+                      {selected.usage ? ponCapacityText(selected.usage) : 'Not recorded'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Counted from the customer, ONT and service records.</p>
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 /** Top-level workspace views reachable from the sidebar. */
 export type MainView =
   | 'map'
+  | 'view3d'
   | 'topology'
   | 'olt_rack'
   | 'inventory'

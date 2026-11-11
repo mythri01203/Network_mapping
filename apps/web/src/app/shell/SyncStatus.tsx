@@ -1,8 +1,10 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { Cloud, CloudAlert, CloudOff, CloudUpload, Loader2, type LucideIcon, RefreshCw, Trash2 } from 'lucide-react';
+import { Cloud, CloudAlert, CloudOff, CloudUpload, History, Loader2, type LucideIcon, RefreshCw, Trash2 } from 'lucide-react';
 
 import { syncEngine } from '../../api/syncEngine';
 import { cn, MenuItem, MenuSeparator, Popover } from '../../components/ui';
+import { AreaLoadMenuItem, AreaLoadNotice } from '../../features/area-loading/AreaLoadNotice';
+import { SyncHistoryModal } from '../../features/sync-history/SyncHistoryModal';
 import { requestConfirm } from '../../stores/confirmStore';
 import { type RefusedRecord, type SyncPhase, useSyncStore } from '../../stores/syncStore';
 
@@ -113,8 +115,13 @@ export function SyncStatus() {
   const { phase, revision, pendingCount, lastSyncedAt, error, refused, cacheWriteFailed } = useSyncStore();
   const meta = cacheWriteFailed ? CACHE_FAILED : PHASES[phase];
   const Icon = meta.icon;
+  // Phase 19: this device's own log of what it sent and what came back.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
+    <>
+    {historyOpen && <SyncHistoryModal onClose={() => setHistoryOpen(false)} />}
+    <AreaLoadNotice />
     <Popover
       align="end"
       panelClassName="w-72"
@@ -147,9 +154,11 @@ export function SyncStatus() {
           error={error}
           refused={refused}
           close={close}
+          onHistory={() => setHistoryOpen(true)}
         />
       )}
     </Popover>
+    </>
   );
 }
 
@@ -162,9 +171,10 @@ interface SyncDetailsProps {
   error: string | null;
   refused: RefusedRecord[];
   close: () => void;
+  onHistory: () => void;
 }
 
-function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error, refused, close }: SyncDetailsProps) {
+function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error, refused, close, onHistory }: SyncDetailsProps) {
   const now = useNow(10_000);
   const canRetry = phase === 'offline' || phase === 'error';
 
@@ -198,6 +208,15 @@ function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error,
           <Detail label="Server revision" value={revision ?? '—'} />
         </div>
       </div>
+      <AreaLoadMenuItem close={close} />
+      <MenuItem
+        icon={History}
+        label="Sync history on this device"
+        onClick={() => {
+          close();
+          onHistory();
+        }}
+      />
       {canRetry && (
         <MenuItem
           icon={RefreshCw}
@@ -232,3 +251,6 @@ function SyncDetails({ phase, meta, revision, pendingCount, lastSyncedAt, error,
     </>
   );
 }
+
+// Phase 24b: the top bar's search list shows it while part of the network is loaded.
+export { AreaSearchNote } from '../../features/area-loading/AreaLoadNotice';

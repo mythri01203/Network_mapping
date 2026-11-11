@@ -1,6 +1,7 @@
 import type { ChangeSet } from '../model/api';
 import type { NetworkSnapshot } from '../model/collections';
-import type { Building, Customer, Equipment, Ont, Service } from '../model/types';
+import type { Building, Customer, Equipment, JointClosure, Ont, Service } from '../model/types';
+import { type CustomerPathFinding, newCustomerPathDisagreements } from './customerPath';
 import type { FiberProblem } from './fiberRules';
 import { buildOltPonPorts } from './oltConfig';
 
@@ -12,7 +13,10 @@ import { buildOltPonPorts } from './oltConfig';
  */
 
 export type ConnectionData = Pick<NetworkSnapshot, 'equipment' | 'cables' | 'splitters' | 'customers'> &
-  Partial<Pick<NetworkSnapshot, 'onts' | 'services' | 'buildings'>>;
+  Partial<Pick<NetworkSnapshot, 'onts' | 'services' | 'buildings'>> & {
+    /** Phase 12: the splices, so a customer's path can be followed through closures. Without them a spliced path is not decided (never guessed). */
+    closures?: readonly JointClosure[];
+  };
 
 export const isActiveCustomer = (c: Pick<Customer, 'status'>): boolean => c.status !== 'Disconnected';
 export const isLiveOnt = (o: Pick<Ont, 'status'>): boolean => o.status !== 'removed';
@@ -233,7 +237,34 @@ export function changeSetTouchesConnections(changes: ChangeSet): boolean {
     (name) => (changes.upserts?.[name]?.length ?? 0) > 0 || (changes.deletes?.[name]?.length ?? 0) > 0,
   );
   const deletesParents = (['equipment', 'cables', 'splitters'] as const).some((name) => (changes.deletes?.[name]?.length ?? 0) > 0);
-  return writes || deletesParents;
+  // Phase 12: a splitter output names its customer, which must agree with the fibre links.
+  const writesOutputs = (changes.upserts?.splitters?.length ?? 0) > 0;
+  return writes || deletesParents || writesOutputs;
+}
+
+/** Phase 12: a customer path or splitter owner that disagrees with the fibre links, as a refusal. */
+export const customerPathProblem = (f: CustomerPathFinding): FiberProblem => ({
+  severity: 'error',
+  code: f.kind === 'customer_field' ? 'customer_path_mismatch' : 'splitter_owner_mismatch',
+  key: f.key,
+  message: `Broken data: ${f.message} Fix the links first, or use "Check customer paths" to take the fix from the links.`,
+  refs: [f.customerId, ...(f.splitterId ? [f.splitterId] : [])],
+});
+
+/**
+ * Phase 12: the customers and splitters this write stores whose path now disagrees with the fibre
+ * links, and did not before. A disagreement already stored is not blamed (it is listed for a person
+ * to fix), and a field the links do not decide is never checked.
+ */
+export function customerPathChangeErrors(before: ConnectionData, after: ConnectionData, written: { customerIds: ReadonlySet<string>; splitterIds: ReadonlySet<string> }): FiberProblem[] {
+  const fiber = (d: ConnectionData) => ({ equipment: d.equipment, cables: d.cables, splitters: d.splitters, closures: d.closures ?? [], customers: d.customers });
+  return newCustomerPathDisagreements(fiber(before), fiber(after), written).map(customerPathProblem);
+}
+
+/** Records in `after` that are not the same object as in `before`: what a browser command wrote. */
+export function writtenIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): Set<string> {
+  const old = new Map(before.map((r) => [r.id, r]));
+  return new Set(after.filter((r) => old.get(r.id) !== r).map((r) => r.id));
 }
 
 /** Errors a change set would add to the stored connection records. Used by the server before it writes. */
@@ -245,7 +276,20 @@ export function checkChangeSetConnections(current: ConnectionData, changes: Chan
     for (const record of (changes.upserts?.[name] ?? []) as { id: string }[]) byId.set(record.id, record);
     after[name] = [...byId.values()];
   }
-  return newConnectionProblems(current, after as unknown as ConnectionData).errors;
+  let closures = current.closures;
+  if (closures && (changes.upserts?.closures?.length || changes.deletes?.closures?.length)) {
+    const byId = new Map(closures.map((c) => [c.id, c]));
+    for (const id of changes.deletes?.closures ?? []) byId.delete(id);
+    for (const record of changes.upserts?.closures ?? []) byId.set(record.id, record);
+    closures = [...byId.values()];
+  }
+  const next = { ...(after as unknown as ConnectionData), ...(closures ? { closures } : {}) };
+  const errors = newConnectionProblems(current, next).errors;
+  const written = {
+    customerIds: new Set((changes.upserts?.customers ?? []).map((c) => c.id)),
+    splitterIds: new Set((changes.upserts?.splitters ?? []).map((s) => s.id)),
+  };
+  return [...errors, ...customerPathChangeErrors(current, next, written)];
 }
 
 /**

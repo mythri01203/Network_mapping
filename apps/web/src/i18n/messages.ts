@@ -85,6 +85,8 @@ export const MESSAGES = {
   'tag.known': { en: 'This tag is already saved: {name}', te: d('ఈ ట్యాగ్ ఇప్పటికే సేవ్ అయింది: {name}'), kn: d('ಈ ಟ್ಯಾಗ್ ಈಗಾಗಲೇ ಉಳಿಸಲಾಗಿದೆ: {name}') },
   'tag.loading': { en: 'Starting scanner', te: d('స్కానర్ మొదలవుతోంది'), kn: d('ಸ್ಕ್ಯಾನರ್ ಆರಂಭವಾಗುತ್ತಿದೆ') },
   'tag.failed': { en: 'The scanner did not start. Tap No tag.', te: d('స్కానర్ మొదలుకాలేదు. ట్యాగ్ లేదు నొక్కండి.'), kn: d('ಸ್ಕ್ಯಾನರ್ ಆರಂಭವಾಗಲಿಲ್ಲ. ಟ್ಯಾಗ್ ಇಲ್ಲ ಒತ್ತಿರಿ.') },
+  // Phase 19: barcodes are read too.
+  'tag.barcodeHint': { en: 'QR code or barcode, both work.', te: d('క్యూఆర్ కోడ్ లేదా బార్‌కోడ్, ఏదైనా పనిచేస్తుంది.'), kn: d('ಕ್ಯೂಆರ್ ಕೋಡ್ ಅಥವಾ ಬಾರ್‌ಕೋಡ್, ಯಾವುದಾದರೂ ಸರಿ.') },
 
   // Picture questions
   'q.owner': { en: 'Whose pole is it?', te: d('ఇది ఎవరి పోల్?'), kn: d('ಇದು ಯಾರ ಕಂಬ?') },
@@ -140,6 +142,12 @@ export const MESSAGES = {
   'saved.finished': { en: 'Finished', te: d('అయిపోయింది'), kn: d('ಮುಗಿಯಿತು') },
   'saved.undone': { en: 'Removed. Nothing else changed.', te: d('తొలగించబడింది. ఇంకేమీ మారలేదు.'), kn: d('ತೆಗೆದುಹಾಕಲಾಗಿದೆ. ಬೇರೆ ಏನೂ ಬದಲಾಗಿಲ್ಲ.') },
   'saved.undoHint': { en: 'Made a mistake? Tap Undo.', te: d('తప్పు జరిగిందా? రద్దు చేయండి నొక్కండి.'), kn: d('ತಪ್ಪಾಯಿತೇ? ರದ್ದು ಮಾಡಿ ಒತ್ತಿರಿ.') },
+  // Phase 19: poles, boxes and drops wait for the office before they join the network map.
+  'saved.review': {
+    en: 'The office will check it, then it goes on the network map.',
+    te: d('ఆఫీస్ సరిచూసిన తర్వాత ఇది నెట్‌వర్క్ మ్యాప్‌లోకి వెళ్తుంది.'),
+    kn: d('ಆಫೀಸ್ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಇದು ನೆಟ್‌ವರ್ಕ್ ನಕ್ಷೆಗೆ ಹೋಗುತ್ತದೆ.'),
+  },
   'saved.failed': {
     en: 'Not saved on phone. Tap Try again. If it fails again, call your supervisor.',
     te: d('ఫోన్‌లో సేవ్ కాలేదు. మళ్ళీ ప్రయత్నించండి నొక్కండి. మళ్ళీ విఫలమైతే సూపర్‌వైజర్‌కు కాల్ చేయండి.'),
@@ -208,6 +216,25 @@ export const MESSAGES = {
     en: 'Phone storage is not working. Work cannot be saved. Call your supervisor.',
     te: d('ఫోన్ స్టోరేజ్ పనిచేయడం లేదు. పని సేవ్ కాదు. సూపర్‌వైజర్‌కు కాల్ చేయండి.'),
     kn: d('ಫೋನ್ ಸ್ಟೋರೇಜ್ ಕೆಲಸ ಮಾಡುತ್ತಿಲ್ಲ. ಕೆಲಸ ಉಳಿಯುವುದಿಲ್ಲ. ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ.'),
+  },
+
+  // Sync history (Phase 19): what this phone sent and what came back
+  'home.history': { en: 'What was sent', te: d('ఏమి పంపబడింది'), kn: d('ಏನು ಕಳುಹಿಸಲಾಗಿದೆ') },
+  'history.title': { en: 'What this phone sent', te: d('ఈ ఫోన్ ఏమి పంపింది'), kn: d('ಈ ಫೋನ್ ಏನು ಕಳುಹಿಸಿದೆ') },
+  'history.empty': { en: 'Nothing sent yet.', te: d('ఇంకా ఏమీ పంపలేదు.'), kn: d('ಇನ್ನೂ ಏನೂ ಕಳುಹಿಸಿಲ್ಲ.') },
+  'history.sent': { en: 'Sent', te: d('పంపబడింది'), kn: d('ಕಳುಹಿಸಲಾಗಿದೆ') },
+  'history.refused': { en: 'Not accepted', te: d('అంగీకరించలేదు'), kn: d('ಸ್ವೀಕರಿಸಲಿಲ್ಲ') },
+  'history.conflict': { en: 'Someone else changed it too', te: d('ఇంకెవరో కూడా మార్చారు'), kn: d('ಬೇರೆಯವರೂ ಬದಲಾಯಿಸಿದ್ದಾರೆ') },
+  'history.photo': { en: 'Photo', te: d('ఫోటో'), kn: d('ಫೋಟೋ') },
+  'history.items': {
+    en: '{count, plural, one {# item} other {# items}}',
+    te: d('{count, plural, one {# అంశం} other {# అంశాలు}}'),
+    kn: d('{count, plural, one {# ವಸ್ತು} other {# ವಸ್ತುಗಳು}}'),
+  },
+  'history.keptOnPhone': {
+    en: 'It stays on the phone. Call your supervisor.',
+    te: d('ఇది ఫోన్‌లోనే ఉంటుంది. సూపర్‌వైజర్‌కు కాల్ చేయండి.'),
+    kn: d('ಇದು ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ. ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ.'),
   },
 
   // Jobs (Phase 8)
@@ -288,6 +315,27 @@ export const MESSAGES = {
   'login.back': { en: 'Back', te: d('వెనక్కి'), kn: d('ಹಿಂದೆ') },
   'login.next': { en: 'Next', te: d('తర్వాత'), kn: d('ಮುಂದೆ') },
   'login.checking': { en: 'Checking', te: d('పరిశీలిస్తోంది'), kn: d('ಪರಿಶೀಲಿಸುತ್ತಿದೆ') },
+  // Learning assistant (Stage 2): welcome lesson and voice player.
+  'learn.welcomeTitle': { en: "Welcome to FiberGIS – Let's learn together!", te: d('ఫైబర్ జీఐఎస్‌కు స్వాగతం – కలిసి నేర్చుకుందాం!'), kn: d('ಫೈಬರ್ ಜಿಐಎಸ್‌ಗೆ ಸ್ವಾಗತ – ಒಟ್ಟಿಗೆ ಕಲಿಯೋಣ!') },
+  'learn.chooseLanguage': { en: 'Choose your language', te: d('మీ భాషను ఎంచుకోండి'), kn: d('ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ') },
+  'learn.start': { en: 'Start learning', te: d('నేర్చుకోవడం మొదలుపెట్టండి'), kn: d('ಕಲಿಯಲು ಶುರು ಮಾಡಿ') },
+  'learn.skip': { en: 'Skip', te: d('వదిలేయండి'), kn: d('ಬಿಟ್ಟುಬಿಡಿ') },
+  'learn.next': { en: 'Next', te: d('తర్వాత'), kn: d('ಮುಂದೆ') },
+  'learn.back': { en: 'Back', te: d('వెనక్కి'), kn: d('ಹಿಂದೆ') },
+  'learn.finish': { en: 'Finish', te: d('పూర్తి'), kn: d('ಮುಗಿಸಿ') },
+  'learn.play': { en: 'Play', te: d('వినండి'), kn: d('ಕೇಳಿ') },
+  'learn.pause': { en: 'Pause', te: d('ఆపండి'), kn: d('ನಿಲ್ಲಿಸಿ') },
+  'learn.resume': { en: 'Resume', te: d('కొనసాగించండి'), kn: d('ಮುಂದುವರಿಸಿ') },
+  'learn.repeat': { en: 'Repeat', te: d('మళ్లీ వినండి'), kn: d('ಮತ್ತೆ ಕೇಳಿ') },
+  'learn.stop': { en: 'Stop', te: d('ముగించండి'), kn: d('ಮುಗಿಸಿ') },
+  'learn.noVoice': { en: 'Voice is not ready in this language yet. The words are shown below.', te: d('ఈ భాషలో వాయిస్ ఇంకా సిద్ధం కాలేదు. మాటలు కింద ఉన్నాయి.'), kn: d('ಈ ಭಾಷೆಯಲ್ಲಿ ಧ್ವನಿ ಇನ್ನೂ ಸಿದ್ಧವಿಲ್ಲ. ಪದಗಳು ಕೆಳಗೆ ಇವೆ.') },
+  'learn.voiceDraft': { en: 'Draft voice: not checked yet. Only the administrator hears this.', te: d('డ్రాఫ్ట్ వాయిస్: ఇంకా తనిఖీ కాలేదు. అడ్మిన్‌కు మాత్రమే వినిపిస్తుంది.'), kn: d('ಡ್ರಾಫ್ಟ್ ಧ್ವನಿ: ಇನ್ನೂ ಪರಿಶೀಲಿಸಿಲ್ಲ. ಆಡ್ಮಿನ್‌ಗೆ ಮಾತ್ರ ಕೇಳಿಸುತ್ತದೆ.') },
+  'learn.voiceError': { en: 'The voice could not play. Check the connection and tap Play again.', te: d('వాయిస్ ప్లే కాలేదు. కనెక్షన్ చూసి మళ్లీ వినండి నొక్కండి.'), kn: d('ಧ್ವನಿ ಪ್ಲೇ ಆಗಲಿಲ್ಲ. ಸಂಪರ್ಕ ನೋಡಿ ಮತ್ತೆ ಕೇಳಿ ಒತ್ತಿ.') },
+  'learn.offline': { en: 'No connection: words and pictures only.', te: d('కనెక్షన్ లేదు: మాటలు, బొమ్మలు మాత్రమే.'), kn: d('ಸಂಪರ್ಕ ಇಲ್ಲ: ಪದಗಳು ಮತ್ತು ಚಿತ್ರಗಳು ಮಾತ್ರ.') },
+  'learn.step': { en: 'Step {n} of {total}', te: d('{total}లో {n}వ దశ'), kn: d('{total}ರಲ್ಲಿ {n}ನೇ ಹಂತ') },
+  'learn.example': { en: 'Example picture, not your network', te: d('ఉదాహరణ బొమ్మ, మీ నెట్‌వర్క్ కాదు'), kn: d('ಉದಾಹರಣೆ ಚಿತ್ರ, ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ಅಲ್ಲ') },
+  'learn.open': { en: 'Learn FiberGIS', te: d('ఫైబర్ జీఐఎస్ నేర్చుకోండి'), kn: d('ಫೈಬರ್ ಜಿಐಎಸ್ ಕಲಿಯಿರಿ') },
+  'learn.draftWords': { en: 'Words not yet checked by a native speaker', te: d('మాటలు ఇంకా తెలుగు మాట్లాడేవారు తనిఖీ చేయలేదు'), kn: d('ಪದಗಳನ್ನು ಇನ್ನೂ ಕನ್ನಡ ಮಾತನಾಡುವವರು ಪರಿಶೀಲಿಸಿಲ್ಲ') },
   'jobs.noPhotoHint': {
     en: 'Write why no photo is possible. The office will see it.',
     te: d('ఫోటో ఎందుకు తీయలేరో రాయండి. ఆఫీసు చూస్తుంది.'),

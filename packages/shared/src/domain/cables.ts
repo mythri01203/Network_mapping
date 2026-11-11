@@ -21,6 +21,31 @@ import { isoDate } from './time';
 
 export type CableDraft = Partial<Cable> & { name: string; type: CableType; coordinates: [number, number][] };
 
+const SINGLE_MODE_STANDARDS = new Set(['G.652D', 'G.657A1', 'G.657A2', 'G.657B3', 'G.655', 'G.654E']);
+const MULTI_MODE_STANDARDS = new Set(['OM1', 'OM2', 'OM3', 'OM4', 'OM5']);
+
+/**
+ * Phase 5: why the recorded build of a cable cannot be right, or null. Only real contradictions: a
+ * G.65x fibre is single-mode and an OM fibre is multimode by definition, and a coaxial cable has no fibre.
+ */
+export function cableBuildProblem(cable: Partial<Pick<Cable, 'fiberStandard' | 'fiberMode' | 'cableCategory' | 'type'>>): string | null {
+  const coax = cable.cableCategory === 'Coaxial' || cable.type === 'Coaxial Cable';
+  if (coax && (cable.fiberStandard || cable.fiberMode)) return 'A coaxial cable has no fibre, so it has no fibre standard or mode. Leave them not recorded.';
+  if (cable.fiberStandard && cable.fiberMode) {
+    if (SINGLE_MODE_STANDARDS.has(cable.fiberStandard) && cable.fiberMode === 'multi_mode') return `${cable.fiberStandard} fibre is single-mode. Check the drum sheet: either the standard or the mode is wrong.`;
+    if (MULTI_MODE_STANDARDS.has(cable.fiberStandard) && cable.fiberMode === 'single_mode') return `${cable.fiberStandard} fibre is multimode. Check the drum sheet: either the standard or the mode is wrong.`;
+  }
+  return null;
+}
+
+/** The mode a fibre standard implies, shown as a hint; never stored unless the person chooses it. */
+export function modeForStandard(standard: string | undefined): 'single_mode' | 'multi_mode' | undefined {
+  if (!standard) return undefined;
+  if (SINGLE_MODE_STANDARDS.has(standard)) return 'single_mode';
+  if (MULTI_MODE_STANDARDS.has(standard)) return 'multi_mode';
+  return undefined;
+}
+
 const coreLabel = (coreNumber: number) => coreNumber.toString().padStart(2, '0');
 
 /** Cores for a new cable. Reserved and damaged cores come from the top, so core 1 upward stay free. */
@@ -49,6 +74,8 @@ export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandCo
       return fail('Invalid Endpoint', `Endpoint equipment ${endpoint} does not exist.`);
     }
   }
+  const build = cableBuildProblem(draft);
+  if (build) return fail('Check the cable details', build, 'warning');
 
   // A cable leaving an OLT port is that port's feeder, which is how a trace finds the serving PON.
   const startOlt = data.equipment.find((e) => e.id === draft.startEquipmentId && e.type === 'OLT');
@@ -119,6 +146,8 @@ export function createCable(data: NetworkData, draft: CableDraft, ctx: CommandCo
 
 export function updateCable(data: NetworkData, item: Cable): CommandResult<Cable> {
   if (!data.cables.some((c) => c.id === item.id)) return fail('Cable Missing', `Cable ${item.id} was not found.`);
+  const build = cableBuildProblem(item);
+  if (build) return fail('Check the cable details', build, 'warning');
   return succeed(
     item,
     { cables: data.cables.map((c) => (c.id === item.id ? item : c)) },

@@ -23,12 +23,12 @@ Forgot the password? Ask the office for a new one. Too many wrong tries: wait th
 2. Stand back. Fit the whole pole in the frame. Tap **Take photo**.
 3. Wait for the green tick. Do not walk closer to the pole for it.
 4. If the app shows a pole and asks **Is it the same pole?**: tap it if it is, or tap **No, a new one**.
-5. Point the camera at the pole's tag. No tag? Tap **No tag**.
+5. Point the camera at the pole's tag (a QR code or a barcode). No tag? Tap **No tag**.
 6. Tap the picture: **Cable pole**, **Electric pole** or **Don't know**.
 7. Tap the picture: **Cement**, **Iron**, **Wood** or **Don't know**.
 8. Check the card. Tap **Save**.
 
-You will see a big tick and **Saved on phone**. Tap **Next pole** to go straight to the camera for the next pole. The office then sees the two poles joined by a dashed line until someone checks it; it does not say a cable is there. Tap **Finished** when the street is done.
+You will see a big tick and **Saved on phone**, and **The office will check it, then it goes on the network map** (more in [FIELD_MAPPING_GUIDE.md](FIELD_MAPPING_GUIDE.md)). Tap **Next pole** to go straight to the camera for the next pole. The office then sees the two poles joined by a dashed line until someone checks it; it does not say a cable is there. Tap **Finished** when the street is done.
 
 ### Add a box
 
@@ -88,6 +88,8 @@ Go to open sky and wait. If it still does not come, tap **Save without place. Of
 - **Sending**: they are going to the office now.
 - **Sent to office**: the office has everything, photos too.
 - **Not saved on phone** (red): the phone's storage is not working. Stop and call your supervisor.
+
+To see what the phone has sent and what the office said, tap **What was sent** on the first screen ([FIELD_MAPPING_GUIDE.md](FIELD_MAPPING_GUIDE.md)).
 
 **Made a mistake?** Right after saving, tap **Undo**. That one item is removed. **Call supervisor** is on the first screen if the office has set the number.
 

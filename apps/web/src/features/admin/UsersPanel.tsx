@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, ShieldCheck, UserPlus } from 'lucide-react';
 
-import { ACCOUNT_ROLE_DUTIES, ACCOUNT_ROLE_LABELS, ACCOUNT_ROLES, type AccountRole, type AccountSummary } from '@fibergis/shared';
+import {
+  ACCOUNT_ROLE_DUTIES,
+  ACCOUNT_ROLE_LABELS,
+  ACCOUNT_ROLES,
+  type AccountRole,
+  type AccountSummary,
+  PERMISSION_ACTIONS,
+  PERMISSION_TITLES,
+  PERMISSION_WORDS,
+  ROLE_ACTION_LIMITS,
+  roleHasAction,
+} from '@fibergis/shared';
 
 import { authClient, describeApiError } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { showToast } from '../../stores/toastStore';
+import { OrganisationsPanel } from './OrganisationsPanel';
 
 const FIELD = 'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm';
 const BUTTON = 'inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold disabled:opacity-50';
@@ -22,6 +34,42 @@ function RoleTable() {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** Phase 23: role × action, the same table the server applies. "Some" means only some records; hover for which. */
+function ActionTable() {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-center text-[11px]" data-testid="role-action-table">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="py-1 pr-2 text-left">Role</th>
+            {PERMISSION_ACTIONS.map((a) => (
+              <th key={a} className="px-1 py-1" title={PERMISSION_WORDS[a]}>
+                {PERMISSION_TITLES[a]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {ACCOUNT_ROLES.map((role) => (
+            <tr key={role}>
+              <td className="py-1 pr-2 text-left font-semibold text-slate-800">{ACCOUNT_ROLE_LABELS[role]}</td>
+              {PERMISSION_ACTIONS.map((a) => {
+                const yes = roleHasAction(role, a);
+                const limit = ROLE_ACTION_LIMITS[role]?.[a];
+                return (
+                  <td key={a} className={`px-1 py-1 ${yes ? (limit ? 'text-amber-700' : 'text-emerald-700') : 'text-slate-300'}`} title={limit ?? (yes ? 'Yes' : 'No')}>
+                    {yes ? (limit ? 'Some' : 'Yes') : 'No'}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -214,6 +262,8 @@ export function UsersPanel() {
         </p>
       </div>
       {mode === 'setup' && <FirstAdminForm />}
+      {/* Phase 23b: which organisation this is; the organisations list for the platform administrator. */}
+      <OrganisationsPanel />
       {mode === 'enforced' && !isAdmin && <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Only the administrator manages accounts.</p>}
       {isAdmin && (
         <>
@@ -270,6 +320,11 @@ export function UsersPanel() {
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">What each role may do</h4>
         <RoleTable />
+        <h4 className="mb-2 mt-4 text-xs font-bold uppercase text-slate-500">Kinds of change, by role (checked by the server)</h4>
+        <ActionTable />
+        <p className="mt-2 text-[11px] text-slate-500">
+          Accounts made before the eight roles keep their rights: Administrator is now Super Admin, Engineer is GIS Engineer, Office staff is Network Planner, Technician is Field Technician, Viewer is Read-only.
+        </p>
       </div>
     </div>
   );

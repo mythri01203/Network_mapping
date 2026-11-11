@@ -18,7 +18,11 @@ import { Button, KeyValueList } from '../../components/ui';
 import { deleteCable, traceNetworkPath, updateCable } from '../../stores/networkActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { CableBuildSection } from '../cables/CableBuildSection';
+import { CableRouteToolsSection } from '../cables/CableRouteTools';
+import { CableSegmentsSection } from '../cables/CableSegmentsSection';
 import { CoreSection } from '../fiber/CoreSection';
+import { CablePonSection } from '../map/pon/PonSections';
 import { formatDate, formatLength, joinPresent, orNotRecorded, presentItems } from './format';
 import { CableDuctsSection, LengthsSection, PolesSupportingSection, SlackLoopsSection } from './osp/CableSections';
 import { ImportInfoSection } from './osp/StructureSections';
@@ -181,6 +185,7 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
         </>
       }
     >
+      <CablePonSection cable={cable} />
       <InspectorSection title="Route" icon={Waypoints}>
         <div className="space-y-1">
           <Endpoint label="From" equipmentId={cable.startEquipmentId} />
@@ -191,10 +196,15 @@ export function CableInspector({ cable, detailed }: { cable: Cable; detailed: bo
         </div>
       </InspectorSection>
 
+      <CableRouteToolsSection cable={cable} />
+      <CableBuildSection cable={cable} />
+
       <PolesSupportingSection cable={cable} />
       <LengthsSection cable={cable} />
       <SlackLoopsSection cable={cable} />
       <CableDuctsSection cable={cable} />
+      {/* Network mapping Phase 6: stretches (aerial here, in a duct there). */}
+      <CableSegmentsSection cable={cable} />
 
       <CableAppearanceSection cable={cable} />
 

@@ -142,7 +142,12 @@ describe('API', () => {
 
   it('restores legacy backups and leaves missing collections untouched', async () => {
     const legacy = { version: '3.0.0', equipments: sample.equipment.slice(0, 2), customComponents: [] };
-    const response = await app.inject({ method: 'POST', url: api('/restore'), payload: legacy });
+    // Two pins back and every cable kept: the cables would end at equipment no longer on record.
+    const refused = await app.inject({ method: 'POST', url: api('/restore'), payload: legacy });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().message).toMatch(/which is not on record/);
+    // The person can still load it, knowing the problems.
+    const response = await app.inject({ method: 'POST', url: api('/restore?accept=problems'), payload: legacy });
     expect(response.json()).toMatchObject({ restored: ['equipment', 'catalog'] });
 
     const { data } = await getNetwork();
@@ -158,18 +163,21 @@ describe('API', () => {
 
   it('resets to the sample network but keeps the custom catalog', async () => {
     const component = { id: 'CUS-1', type: 'Box', category: 'Custom', name: 'Box', description: '', iconBg: '#000' };
-    await app.inject({
+    // A cable no customer or splitter uses: deleting one that is still in use is refused.
+    const removed = 'CBL-DIST-05';
+    const change = await app.inject({
       method: 'POST',
       url: api('/changes'),
       // Splices naming the cable go with it, as the app does; a splice left naming nothing is refused.
       payload: {
         upserts: {
           catalog: [component],
-          closures: sample.closures.map((c) => ({ ...c, splices: c.splices.filter((s) => s.inputCableId !== sample.cables[0].id && s.outputCableId !== sample.cables[0].id) })),
+          closures: sample.closures.map((c) => ({ ...c, splices: c.splices.filter((s) => s.inputCableId !== removed && s.outputCableId !== removed) })),
         },
-        deletes: { cables: [sample.cables[0].id] },
+        deletes: { cables: [removed] },
       },
     });
+    expect(change.statusCode).toBe(200);
     // Without the confirm word nothing happens, even with login off.
     expect((await app.inject({ method: 'POST', url: api('/reset') })).statusCode).toBe(400);
     const reset = await app.inject({ method: 'POST', url: api('/reset'), payload: { confirm: 'reset' } });
@@ -384,7 +392,9 @@ describe('outside-plant link checks', () => {
     await send({ upserts: { spans: [span] } });
     const response = await app.inject({ method: 'POST', url: api('/restore'), payload: { equipment: [] } });
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: 'restore_refused', total: 2, counts: { links: 2 } });
+    // The two span ends, plus the cable ends and customers that would point to nothing.
+    expect(response.json()).toMatchObject({ error: 'restore_refused', counts: { links: 2 } });
+    expect(response.json().counts.fiber).toBeGreaterThan(0);
     expect(response.json().message).toMatch(/Nothing was restored/);
   });
 
@@ -487,6 +497,46 @@ describe('outside-plant link checks', () => {
       const alone = await send({ deletes: { equipment: [pin.id] } });
       expect(alone.statusCode).toBe(409);
       expect(alone.json().message).toMatch(/entry point/);
+    });
+  });
+
+  describe('cable ends, routes and customer paths (Phase 0B)', () => {
+    const used = sample.cables.find((c) => c.id === 'CBL-DIST-05')!;
+
+    it('refuses deleting equipment a cable still ends at, even straight through the API', async () => {
+      const endId = used.startEquipmentId!;
+      const response = await app.inject({ method: 'DELETE', url: api(`/equipment/${endId}`) });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().message).toMatch(/which is not on record[\s\S]*Nothing was saved/);
+      expect((await getNetwork()).data.equipment.some((e) => e.id === endId)).toBe(true);
+    });
+
+    it('refuses a cable end at equipment that is not on record', async () => {
+      const response = await send({ upserts: { cables: [{ ...used, endEquipmentId: 'EQ-GONE' }] } });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().message).toMatch(/its end is at EQ-GONE, which is not on record/);
+      // An older drop that ends at the customer itself is accepted, as the map check accepts it.
+      const atCustomer = await send({ upserts: { cables: [{ ...used, endEquipmentId: sample.customers[0].id }] } });
+      expect(atCustomer.statusCode).toBe(200);
+    });
+
+    it('refuses a route of one point, but keeps an empty route (not drawn yet)', async () => {
+      const one = await send({ upserts: { cables: [{ ...used, coordinates: [used.coordinates[0]] }] } });
+      expect(one.statusCode).toBe(409);
+      expect(one.json().message).toMatch(/route of one point/);
+      expect((await send({ upserts: { cables: [{ ...used, coordinates: [] }] } })).statusCode).toBe(200);
+    });
+
+    it('refuses a customer path naming a splitter or cable that is not on record', async () => {
+      const customer = sample.customers[0];
+      const splitter = await send({ upserts: { customers: [{ ...customer, splitterId: 'SPL-GONE' }] } });
+      expect(splitter.statusCode).toBe(409);
+      expect(splitter.json().message).toMatch(/names splitter SPL-GONE, which is not on record/);
+      expect((await send({ upserts: { customers: [{ ...customer, feederCableId: 'CBL-GONE' }] } })).statusCode).toBe(409);
+      // The sample customer's drop (DROP-001) was never recorded as a cable. That stored problem is
+      // not blamed on an ordinary edit, which still saves.
+      expect(customer.dropCableId).toBe('DROP-001');
+      expect((await send({ upserts: { customers: [{ ...customer, plan: 'Changed plan' }] } })).statusCode).toBe(200);
     });
   });
 });
@@ -699,18 +749,24 @@ describe('per-record version checks (Phase 8)', () => {
       expect(network.versions?.zones?.[zone().id]).toBe(0);
       await expect(repo.applyChanges({ upserts: { zones: [zone()] }, expect: { zones: { [zone().id]: 0 } } })).resolves.toMatchObject({ revision: 8 });
       await repo.close();
-      // The schema number is unchanged, so an older server can still open this database.
+      // Phase 23 (approved): migration 2 adds the history and change request tables, so the number is 2.
       const after = new DatabaseSync(path);
-      expect((after.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1);
-      // A database a pre-release build numbered 2 is set back to 1 and keeps its versions.
-      after.exec('PRAGMA user_version = 2');
+      const version = (after.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+      // A database a pre-release build numbered 2 (no Phase 23 tables) is set back to 1, keeps its
+      // versions, and then gets migration 2.
+      after.exec('DROP TABLE audit_events; DROP TABLE record_revisions; DROP TABLE change_requests; PRAGMA user_version = 2;');
       after.close();
+      // Phase 24 (approved): migration 3 adds the spatial index and the change log.
+      expect(version).toBe(3);
       const again = new SqliteNetworkRepository(path);
       expect((await again.getNetwork()).versions?.zones?.[zone().id]).toBe(8);
       await again.close();
       const check = new DatabaseSync(path);
-      expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1);
+      const checked = (check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+      const tables = check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'audit_events'").all();
       check.close();
+      expect(checked).toBe(3);
+      expect(tables).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

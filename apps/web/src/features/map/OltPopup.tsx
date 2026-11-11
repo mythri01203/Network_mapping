@@ -1,5 +1,5 @@
-import { Box, Cable, ChevronRight, type LucideIcon, Server, SlidersHorizontal, UtilityPole } from 'lucide-react';
 import type L from 'leaflet';
+import { Box, Cable, ChevronRight, type LucideIcon, Server, SlidersHorizontal, UtilityPole } from 'lucide-react';
 
 import type { Equipment, EquipmentType } from '@fibergis/shared';
 

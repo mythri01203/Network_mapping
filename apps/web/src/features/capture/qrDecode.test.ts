@@ -7,6 +7,8 @@ import * as writer from 'zxing-wasm/writer';
 
 import { equipmentSchema, findByTag, normalizeTag } from '@fibergis/shared';
 
+import { TAG_BARCODE_FORMATS } from './qrScanner';
+
 // The bundled decoder, run in Node with its WASM file read from disk (no CDN, as on the phone).
 const require = createRequire(import.meta.url);
 const pkgDir = dirname(require.resolve('zxing-wasm/reader')).replace(/[\\/]dist[\\/].*$/, '');
@@ -30,5 +32,27 @@ describe('QR tags', () => {
   it('finds no QR code in a picture of some other barcode', async () => {
     const other = await writer.writeBarcode('5901234123457', { format: 'EAN13', scale: 3 });
     expect(await reader.readBarcodes(other.image!, { formats: ['QRCode'] })).toEqual([]);
+  });
+});
+
+describe('barcode tags (Phase 19)', () => {
+  it.each([
+    ['Code128', 'krm-0142'],
+    ['Code39', 'KRM-0143'],
+    ['EAN13', '5901234123457'],
+  ] as const)('reads a %s tag with the scanner formats and finds its record', async (format, text) => {
+    const tag = await writer.writeBarcode(text, { format, scale: 3 });
+    expect(tag.error).toBe('');
+    const [hit] = await reader.readBarcodes(tag.image!, { formats: [...TAG_BARCODE_FORMATS], tryHarder: true, maxNumberOfSymbols: 1 });
+    expect(hit?.isValid).toBe(true);
+    const box = equipmentSchema.parse({
+      id: 'BOX-0000000001', name: 'Box-01', type: 'FAT', category: 'Fiber Distribution', lat: 12.9, lng: 77.6,
+      area: '', street: '', status: 'Active', images: [], installedDate: '', tagCode: normalizeTag(text),
+    });
+    expect(findByTag([box], hit.text)?.id).toBe('BOX-0000000001');
+  });
+
+  it('still reads QR codes', () => {
+    expect(TAG_BARCODE_FORMATS).toContain('QRCode');
   });
 });

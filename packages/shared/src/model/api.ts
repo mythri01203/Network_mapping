@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { PlacementWarning } from '../domain/assetPlacement';
+import type { RouteWarning } from '../domain/cableRouteEdit';
 import {
   COLLECTION_NAMES,
   COLLECTION_SCHEMAS,
@@ -50,12 +52,56 @@ export interface NetworkResponse {
   versions?: RecordVersions;
 }
 
+/**
+ * Phase 24: `GET /changes?since=<revision>`. Either every record stored or deleted after `since`
+ * (with its version), or `reload: true` when the server's change history does not reach back that
+ * far (a restore, a reset, a long time away): the device then loads the whole network once.
+ */
+export type ChangesResponse =
+  | {
+      revision: number;
+      since: number;
+      reload?: false;
+      upserts: Partial<NetworkSnapshot>;
+      deletes: Partial<Record<CollectionName, string[]>>;
+      versions: RecordVersions;
+    }
+  | { revision: number; since: number; reload: true; reason: string };
+
+/** Phase 24: `GET /network/area?bbox=south,west,north,east`: only records whose point, line or area touches the box. */
+export interface AreaResponse {
+  revision: number;
+  bbox: [number, number, number, number];
+  data: Partial<NetworkSnapshot>;
+  versions: RecordVersions;
+  /** More records touch the box than `limit`; the rest were left out. */
+  truncated: boolean;
+  limit: number;
+}
+
+/**
+ * Phase 24b: some records with their versions, read in one transaction: `GET /network?except=` (every
+ * collection but the named ones, in full) and `GET /network/records?ids=` (records by id). `data`
+ * holds only the collections asked for; one that is absent was not asked for, not empty.
+ */
+export interface RecordsResponse {
+  revision: number;
+  data: Partial<NetworkSnapshot>;
+  versions: RecordVersions;
+}
+
 export interface ChangeResult {
   revision: number;
   upserted: number;
   deleted: number;
   /** The new version of every record this change wrote. */
   versions?: RecordVersions;
+  /**
+   * Phase 3: things worth checking that did not stop the save, such as a new point within the
+   * duplicate radius of one of the same kind. Present only when there is something to say.
+   * Phase 5 adds `possible_duplicate_route`: a cable with the same two ends along the same line.
+   */
+  warnings?: (PlacementWarning | RouteWarning)[];
 }
 
 /** One record that changed on the server since the client read it. `record` is null when it was deleted. */

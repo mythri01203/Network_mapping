@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPointIndex, CLUSTER_MAX_ZOOM, CLUSTER_MIN_POINTS, lineTouchesBox, padBox, pointsInView } from './clustering';
+import { buildPointIndex, CLUSTER_MAX_ZOOM, CLUSTER_MIN_POINTS, lineTouchesBox, padBox, pointsInView, samePoints, updatePointIndex } from './clustering';
 
 /** A square of n×n pins about 10 m apart near Hyderabad. */
 function grid(n: number) {
@@ -48,5 +48,29 @@ describe('map clustering (Phase 9)', () => {
     expect(lineTouchesBox([[17.5, 77], [17.5, 80]], WIDE)).toBe(true);
     expect(lineTouchesBox([[12, 77], [12.1, 77.1]], WIDE)).toBe(false);
     expect(padBox([0, 0, 2, 2])).toEqual([-1, -1, 3, 3]);
+  });
+});
+
+describe('group index kept between edits (Phase 24b)', () => {
+  it('keeps the index when no pin was added, removed or moved, and rebuilds when one was', () => {
+    const points = grid(30);
+    const first = updatePointIndex(null, points);
+    // A rename or a selection makes new point objects at the same places.
+    expect(updatePointIndex(first, points.map((p) => ({ ...p })))).toBe(first);
+    const moved = points.map((p, i) => (i === 7 ? { ...p, lat: p.lat + 0.001 } : p));
+    const rebuilt = updatePointIndex(first, moved);
+    expect(rebuilt).not.toBe(first);
+    expect(updatePointIndex(first, points.slice(1))).not.toBe(first);
+    expect(updatePointIndex(first, [...points, { id: 'NEW', lat: 17.4, lng: 78.4 }])).not.toBe(first);
+    expect(samePoints(points, [...points].reverse())).toBe(false);
+  });
+
+  it('a kept index gives exactly the groups a fresh one gives', () => {
+    const points = grid(40);
+    const kept = updatePointIndex(updatePointIndex(null, points), points.map((p) => ({ ...p })));
+    for (const zoom of [10, 12, 14]) expect(pointsInView(kept, WIDE, zoom)).toEqual(pointsInView(buildPointIndex(points), WIDE, zoom));
+    // After a move the rebuilt index counts the moved pin where it now is.
+    const moved = points.map((p, i) => (i === 0 ? { ...p, lat: 17.9, lng: 78.9 } : p));
+    expect(pointsInView(updatePointIndex(kept, moved), WIDE, 12)).toEqual(pointsInView(buildPointIndex(moved), WIDE, 12));
   });
 });

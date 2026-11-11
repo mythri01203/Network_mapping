@@ -54,7 +54,7 @@ export const useSyncStore = create<SyncState>()(() => initialSyncState);
 const failingKeys = new Set<string>();
 
 /** Turns a failed cache write into a message once per episode, and clears it when writes succeed again. */
-onStorageWrite((key, ok) => {
+onStorageWrite((key, ok, kind) => {
   if (ok) failingKeys.delete(key);
   else failingKeys.add(key);
   const failed = failingKeys.size > 0;
@@ -62,10 +62,13 @@ onStorageWrite((key, ok) => {
   if (failed === was) return;
   useSyncStore.setState({ cacheWriteFailed: failed });
   if (failed) {
+    // Phase 19: "full" only when the browser said so; any other failure is named as what it is.
     showToast(
       'error',
-      'Phone storage is full',
-      'Recent changes are not saved on this device. Stay connected until they reach the office, and do not close the app.',
+      kind === undefined || kind === 'full' ? 'Phone storage is full' : 'Not saved on this device',
+      kind === undefined || kind === 'full'
+        ? 'Recent changes are not saved on this device. Stay connected until they reach the office, and do not close the app.'
+        : 'This browser did not save recent changes on this device. Stay connected until they reach the office, and do not close the app.',
     );
   } else {
     showToast('success', 'Saved on this device again', 'Phone storage is working again.');

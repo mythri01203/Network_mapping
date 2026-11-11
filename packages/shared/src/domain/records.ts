@@ -3,7 +3,6 @@ import {
   type CommandContext,
   type CommandResult,
   fail,
-  networkAnchor,
   type NetworkData,
   notice,
   sameId,
@@ -15,10 +14,8 @@ import { isoDate } from './time';
 export type ZoneDraft = Partial<NetworkZone> & { name: string; areaCode: string };
 export type DocumentDraft = Partial<NetworkDocument> & { title: string; category: NetworkDocument['category'] };
 
-/** Half-width, in degrees, of the placeholder square drawn for a zone created without a boundary. */
-const DEFAULT_ZONE_HALF_SIZE = 0.0035;
 
-export function createZone(data: NetworkData, draft: ZoneDraft, ctx: CommandContext = {}): CommandResult<NetworkZone> {
+export function createZone(data: NetworkData, draft: ZoneDraft, _ctx: CommandContext = {}): CommandResult<NetworkZone> {
   const name = draft.name.trim();
   const areaCode = draft.areaCode.trim();
   if (!name || !areaCode) return fail('Missing Zone Details', 'A zone needs a name and an area code.');
@@ -27,28 +24,19 @@ export function createZone(data: NetworkData, draft: ZoneDraft, ctx: CommandCont
     draft.id || newRecordId('ZONE-');
   if (data.zones.some((z) => sameId(z.id, id))) return fail('Duplicate Zone ID', `Zone ${id} already exists.`);
 
-  const [lat, lng] = networkAnchor(data, ctx.fallbackLocation) ?? [0, 0];
-  const d = DEFAULT_ZONE_HALF_SIZE;
+  // No boundary or area is made up: a zone without a drawn boundary has none until someone draws it.
   const zone: NetworkZone = {
     id,
     name,
     areaCode,
-    coverageSqKm: draft.coverageSqKm ?? 2.5,
+    coverageSqKm: draft.coverageSqKm ?? 0,
     homePassed: draft.homePassed ?? 0,
     connectedCustomers: draft.connectedCustomers ?? 0,
     feederCableCount: draft.feederCableCount ?? 0,
     fatCount: draft.fatCount ?? 0,
     penetrationRatePct: draft.penetrationRatePct ?? 0,
     status: draft.status || 'Expansion',
-    boundaryCoords:
-      draft.boundaryCoords && draft.boundaryCoords.length >= 3
-        ? draft.boundaryCoords
-        : [
-            [lat - d, lng - d],
-            [lat + d, lng - d],
-            [lat + d, lng + d],
-            [lat - d, lng + d],
-          ],
+    boundaryCoords: draft.boundaryCoords && draft.boundaryCoords.length >= 3 ? draft.boundaryCoords : [],
   };
   return succeed(
     zone,

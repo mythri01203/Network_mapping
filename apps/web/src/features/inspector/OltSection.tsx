@@ -1,10 +1,11 @@
 import { Activity, Network, Radio } from 'lucide-react';
 
-import { type Equipment, opticalPowerFor, PON_TECHNOLOGIES, type PonPort, type PonTechnology } from '@fibergis/shared';
+import { type Equipment, oltPonUsage, opticalPowerFor, PON_TECHNOLOGIES, type PonPort, type PonTechnology } from '@fibergis/shared';
 
 import { OltChassisIcon } from '../../components/icons/OltChassisIcon';
 import { Badge, type BadgeTone, Button, cn, KeyValueList, Select, StatusBadge } from '../../components/ui';
 import { traceNetworkPath, updateEquipment } from '../../stores/networkActions';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 import { formatDateTime, formatDbm, joinPresent, rxBudget, SIGNAL_TONES } from './format';
 import { PON_TECHNOLOGY_SPECS } from './ponTechnology';
@@ -28,7 +29,10 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
   const power = opticalPowerFor(olt);
   const spec = olt.technology ? PON_TECHNOLOGY_SPECS[olt.technology] : undefined;
   const worstRx = rxBudget(power.rxPowerDbm);
-  const subscribers = ponPorts.reduce((sum, port) => sum + port.connectedCustomersCount, 0);
+  // Phase 10: counted from the customer records, not the stored per-port counter.
+  const customers = useNetworkStore((s) => s.customers);
+  const usage = new Map(oltPonUsage({ equipment: [olt], customers }, olt.id).map((u) => [u.ponPortId, u]));
+  const subscribers = [...usage.values()].reduce((sum, u) => sum + u.customers.length, 0);
 
   return (
     <>
@@ -44,7 +48,7 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
             <div className="font-medium text-slate-700">
               {ponPorts.length} PON ports · <span className="text-sky-700 font-bold">{olt.technology || 'Technology not recorded'}</span>
             </div>
-            <div>{subscribers} subscribers</div>
+            <div>{subscribers} customers on record</div>
           </div>
         </div>
         <Button
@@ -137,14 +141,16 @@ export function OltSections({ olt, detailed }: { olt: Equipment; detailed: boole
                   {port.slotCardPort ?? `PON ${port.portNumber}`}
                 </span>
                 <StatusBadge status={port.status} tone={PON_PORT_TONES[port.status]} />
-                <span className="text-right tabular-nums text-slate-700">{port.connectedCustomersCount}</span>
+                <span className="text-right tabular-nums text-slate-700">{usage.get(port.id)?.customers.length ?? 0}</span>
                 <span className="text-right tabular-nums text-slate-700">{formatReading(port.txPowerDbm)}</span>
                 <span className={cn('text-right tabular-nums', rxBudget(port.rxPowerDbm).text)}>
                   {formatReading(port.rxPowerDbm)}
                 </span>
               </button>
             ))}
-            <p className="px-2 pt-1.5 text-[11px] text-slate-500">Power in dBm. Select a port to trace its path.</p>
+            <p className="px-2 pt-1.5 text-[11px] text-slate-500">
+              Subs: active customers whose record names the port. Power in dBm. Select a port to trace its path.
+            </p>
           </div>
         )}
       </InspectorSection>

@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { Camera, Download, MapPin, PlusCircle, Search, Trash2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { Equipment } from '@fibergis/shared';
+import { type Equipment, reportToCsv } from '@fibergis/shared';
 
 import { useOpenView, useShowOnMap } from '../../app/views';
+import { useMayDo } from '../../stores/authStore';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { type InventorySortKey, matchesInventorySearch, pageOf, type SortDirection, sortInventory } from './inventoryRows';
 
 export const EquipmentInventoryView: React.FC = () => {
+  // Phase 23: saving lists to a file is the export right.
+  const mayExport = useMayDo('export');
   const equipments = useNetworkStore((s) => s.equipment);
   const { setSelectedObject, setModalOpen } = useUiStore(
     useShallow((s) => ({ setSelectedObject: s.select, setModalOpen: s.setModalOpen })),
@@ -27,16 +31,13 @@ export const EquipmentInventoryView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [selectedTechnology, setSelectedTechnology] = useState<'All' | 'GPON' | 'EPON'>('All');
+  const [sortKey, setSortKey] = useState<InventorySortKey>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [page, setPage] = useState(0);
 
   // Filtered equipments
   const filteredEquipments = equipments.filter((eq) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      eq.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      eq.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      eq.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      eq.area.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      eq.street.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = matchesInventorySearch(eq, searchQuery);
 
     const matchesCategory = selectedCategory === 'All' || eq.category === selectedCategory;
     const matchesStatus = selectedStatus === 'All' || eq.status === selectedStatus;
@@ -45,41 +46,59 @@ export const EquipmentInventoryView: React.FC = () => {
 
     return matchesSearch && matchesCategory && matchesStatus && matchesTech;
   });
+  // Phase 2: sorted, and shown a page at a time. The CSV export still takes every filtered row.
+  const sorted = sortInventory(filteredEquipments, sortKey, sortDirection);
+  const shown = pageOf(sorted, page);
+  const sortBy = (key: InventorySortKey) => {
+    if (key === sortKey) setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+    setPage(0);
+  };
+  const sortHeader = (key: InventorySortKey, text: string) => (
+    <button type="button" onClick={() => sortBy(key)} className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800" data-testid={`inv-sort-${key}`} aria-label={`Sort by ${text}`}>
+      {text}
+      <span aria-hidden className="text-slate-400">{sortKey === key ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+    </button>
+  );
 
   // Export to CSV
   const handleExportCSV = () => {
-    const headers = [
-      'ID',
-      'Name',
-      'Type',
-      'Category',
-      'Area',
-      'Street',
-      'Status',
-      'Total Ports',
-      'Used Ports',
-      'Manufacturer',
-      'Installed Date',
-      'Latitude',
-      'Longitude',
-    ];
-    const rows = filteredEquipments.map((e) => [
-      e.id,
-      `"${e.name}"`,
-      e.type,
-      e.category,
-      `"${e.area}"`,
-      `"${e.street}"`,
-      e.status,
-      e.totalPorts || 0,
-      e.usedPorts || 0,
-      e.manufacturer || 'N/A',
-      e.installedDate,
-      e.lat,
-      e.lng,
-    ]);
+    // A blank cell means not recorded. Every cell is escaped and kept safe from spreadsheet formulas.
+    const columns = [
+      ['id', 'ID'],
+      ['name', 'Name'],
+      ['type', 'Type'],
+      ['category', 'Category'],
+      ['area', 'Area'],
+      ['street', 'Street'],
+      ['status', 'Status'],
+      ['totalPorts', 'Total Ports'],
+      ['usedPorts', 'Used Ports'],
+      ['manufacturer', 'Manufacturer'],
+      ['installedDate', 'Installed Date'],
+      ['lat', 'Latitude'],
+      ['lng', 'Longitude'],
+    ].map(([key, label]) => ({ key, label }));
+    const rows = filteredEquipments.map((e) => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      category: e.category,
+      area: e.area,
+      street: e.street,
+      status: e.status,
+      totalPorts: e.totalPorts ?? '',
+      usedPorts: e.usedPorts ?? '',
+      manufacturer: e.manufacturer ?? '',
+      installedDate: e.installedDate,
+      lat: e.lat,
+      lng: e.lng,
+    }));
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent = reportToCsv({ columns, rows });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -118,6 +137,7 @@ export const EquipmentInventoryView: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={handleExportCSV}
+            hidden={!mayExport}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
@@ -170,9 +190,9 @@ export const EquipmentInventoryView: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Filter by ID, name, area, street, or model..."
+              placeholder="Filter by ID, name, area, make, model, serial or tag..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
               className="w-full pl-9 pr-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs outline-none transition-all"
             />
           </div>
@@ -180,7 +200,7 @@ export const EquipmentInventoryView: React.FC = () => {
           {/* Category Filter */}
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => { setSelectedCategory(e.target.value); setPage(0); }}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Categories</option>
@@ -194,7 +214,7 @@ export const EquipmentInventoryView: React.FC = () => {
           {/* Status Filter */}
           <select
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
+            onChange={(e) => { setSelectedStatus(e.target.value); setPage(0); }}
             className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
           >
             <option value="All">All Statuses</option>
@@ -227,20 +247,22 @@ export const EquipmentInventoryView: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
-                <th className="py-3 px-4">Asset ID & Name</th>
-                <th className="py-3 px-4">Type & Category</th>
+                <th className="py-3 px-4">{sortHeader('name', 'Asset ID & Name')}</th>
+                <th className="py-3 px-4">{sortHeader('type', 'Type & Category')}</th>
+                <th className="py-3 px-4">{sortHeader('model', 'Make & model')}</th>
                 <th className="py-3 px-4">Area & Street</th>
-                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">{sortHeader('status', 'Status')}</th>
                 <th className="py-3 px-4">Port Capacity</th>
-                <th className="py-3 px-4">Installed Date</th>
+                <th className="py-3 px-4">{sortHeader('installedDate', 'Installed Date')}</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEquipments.map((eq) => {
-                const totalPorts = eq.totalPorts || (eq.type === 'FAT' ? 8 : eq.type === 'FDT' ? 48 : 0);
-                const usedPorts = eq.usedPorts || (eq.type === 'FAT' ? 5 : eq.type === 'FDT' ? 24 : 0);
-                const portPct = totalPorts > 0 ? Math.round((usedPorts / totalPorts) * 100) : 0;
+              {shown.rows.map((eq) => {
+                // Only what is recorded. No port count or use is filled in from the type.
+                const totalPorts = eq.totalPorts ?? 0;
+                const usedPorts = eq.usedPorts;
+                const portPct = totalPorts > 0 && usedPorts !== undefined ? Math.round((usedPorts / totalPorts) * 100) : 0;
 
                 return (
                   <tr key={eq.id} className="hover:bg-slate-50/80 transition-colors group">
@@ -268,6 +290,14 @@ export const EquipmentInventoryView: React.FC = () => {
                       <div className="text-[10px] text-slate-400">{eq.category}</div>
                     </td>
                     <td className="py-3 px-4">
+                      {eq.manufacturer || eq.model ? (
+                        <div className="text-slate-800 font-medium">{[eq.manufacturer, eq.model].filter(Boolean).join(' ')}</div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">Not recorded</span>
+                      )}
+                      {eq.serialNumber && <div className="text-[10px] font-mono text-slate-400">SN {eq.serialNumber}</div>}
+                    </td>
+                    <td className="py-3 px-4">
                       <div className="text-slate-800 font-medium">{eq.area}</div>
                       <div className="text-[10px] text-slate-400 truncate max-w-xs">{eq.street}</div>
                     </td>
@@ -288,7 +318,9 @@ export const EquipmentInventoryView: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      {totalPorts > 0 ? (
+                      {totalPorts > 0 && usedPorts === undefined ? (
+                        <span className="text-slate-500 text-[11px]">{totalPorts} ports · use not recorded</span>
+                      ) : totalPorts > 0 && usedPorts !== undefined ? (
                         <div className="w-28">
                           <div className="flex justify-between text-[10px] mb-1">
                             <span className="font-semibold text-slate-700">
@@ -304,11 +336,11 @@ export const EquipmentInventoryView: React.FC = () => {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">N/A</span>
+                        <span className="text-slate-400 text-[11px]">Not recorded</span>
                       )}
                     </td>
                     <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
-                      {eq.installedDate || '2026-01-15'}
+                      {eq.installedDate || <span className="font-sans text-slate-400">Not recorded</span>}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -344,6 +376,21 @@ export const EquipmentInventoryView: React.FC = () => {
               })}
             </tbody>
           </table>
+          {shown.pages > 1 && (
+            <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-testid="inv-pager">
+              <span>
+                Page {shown.page + 1} of {shown.pages} · {sorted.length} items
+              </span>
+              <div className="flex gap-2">
+                <button type="button" disabled={shown.page === 0} onClick={() => setPage(shown.page - 1)} className="min-h-9 rounded-lg border border-slate-200 px-3 font-semibold disabled:opacity-40" data-testid="inv-prev">
+                  Previous
+                </button>
+                <button type="button" disabled={shown.page >= shown.pages - 1} onClick={() => setPage(shown.page + 1)} className="min-h-9 rounded-lg border border-slate-200 px-3 font-semibold disabled:opacity-40" data-testid="inv-next">
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

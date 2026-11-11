@@ -99,6 +99,7 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `tag.known` | This tag is already saved: {name} | ఈ ట్యాగ్ ఇప్పటికే సేవ్ అయింది: {name} | ಈ ಟ್ಯಾಗ್ ಈಗಾಗಲೇ ಉಳಿಸಲಾಗಿದೆ: {name} |
 | `tag.loading` | Starting scanner | స్కానర్ మొదలవుతోంది | ಸ್ಕ್ಯಾನರ್ ಆರಂಭವಾಗುತ್ತಿದೆ |
 | `tag.failed` | The scanner did not start. Tap No tag. | స్కానర్ మొదలుకాలేదు. ట్యాగ్ లేదు నొక్కండి. | ಸ್ಕ್ಯಾನರ್ ಆರಂಭವಾಗಲಿಲ್ಲ. ಟ್ಯಾಗ್ ಇಲ್ಲ ಒತ್ತಿರಿ. |
+| `tag.barcodeHint` | QR code or barcode, both work. | క్యూఆర్ కోడ్ లేదా బార్‌కోడ్, ఏదైనా పనిచేస్తుంది. | ಕ್ಯೂಆರ್ ಕೋಡ್ ಅಥವಾ ಬಾರ್‌ಕೋಡ್, ಯಾವುದಾದರೂ ಸರಿ. |
 | `q.owner` | Whose pole is it? | ఇది ఎవరి పోల్? | ಇದು ಯಾರ ಕಂಬ? |
 | `q.owner.telecom` | Cable pole | కేబుల్ పోల్ | ಕೇಬಲ್ ಕಂಬ |
 | `q.owner.electricity` | Electric pole | కరెంట్ పోల్ | ಕರೆಂಟ್ ಕಂಬ |
@@ -138,6 +139,7 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `saved.finished` | Finished | అయిపోయింది | ಮುಗಿಯಿತು |
 | `saved.undone` | Removed. Nothing else changed. | తొలగించబడింది. ఇంకేమీ మారలేదు. | ತೆಗೆದುಹಾಕಲಾಗಿದೆ. ಬೇರೆ ಏನೂ ಬದಲಾಗಿಲ್ಲ. |
 | `saved.undoHint` | Made a mistake? Tap Undo. | తప్పు జరిగిందా? రద్దు చేయండి నొక్కండి. | ತಪ್ಪಾಯಿತೇ? ರದ್ದು ಮಾಡಿ ಒತ್ತಿರಿ. |
+| `saved.review` | The office will check it, then it goes on the network map. | ఆఫీస్ సరిచూసిన తర్వాత ఇది నెట్‌వర్క్ మ్యాప్‌లోకి వెళ్తుంది. | ಆಫೀಸ್ ಪರಿಶೀಲಿಸಿದ ನಂತರ ಇದು ನೆಟ್‌ವರ್ಕ್ ನಕ್ಷೆಗೆ ಹೋಗುತ್ತದೆ. |
 | `saved.failed` | Not saved on phone. Tap Try again. If it fails again, call your supervisor. | ఫోన్‌లో సేవ్ కాలేదు. మళ్ళీ ప్రయత్నించండి నొక్కండి. మళ్ళీ విఫలమైతే సూపర్‌వైజర్‌కు కాల్ చేయండి. | ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಒತ್ತಿರಿ. ಮತ್ತೆ ವಿಫಲವಾದರೆ ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ. |
 | `pad.title` | Type the numbers on the meter | మీటర్‌పై ఉన్న అంకెలు టైప్ చేయండి | ಮೀಟರ್‌ನಲ್ಲಿರುವ ಅಂಕೆಗಳನ್ನು ಒತ್ತಿರಿ |
 | `pad.hint` | Skip the minus sign and the dot. | మైనస్, చుక్క అవసరం లేదు. | ಮೈನಸ್ ಮತ್ತು ಚುಕ್ಕೆ ಬೇಡ. |
@@ -173,6 +175,15 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `common.tryAgain` | Try again | మళ్ళీ ప్రయత్నించండి | ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ |
 | `common.listen` | Listen | వినండి | ಕೇಳಿ |
 | `storage.failed` | Phone storage is not working. Work cannot be saved. Call your supervisor. | ఫోన్ స్టోరేజ్ పనిచేయడం లేదు. పని సేవ్ కాదు. సూపర్‌వైజర్‌కు కాల్ చేయండి. | ಫೋನ್ ಸ್ಟೋರೇಜ್ ಕೆಲಸ ಮಾಡುತ್ತಿಲ್ಲ. ಕೆಲಸ ಉಳಿಯುವುದಿಲ್ಲ. ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ. |
+| `home.history` | What was sent | ఏమి పంపబడింది | ಏನು ಕಳುಹಿಸಲಾಗಿದೆ |
+| `history.title` | What this phone sent | ఈ ఫోన్ ఏమి పంపింది | ಈ ಫೋನ್ ಏನು ಕಳುಹಿಸಿದೆ |
+| `history.empty` | Nothing sent yet. | ఇంకా ఏమీ పంపలేదు. | ಇನ್ನೂ ಏನೂ ಕಳುಹಿಸಿಲ್ಲ. |
+| `history.sent` | Sent | పంపబడింది | ಕಳುಹಿಸಲಾಗಿದೆ |
+| `history.refused` | Not accepted | అంగీకరించలేదు | ಸ್ವೀಕರಿಸಲಿಲ್ಲ |
+| `history.conflict` | Someone else changed it too | ఇంకెవరో కూడా మార్చారు | ಬೇರೆಯವರೂ ಬದಲಾಯಿಸಿದ್ದಾರೆ |
+| `history.photo` | Photo | ఫోటో | ಫೋಟೋ |
+| `history.items` | {count, plural, one {# item} other {# items}} | {count, plural, one {# అంశం} other {# అంశాలు}} | {count, plural, one {# ವಸ್ತು} other {# ವಸ್ತುಗಳು}} |
+| `history.keptOnPhone` | It stays on the phone. Call your supervisor. | ఇది ఫోన్‌లోనే ఉంటుంది. సూపర్‌వైజర్‌కు కాల్ చేయండి. | ಇದು ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ. ಸೂಪರ್‌ವೈಸರ್‌ಗೆ ಕರೆ ಮಾಡಿ. |
 | `jobs.tile` | My jobs | నా పనులు | ನನ್ನ ಕೆಲಸಗಳು |
 | `jobs.who` | Who are you? | మీరు ఎవరు? | ನೀವು ಯಾರು? |
 | `jobs.notListed` | My name is not here | నా పేరు ఇక్కడ లేదు | ನನ್ನ ಹೆಸರು ಇಲ್ಲಿ ಇಲ್ಲ |
@@ -242,6 +253,26 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `login.back` | Back | వెనక్కి | ಹಿಂದೆ |
 | `login.next` | Next | తర్వాత | ಮುಂದೆ |
 | `login.checking` | Checking | పరిశీలిస్తోంది | ಪರಿಶೀಲಿಸುತ್ತಿದೆ |
+| `learn.welcomeTitle` | Welcome to FiberGIS – Let's learn together! | ఫైబర్ జీఐఎస్‌కు స్వాగతం – కలిసి నేర్చుకుందాం! | ಫೈಬರ್ ಜಿಐಎಸ್‌ಗೆ ಸ್ವಾಗತ – ಒಟ್ಟಿಗೆ ಕಲಿಯೋಣ! |
+| `learn.chooseLanguage` | Choose your language | మీ భాషను ఎంచుకోండి | ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ |
+| `learn.start` | Start learning | నేర్చుకోవడం మొదలుపెట్టండి | ಕಲಿಯಲು ಶುರು ಮಾಡಿ |
+| `learn.skip` | Skip | వదిలేయండి | ಬಿಟ್ಟುಬಿಡಿ |
+| `learn.next` | Next | తర్వాత | ಮುಂದೆ |
+| `learn.back` | Back | వెనక్కి | ಹಿಂದೆ |
+| `learn.finish` | Finish | పూర్తి | ಮುಗಿಸಿ |
+| `learn.play` | Play | వినండి | ಕೇಳಿ |
+| `learn.pause` | Pause | ఆపండి | ನಿಲ್ಲಿಸಿ |
+| `learn.resume` | Resume | కొనసాగించండి | ಮುಂದುವರಿಸಿ |
+| `learn.repeat` | Repeat | మళ్లీ వినండి | ಮತ್ತೆ ಕೇಳಿ |
+| `learn.stop` | Stop | ముగించండి | ಮುಗಿಸಿ |
+| `learn.noVoice` | Voice is not ready in this language yet. The words are shown below. | ఈ భాషలో వాయిస్ ఇంకా సిద్ధం కాలేదు. మాటలు కింద ఉన్నాయి. | ಈ ಭಾಷೆಯಲ್ಲಿ ಧ್ವನಿ ಇನ್ನೂ ಸಿದ್ಧವಿಲ್ಲ. ಪದಗಳು ಕೆಳಗೆ ಇವೆ. |
+| `learn.voiceDraft` | Draft voice: not checked yet. Only the administrator hears this. | డ్రాఫ్ట్ వాయిస్: ఇంకా తనిఖీ కాలేదు. అడ్మిన్‌కు మాత్రమే వినిపిస్తుంది. | ಡ್ರಾಫ್ಟ್ ಧ್ವನಿ: ಇನ್ನೂ ಪರಿಶೀಲಿಸಿಲ್ಲ. ಆಡ್ಮಿನ್‌ಗೆ ಮಾತ್ರ ಕೇಳಿಸುತ್ತದೆ. |
+| `learn.voiceError` | The voice could not play. Check the connection and tap Play again. | వాయిస్ ప్లే కాలేదు. కనెక్షన్ చూసి మళ్లీ వినండి నొక్కండి. | ಧ್ವನಿ ಪ್ಲೇ ಆಗಲಿಲ್ಲ. ಸಂಪರ್ಕ ನೋಡಿ ಮತ್ತೆ ಕೇಳಿ ಒತ್ತಿ. |
+| `learn.offline` | No connection: words and pictures only. | కనెక్షన్ లేదు: మాటలు, బొమ్మలు మాత్రమే. | ಸಂಪರ್ಕ ಇಲ್ಲ: ಪದಗಳು ಮತ್ತು ಚಿತ್ರಗಳು ಮಾತ್ರ. |
+| `learn.step` | Step {n} of {total} | {total}లో {n}వ దశ | {total}ರಲ್ಲಿ {n}ನೇ ಹಂತ |
+| `learn.example` | Example picture, not your network | ఉదాహరణ బొమ్మ, మీ నెట్‌వర్క్ కాదు | ಉದಾಹರಣೆ ಚಿತ್ರ, ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ಅಲ್ಲ |
+| `learn.open` | Learn FiberGIS | ఫైబర్ జీఐఎస్ నేర్చుకోండి | ಫೈಬರ್ ಜಿಐಎಸ್ ಕಲಿಯಿರಿ |
+| `learn.draftWords` | Words not yet checked by a native speaker | మాటలు ఇంకా తెలుగు మాట్లాడేవారు తనిఖీ చేయలేదు | ಪದಗಳನ್ನು ಇನ್ನೂ ಕನ್ನಡ ಮಾತನಾಡುವವರು ಪರಿಶೀಲಿಸಿಲ್ಲ |
 | `jobs.noPhotoHint` | Write why no photo is possible. The office will see it. | ఫోటో ఎందుకు తీయలేరో రాయండి. ఆఫీసు చూస్తుంది. | ಫೋಟೋ ಏಕೆ ತೆಗೆಯಲು ಆಗುವುದಿಲ್ಲ ಎಂದು ಬರೆಯಿರಿ. ಆಫೀಸ್ ನೋಡುತ್ತದೆ. |
 | `login.notSetUp` | Logins are not set up yet. The office must first make the administrator account on the server computer. Then log in here. | లాగిన్లు ఇంకా సిద్ధం కాలేదు. ముందుగా ఆఫీసు సర్వర్ కంప్యూటర్‌లో అడ్మినిస్ట్రేటర్ ఖాతా చేయాలి. తర్వాత ఇక్కడ లాగిన్ అవ్వండి. | ಲಾಗಿನ್‌ಗಳು ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಮೊದಲು ಆಫೀಸ್ ಸರ್ವರ್ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಆಡ್ಮಿನಿಸ್ಟ್ರೇಟರ್ ಖಾತೆ ಮಾಡಬೇಕು. ನಂತರ ಇಲ್ಲಿ ಲಾಗಿನ್ ಆಗಿ. |
 | `login.kept` | {count} saved on this phone. They are sent after you log in. | {count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి. | {count} ಈ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿದಿವೆ. ನೀವು ಲಾಗಿನ್ ಆದ ನಂತರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. |
@@ -252,3 +283,23 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `login.savePassword` | Save password | పాస్‌వర్డ్ సేవ్ చేయండి | ಪಾಸ್‌ವರ್ಡ್ ಉಳಿಸಿ |
 | `login.later` | Not now | ఇప్పుడు కాదు | ಈಗ ಬೇಡ |
 | `login.offline` | No internet. You can keep working as {name}. Log in when the signal is back. | ఇంటర్నెట్ లేదు. {name}గా పని కొనసాగించవచ్చు. సిగ్నల్ వచ్చాక లాగిన్ అవ్వండి. | ಇಂಟರ್ನೆಟ್ ಇಲ್ಲ. {name} ಆಗಿ ಕೆಲಸ ಮುಂದುವರಿಸಬಹುದು. ಸಿಗ್ನಲ್ ಬಂದ ನಂತರ ಲಾಗಿನ್ ಆಗಿ. |
+
+
+## 3D view (draft, not checked)
+
+The 3D view (`apps/web/src/features/view3d/i18n.ts`) has its own word list in English, Kannada,
+Hindi, Telugu and Tamil. Every non-English text there is a **draft** written without a native
+speaker or crew check, the same as above. Hindi and Tamil are new to the app and appear only in the
+3D view. Check them with crews before relying on them, in particular these terms:
+
+| English | Kannada | Hindi | Telugu | Tamil |
+|---|---|---|---|---|
+| Main Office Box (OLT) | ಮುಖ್ಯ ಆಫೀಸ್ ಬಾಕ್ಸ್ | मुख्य ऑफिस बॉक्स | మెయిన్ ఆఫీస్ బాక్స్ | முதன்மை அலுவலக பெட்டி |
+| Home Connection Box (FAT) | ಮನೆ ಸಂಪರ್ಕ ಬಾಕ್ಸ್ | घर कनेक्शन बॉक्स | ఇంటి కనెక్షన్ బాక్స్ | வீட்டு இணைப்பு பெட்டி |
+| Customer modem (ONT) | ಗ್ರಾಹಕ ಮೋಡೆಮ್ | ग्राहक मॉडेम | కస్టమర్ మోడెమ్ | வாடிக்கையாளர் மோடம் |
+| House cable (drop) | ಮನೆ ಕೇಬಲ್ | घर केबल | ఇంటి కేబుల్ | வீட்டு கேபிள் |
+| Main cable (feeder) | ಮುಖ್ಯ ಕೇಬಲ್ | मुख्य केबल | మెయిన్ కేబుల్ | முதன்மை கேபிள் |
+| Light loss (estimated) | ಬೆಳಕಿನ ನಷ್ಟ (ಅಂದಾಜು) | रोशनी का नुकसान (अनुमान) | లైట్ నష్టం (అంచనా) | ஒளி இழப்பு (மதிப்பீடு) |
+
+Technical terms printed on equipment (OLT, FAT, ONT, PON, SC/APC, OM3, Cat6) stay in English on
+purpose. `i18n.test.ts` checks that every key has all five languages with the same placeholders.

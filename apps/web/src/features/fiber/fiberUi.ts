@@ -1,4 +1,17 @@
 /** Small helpers shared by the fiber screens. */
+import type { CoreStatus } from '@fibergis/shared';
+
+/** A mark for each core state, so the state is never told by colour alone. */
+export const STATUS_MARK: Partial<Record<CoreStatus, string>> = {
+  'In Use': '●',
+  Reserved: '◐',
+  Damaged: '✕',
+  Faulty: '!',
+  Retired: '—',
+  Spliced: '⋈',
+  Available: '○',
+  Dark: '○',
+};
 
 export interface FiberChoice {
   cableId: string;

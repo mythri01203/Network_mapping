@@ -2,12 +2,13 @@ import type { SplitterKind, SplitterRatio } from '../model/enums';
 import type { Cable, CoreAssignment, Customer, Equipment, Splitter, SplitterPort } from '../model/types';
 import { applyPatch, type CommandContext, type CommandResult, fail, type NetworkData, notice, sameId, succeed } from './command';
 import { buildCores, hasRecordedLocation, isValidCoordinate } from './defaults';
-import { activeAssignment, checkedFiberChange, completeCores, type SplitterInput } from './fiberCommands';
+import { activeAssignment, checkedFiberChange, completeCores, isCoreConditionStatus, type SplitterInput } from './fiberCommands';
 import { coreKey, newFiberId } from './fiberIndex';
 import { traceCoreUpstream } from './fiberPath';
 import { polylineLengthMeters } from './geo';
 import { newRecordId } from './ids';
 import { DEFAULT_OPTICAL_SETTINGS } from './opticalSettings';
+import { recountPonCustomers } from './ponUsage';
 import { setPortUsage } from './ports';
 import { isoDate } from './time';
 import { estimateRxForSplitter } from './trace';
@@ -278,6 +279,20 @@ export function provisionCustomer(
   const recorded = estimate.level === 'core' ? estimate : undefined;
   const feederId = recorded?.cableIds[0];
   const distributionId = recorded && recorded.cableIds.length > 1 ? recorded.cableIds[recorded.cableIds.length - 1] : undefined;
+  // Phase 12: the fibre links are the one source of truth. A path field the person named that the
+  // recorded links contradict is broken data, so nothing is saved.
+  if (recorded) {
+    const fromLinks: [string, string | undefined, string | undefined][] = [
+      ['OLT', draft.oltId, recorded.olt?.id],
+      ['PON port', draft.ponPort, recorded.pon?.id],
+      ['feeder cable', draft.feederCableId, feederId],
+      ['distribution cable', draft.distributionCableId, distributionId ?? feederId],
+    ];
+    const clash = fromLinks.find(([, given, linked]) => !!given && !!linked && given !== linked);
+    if (clash) {
+      return fail('Path does not match the fibres', `Broken data: you chose ${clash[0]} ${clash[1]}, but the fibre links from ${splitter.name} lead to ${clash[2]}. Nothing was saved.`);
+    }
+  }
 
   const customer: Customer = {
     id,
@@ -316,20 +331,18 @@ export function provisionCustomer(
 
   // The PON count follows only a recorded path or the person's own choice, never a cable-level walk.
   const servingPon = customer.oltId && customer.ponPort ? { oltId: customer.oltId, ponId: customer.ponPort } : undefined;
-  const equipment = data.equipment.map((e): Equipment => {
+  const marked0 = data.equipment.map((e): Equipment => {
     if (e.id === fat.id) return setPortUsage(e, port.portNumber, true, id, isoDate(ctx.now));
     if (servingPon && e.id === servingPon.oltId) {
       return {
         ...e,
-        ponPorts: e.ponPorts?.map((p) =>
-          p.id === servingPon.ponId
-            ? { ...p, status: 'Active' as const, connectedCustomersCount: p.connectedCustomersCount + 1 }
-            : p,
-        ),
+        ponPorts: e.ponPorts?.map((p) => (p.id === servingPon.ponId ? { ...p, status: 'Active' as const } : p)),
       };
     }
     return e;
   });
+  // Phase 10: the cached PON count is set from the customer records, not raised by one.
+  const equipment = recountPonCustomers(marked0, [...data.customers, customer], [servingPon?.oltId]);
   const splitters = data.splitters.map((s) =>
     s.id !== splitter.id
       ? s
@@ -493,19 +506,16 @@ export function relinkCustomer(
   };
 
   const servingPonId = estimate.pon?.id;
+  // Phase 10: the cached PON counts of the old and new OLT are set from the customer records (the
+  // old port used to keep its count when a customer was relinked elsewhere).
   const equipment =
     !servesAlready && servingPonId
-      ? data.equipment.map((e) =>
-          e.id !== estimate.olt!.id
-            ? e
-            : {
-                ...e,
-                ponPorts: e.ponPorts?.map((p) =>
-                  p.id === servingPonId
-                    ? { ...p, status: 'Active' as const, connectedCustomersCount: p.connectedCustomersCount + 1 }
-                    : p,
-                ),
-              },
+      ? recountPonCustomers(
+          data.equipment.map((e) =>
+            e.id !== estimate.olt!.id ? e : { ...e, ponPorts: e.ponPorts?.map((p) => (p.id === servingPonId ? { ...p, status: 'Active' as const } : p)) },
+          ),
+          data.customers.map((c) => (c.id === customerId ? updated : c)),
+          [customer.oltId, estimate.olt.id],
         )
       : undefined;
   // The splitter input is already on record (the path above starts from it); it is never set here.
@@ -584,7 +594,8 @@ export function markServingCores(
         createdAt: now.toISOString(),
         ...(ctx.actor ? { createdBy: ctx.actor } : {}),
       };
-      return { ...core, status: 'In Use' as const, assignments: [...(core.assignments ?? []), assignment] };
+      // Phase 7: a damaged, faulty or retired mark is kept; the fiber rules then warn about it.
+      return { ...core, status: isCoreConditionStatus(core.status) ? core.status : ('In Use' as const), assignments: [...(core.assignments ?? []), assignment] };
     });
     return changed ? { ...cable, cores } : cable;
   });

@@ -14,6 +14,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import {
   type Customer,
+  CUSTOMER_HIDDEN_TEXT,
   estimateRxForSplitter,
   findUpstreamChain,
   hasRecordedLocation,
@@ -38,6 +39,7 @@ import {
   RxCheckSection,
   ServicesSection,
 } from '../customers/ConnectionSections';
+import { CustomerPonSection } from '../map/pon/PonSections';
 import { LiveStatusSection } from '../monitoring/LiveStatusSection';
 import { navigateToSite } from './actions';
 import { formatDate, formatDateTime, formatDbm, joinPresent, orNotRecorded, presentItems, rxBudget } from './format';
@@ -178,7 +180,8 @@ function NotLinkedNotice({ customer }: { customer: Customer }) {
 /** Says plainly when the house position is unknown, and offers the two honest ways to record it. */
 function NoLocationNotice({ customer }: { customer: Customer }) {
   const setPicking = useUiStore((s) => s.setPickingOnuCustomer);
-  if (hasRecordedLocation(customer)) return null;
+  // Phase 12: a position hidden for this role is not "not recorded".
+  if (hasRecordedLocation(customer) || customer.hiddenFields?.includes('gps')) return null;
   const captureGps = async () => {
     try {
       const { lat, lng, accuracyMeters } = await currentGpsPosition();
@@ -239,7 +242,7 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
     { label: 'IP address', value: orNotRecorded(customer.ipAddress), mono: true },
     {
       label: 'Location',
-      value: located ? `${customer.lat.toFixed(5)}, ${customer.lng.toFixed(5)}` : 'Not recorded',
+      value: located ? `${customer.lat.toFixed(5)}, ${customer.lng.toFixed(5)}` : customer.hiddenFields?.includes('gps') ? CUSTOMER_HIDDEN_TEXT : 'Not recorded',
       mono: located,
     },
     {
@@ -311,6 +314,7 @@ export function CustomerInspector({ customer, detailed }: { customer: Customer; 
         </InspectorSection>
       )}
 
+      <CustomerPonSection customer={customer} />
       <LiveStatusSection customer={customer} />
       <RxCheckSection customer={customer} />
 

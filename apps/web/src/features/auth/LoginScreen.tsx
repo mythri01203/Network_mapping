@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Building2, Eye, EyeOff, Loader2, LogIn, type LucideIcon, Network, ShieldCheck, UserRound, Wrench } from 'lucide-react';
+import { ArrowLeft, Building2, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, type LucideIcon, MonitorDot, Network, ShieldCheck, UserRound, Wrench } from 'lucide-react';
 
 import type { AccountRole } from '@fibergis/shared';
 
@@ -18,9 +18,12 @@ import { FirstAdminForm } from '../admin/UsersPanel';
 
 const ROLE_PICTURE: Record<AccountRole, LucideIcon> = {
   admin: ShieldCheck,
+  network_admin: ShieldCheck,
   engineer: Network,
   office: Building2,
   technician: Wrench,
+  noc: MonitorDot,
+  supervisor: ClipboardCheck,
   viewer: Eye,
 };
 

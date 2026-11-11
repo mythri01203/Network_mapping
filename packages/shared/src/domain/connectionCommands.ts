@@ -29,21 +29,25 @@ import {
 } from './command';
 import {
   type ConnectionData,
+  customerPathChangeErrors,
   customersOnOnt,
   isActiveCustomer,
   isLiveOnt,
   isLiveService,
   newConnectionProblems,
   sameSerial,
+  writtenIds,
 } from './connectionRules';
+import { CUSTOMER_PATH_FIELD_LABELS, customerPathCache, customerPathFromLinks, type CustomerPathValues, proposeCustomerPathFixes } from './customerPath';
 import { hasRecordedLocation, isValidCoordinate } from './defaults';
-import { activeAssignment, completeCores } from './fiberCommands';
+import { activeAssignment, completeCores, isCoreConditionStatus } from './fiberCommands';
 import { buildFiberIndex, describeCore, type FiberData, newFiberId, splitterCapacity } from './fiberIndex';
 import { traceCustomerCores } from './fiberPath';
 import { describeFiberProblems, newFiberProblems } from './fiberRules';
 import { randomCode } from './fieldCapture';
 import { buildOltPonPorts } from './oltConfig';
 import { DEFAULT_OPTICAL_SETTINGS } from './opticalSettings';
+import { recountPonCustomers } from './ponUsage';
 import { setPortUsage } from './ports';
 import { markServingCores } from './provisioning';
 import { rxReadingOf } from './rxReading';
@@ -67,6 +71,7 @@ const connectionDataOf = (data: NetworkData): ConnectionData => ({
   onts: data.onts ?? [],
   services: data.services ?? [],
   buildings: data.buildings ?? [],
+  closures: data.closures,
 });
 
 const fiberDataOf = (data: NetworkData): FiberData => ({
@@ -88,7 +93,12 @@ export function checkedConnectionChange<T>(
   const after = applyPatch(data, patch);
   const conn = newConnectionProblems(connectionDataOf(data), connectionDataOf(after));
   const fiber = newFiberProblems(fiberDataOf(data), fiberDataOf(after), { settings: ctx.optical ?? DEFAULT_OPTICAL_SETTINGS, schemes: ctx.schemes });
-  const errors = [...conn.errors, ...fiber.errors];
+  // Phase 12: the same refusal the server gives when a written customer or output disagrees with the links.
+  const paths = customerPathChangeErrors(connectionDataOf(data), connectionDataOf(after), {
+    customerIds: writtenIds(data.customers, after.customers),
+    splitterIds: writtenIds(data.splitters, after.splitters),
+  });
+  const errors = [...conn.errors, ...fiber.errors, ...paths];
   if (errors.length > 0) return fail('Not saved', `${describeFiberProblems(errors)} Nothing was saved.`);
   const warnings = [...conn.warnings, ...fiber.warnings];
   if (warnings.length === 0) return succeed(value, patch, extras);
@@ -451,7 +461,8 @@ function releaseCustomerFiber(cables: readonly Cable[], customer: Customer, cabl
       const { customerId: _c, customerName: _n, connectedToEquipmentId: _e, connectedPort: _p, ...rest } = k;
       return {
         ...rest,
-        status: 'Available' as const,
+        // Phase 7: releasing does not repair the glass; a damaged, faulty or retired fiber stays so.
+        status: isCoreConditionStatus(k.status) ? k.status : ('Available' as const),
         assignments: (k.assignments ?? []).map((a) => (a.releasedAt ? a : { ...a, releasedAt: at, ...(ctx.actor ? { releasedBy: ctx.actor } : {}), releaseReason: why.slice(0, 300) })),
       };
     }),
@@ -469,7 +480,9 @@ function giveCustomerFiber(cables: readonly Cable[], customer: Customer, cableId
   const active = activeAssignment(record);
   if (active && active.customerId !== customer.id) return `${label[0].toUpperCase()}${label.slice(1)} is already ${active.kind === 'reserved' ? 'reserved' : 'in use'} for ${active.use}. Choose a free fiber.`;
   if (!active && record.status === 'In Use' && record.customerId !== customer.id) return `${label[0].toUpperCase()}${label.slice(1)} is marked In Use${record.customerId ? ` for ${record.customerId}` : ''}. Choose a free fiber.`;
-  if (record.status === 'Damaged') return `${label[0].toUpperCase()}${label.slice(1)} is marked damaged.`;
+  if (record.status === 'Damaged' || record.status === 'Faulty' || record.status === 'Retired') {
+    return `${label[0].toUpperCase()}${label.slice(1)} is marked ${record.status === 'Retired' ? 'retired (out of use)' : record.status.toLowerCase()}. Choose another fiber.`;
+  }
   if (active) return { cables: [...cables] };
   const assignment: CoreAssignment = {
     id: newFiberId('CA'),
@@ -491,16 +504,12 @@ function giveCustomerFiber(cables: readonly Cable[], customer: Customer, cableId
   return { cables: cables.map((c) => (c.id === cable.id ? updated : c)) };
 }
 
-/** Frees the access box port the customer held, and lowers the PON port's customer count. */
+/**
+ * Frees the access box port the customer held. Phase 10: the PON port's cached customer count is no
+ * longer lowered by one here; callers recount it from the customer records (`recountPonCustomers`).
+ */
 function releaseBoxAndPon(equipment: readonly Equipment[], customer: Customer): Equipment[] {
-  return equipment.map((e) => {
-    let next = e;
-    if (e.id === customer.terminalBoxId && e.logicalPorts?.some((p) => p.customerId === customer.id)) next = setPortUsage(next, undefined, false, customer.id);
-    if (e.id === customer.oltId && customer.ponPort && next.ponPorts?.some((p) => p.id === customer.ponPort)) {
-      next = { ...next, ponPorts: next.ponPorts!.map((p) => (p.id === customer.ponPort ? { ...p, connectedCustomersCount: Math.max(0, p.connectedCustomersCount - 1) } : p)) };
-    }
-    return next;
-  });
+  return equipment.map((e) => (e.id === customer.terminalBoxId && e.logicalPorts?.some((p) => p.customerId === customer.id) ? setPortUsage(e, undefined, false, customer.id) : e));
 }
 
 const connectionOf = (customer: Customer, kind: CustomerConnection['kind'], reason: string, ctx: CommandContext, ont?: Ont): CustomerConnection => ({
@@ -571,13 +580,15 @@ export function disconnectCustomer(data: NetworkData, customerId: string, reason
     history: [...(customer.history ?? []), line('DISCONNECTED', `${why}${reading.valueDbm !== undefined ? `. Last reading ${reading.text}` : ''}`, ctx)],
   };
   const released = [fiber.released, ...outputs.freed].filter(Boolean);
+  const customers = replace(data.customers, updated);
   return checkedConnectionChange(
     data,
     {
-      customers: replace(data.customers, updated),
+      customers,
       cables: fiber.cables,
       splitters: outputs.splitters,
-      equipment,
+      // Phase 10: the cached PON count is set from the customer records, not lowered by one.
+      equipment: recountPonCustomers(equipment, customers, [customer.oltId]),
       ...(onts !== data.onts ? { onts } : {}),
       ...(ended ? { services } : {}),
     },
@@ -695,14 +706,17 @@ export function moveCustomer(data: NetworkData, customerId: string, target: Move
   };
   const interim = applyPatch(data, { cables, splitters, equipment, customers: replace(data.customers, moved) });
   const path = traceCustomerCores(moved, fiberDataOf(interim), { settings: ctx.optical });
-  const upstream = path.cableIds.filter((id) => id !== drop.cableId);
-  const linked = path.complete && path.olt && path.pon ? { oltId: path.olt.id, ponPort: path.pon.id } : undefined;
+  // Phase 12: the path fields come from the fibre links, the one source of truth (blank where they stop).
+  const fromLinks = customerPathFromLinks(moved, customerPathCache(fiberDataOf(interim))).values;
+  const linked = fromLinks.oltId && fromLinks.ponPort ? { oltId: fromLinks.oltId, ponPort: fromLinks.ponPort } : undefined;
+  const linkedOlt = linked ? interim.equipment.find((e) => e.id === linked.oltId) : undefined;
   const reading = rxReadingOf(customer, ctx.optical);
   const { disconnectedAt: _d, disconnectReason: _r, rxOpticalPowerDbm: _rx, rxSource: _rs, rxMeasuredAt: _rm, rxLaunchDbm: _rl, rxPhotoId: _rp, rxCaptureId: _rc, ...kept } = moved;
   const updated: Customer = {
     ...kept,
     ...(linked ? { oltId: linked.oltId, ponPort: linked.ponPort } : {}),
-    ...(upstream.length ? { feederCableId: upstream.at(-1)!, distributionCableId: upstream[0] } : {}),
+    ...(fromLinks.feederCableId ? { feederCableId: fromLinks.feederCableId } : {}),
+    ...(fromLinks.distributionCableId ? { distributionCableId: fromLinks.distributionCableId } : {}),
     connectionHistory: reconnect ? customer.connectionHistory : [...(customer.connectionHistory ?? []), connectionOf(customer, 'moved', why, ctx)],
     history: [
       ...(customer.history ?? []),
@@ -711,9 +725,11 @@ export function moveCustomer(data: NetworkData, customerId: string, target: Move
   };
   if (linked) {
     equipment = equipment.map((e) =>
-      e.id === linked.oltId && e.ponPorts ? { ...e, ponPorts: e.ponPorts.map((p) => (p.id === linked.ponPort ? { ...p, status: 'Active' as const, connectedCustomersCount: p.connectedCustomersCount + 1 } : p)) } : e,
+      e.id === linked.oltId && e.ponPorts ? { ...e, ponPorts: e.ponPorts.map((p) => (p.id === linked.ponPort ? { ...p, status: 'Active' as const } : p)) } : e,
     );
   }
+  // Phase 10: the cached PON counts of the old and new OLT are set from the customer records.
+  equipment = recountPonCustomers(equipment, replace(data.customers, updated), [customer.oltId, linked?.oltId]);
   // 5. The customer's ONT follows the move.
   const ont = customer.ontId ? (data.onts ?? []).find((o) => o.id === customer.ontId) : undefined;
   const onts =
@@ -730,7 +746,7 @@ export function moveCustomer(data: NetworkData, customerId: string, target: Move
       : data.onts;
   const basePatch: NetworkPatch = { cables, splitters, equipment, customers: replace(data.customers, updated), ...(onts !== data.onts ? { onts } : {}) };
   const marked = markServingCores(applyPatch(data, basePatch), splitter.id, ctx);
-  const linkNote = linked ? ` Traced to ${path.olt!.name} ${path.pon!.id}.` : ` Not linked to an OLT yet: ${path.gaps[0] ?? 'the fiber path does not reach a PON port'}.`;
+  const linkNote = linked ? ` Traced to ${linkedOlt?.name ?? linked.oltId} ${linked.ponPort}.` : ` Not linked to an OLT yet: ${path.gaps[0] ?? 'the fiber path does not reach a PON port'}.`;
   return checkedConnectionChange(data, { ...basePatch, cables: marked.cables }, updated, {
     notice: notice(
       linked ? 'success' : 'warning',
@@ -987,4 +1003,144 @@ export function placeCustomerInUnit(data: NetworkData, customerId: string, place
     notice: notice('success', 'Saved', building ? `${customer.name} is in ${building.name}${unit ? `, ${unit.label}` : ''}.` : `${customer.name} is no longer recorded in a building.`),
     audit: [{ action: 'CUSTOMER_PLACED', details: `${customer.id}: ${building ? `${building.id}${unit ? `/${unit.id}` : ''}` : 'cleared'}`, assetId: customer.id, assetType: 'Customer' }],
   }, ctx);
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 12: customer paths from the fibre links                       */
+/* ------------------------------------------------------------------ */
+
+const shownValue = (field: string, v: unknown) => (v === undefined || v === '' || v === 0 ? 'not recorded' : field === 'fiberCore' ? `fiber ${v}` : field === 'splitterOutputPort' ? `output ${v}` : String(v));
+
+/**
+ * Takes the path fields of these customers, and the customer named on their splitter outputs, from
+ * the fibre links. Runs only when a person confirms the list (Customers, "Check customer paths").
+ * Fields the links do not decide are left as they are; nothing is filled from a guess. Each record
+ * keeps a history line saying what was changed from what.
+ */
+export function reconcileCustomerPaths(data: NetworkData, customerIds: readonly string[], ctx: CommandContext = {}): CommandResult<{ fixed: string[] }> {
+  const wanted = new Set(customerIds);
+  if (wanted.size === 0) return fail('Nothing chosen', 'Choose the customers to fix.', 'info');
+  const fixes = proposeCustomerPathFixes(fiberDataOf(data), wanted).filter((f) => Object.keys(f.customerPatch).length > 0 || f.outputFixes.length > 0);
+  if (fixes.length === 0) return fail('Nothing to fix', 'These customers already agree with the fibre links, or the links do not say yet.', 'info');
+  let customers = [...data.customers];
+  let splitters = [...data.splitters];
+  const oltIds = new Set<string>();
+  const audit: AuditEntry[] = [];
+  const fixed: string[] = [];
+  for (const fix of fixes) {
+    const customer = customers.find((c) => c.id === fix.customerId);
+    const said: string[] = [];
+    if (customer) {
+      const patch: CustomerPathValues = fix.customerPatch;
+      for (const [field, value] of Object.entries(patch)) {
+        said.push(`${CUSTOMER_PATH_FIELD_LABELS[field as keyof CustomerPathValues]} ${shownValue(field, customer[field as keyof Customer])} → ${shownValue(field, value)}`);
+      }
+      if (said.length > 0) {
+        if (customer.oltId) oltIds.add(customer.oltId);
+        if (patch.oltId) oltIds.add(patch.oltId);
+        customers = replace(customers, { ...customer, ...patch, history: [...(customer.history ?? []), line('PATH_FROM_LINKS', `Set from the fibre links: ${said.join('; ')}`, ctx)] });
+      }
+    }
+    for (const out of fix.outputFixes) {
+      const owner = out.customerId ? customers.find((c) => c.id === out.customerId) : undefined;
+      splitters = splitters.map((s) =>
+        s.id !== out.splitterId
+          ? s
+          : {
+              ...s,
+              outputPorts: s.outputPorts.map((p): SplitterPort => {
+                if (p.portNumber !== out.port) return p;
+                if (out.customerId) {
+                  said.push(`output ${p.portNumber} of ${s.name}: customer ${p.connectedCustomerId ?? 'not recorded'} → ${out.customerId}`);
+                  return {
+                    ...p,
+                    connectedCustomerId: out.customerId,
+                    ...(owner ? { connectedCustomerName: owner.name } : {}),
+                    status: p.status === 'Available' ? 'Occupied' : p.status,
+                    history: [...(p.history ?? []), line('OWNER_FROM_LINKS', `Customer set from the fibre links: ${p.connectedCustomerId ?? 'none'} → ${out.customerId}`, ctx)],
+                  };
+                }
+                said.push(`output ${p.portNumber} of ${s.name}: customer ${p.connectedCustomerId ?? '?'} cleared`);
+                const { connectedCustomerId: _c, connectedCustomerName: _n, ...rest } = p;
+                return {
+                  ...rest,
+                  status: !p.connectedDropCableId && p.status === 'Occupied' ? 'Available' : p.status,
+                  history: [...(p.history ?? []), line('OWNER_FROM_LINKS', `Customer ${p.connectedCustomerId ?? '?'} cleared: the fibre links do not lead to them`, ctx)],
+                };
+              }),
+            },
+      );
+    }
+    if (said.length > 0) {
+      fixed.push(fix.customerId);
+      audit.push({ action: 'CUSTOMER_PATH_FROM_LINKS', details: `${fix.customerId}: ${said.join('; ')}`.slice(0, 1000), assetId: fix.customerId, assetType: 'Customer' });
+    }
+  }
+  // The cached PON counts of the old and new OLT follow the customer records.
+  const equipment = oltIds.size > 0 ? recountPonCustomers(data.equipment, customers, oltIds) : undefined;
+  return checkedConnectionChange(
+    data,
+    { customers, splitters, ...(equipment ? { equipment } : {}) },
+    { fixed },
+    {
+      notice: notice('success', 'Paths fixed from the links', `${fixed.length} customer(s) now agree with the fibre links. Each change is in their history.`),
+      audit,
+    },
+    ctx,
+  );
+}
+
+export interface CustomerDropLink {
+  splitterId: string;
+  port: number;
+  cableId: string;
+  core: number;
+}
+
+/**
+ * Records the drop fiber a customer is on, after the splitter output was linked to it. The OLT,
+ * PON port, feeder and distribution are then taken from the fibre links, and left blank where the
+ * links stop (the old values were for another connection). The output names the customer.
+ */
+export function linkCustomerDrop(data: NetworkData, customerId: string, link: CustomerDropLink, ctx: CommandContext = {}): CommandResult<Customer> {
+  const customer = data.customers.find((c) => c.id === customerId);
+  if (!customer) return fail('Customer Missing', `Customer ${customerId} was not found.`);
+  const splitter = data.splitters.find((s) => s.id === link.splitterId);
+  if (!splitter) return fail('Splitter Missing', `Splitter ${link.splitterId} was not found.`);
+  const port = splitter.outputPorts.find((p) => p.portNumber === link.port);
+  if (!port) return fail('No such output', `${splitter.name} has no output ${link.port}.`);
+  if (port.connectedCustomerId && port.connectedCustomerId !== customer.id) {
+    return fail('Output in use', `Output ${link.port} of ${splitter.name} already serves ${port.connectedCustomerName ?? port.connectedCustomerId}.`);
+  }
+  const placed: Customer = { ...customer, terminalBoxId: splitter.terminalBoxId, splitterId: splitter.id, splitterOutputPort: link.port, dropCableId: link.cableId, fiberCore: link.core };
+  const splitters = data.splitters.map((s) =>
+    s.id !== splitter.id
+      ? s
+      : { ...s, outputPorts: s.outputPorts.map((p) => (p.portNumber === link.port ? { ...p, connectedCustomerId: customer.id, connectedCustomerName: customer.name, status: p.status === 'Available' ? ('Occupied' as const) : p.status } : p)) },
+  );
+  const interim = applyPatch(data, { splitters, customers: replace(data.customers, placed) });
+  const fromLinks = customerPathFromLinks(placed, customerPathCache(fiberDataOf(interim))).values;
+  const updated: Customer = {
+    ...placed,
+    oltId: fromLinks.oltId ?? '',
+    ponPort: fromLinks.ponPort ?? '',
+    feederCableId: fromLinks.feederCableId ?? '',
+    distributionCableId: fromLinks.distributionCableId ?? '',
+    history: [...(customer.history ?? []), line('DROP_LINKED', `${splitter.id} output ${link.port}, ${link.cableId} fiber ${link.core}`, ctx)],
+  };
+  const customers = replace(data.customers, updated);
+  return checkedConnectionChange(
+    data,
+    { customers, splitters, equipment: recountPonCustomers(data.equipment, customers, [customer.oltId, updated.oltId]) },
+    updated,
+    {
+      notice: notice(
+        updated.oltId ? 'success' : 'warning',
+        'Drop linked',
+        `${customer.name} is on fiber ${link.core} of ${link.cableId}, output ${link.port} of ${splitter.name}.${updated.oltId ? ` Traced to ${updated.oltId}${updated.ponPort ? ` ${updated.ponPort}` : ''}.` : ' Not linked to an OLT yet: the fibre links stop before a PON port.'}`,
+      ),
+      audit: [{ action: 'CUSTOMER_DROP_LINKED', details: `${customer.id} on ${splitter.id} output ${link.port}, ${link.cableId} fiber ${link.core}`, assetId: customer.id, assetType: 'Customer' }],
+    },
+    ctx,
+  );
 }

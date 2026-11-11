@@ -1,11 +1,15 @@
 import { type CableType, EQUIPMENT_TYPES_BY_CATEGORY, type EquipmentCategory } from '../model/enums';
+import type { ImportedCollection, ImportFormat, ImportRecord } from '../model/importSchemas';
 import type { Cable, Duct, Equipment, ImportInfo, LatLng } from '../model/types';
 import { type CommandContext, type CommandResult, fail, type NetworkData, notice, succeed } from './command';
-import { buildCores } from './defaults';
-import { randomCode } from './fieldCapture';
-import { polylineLengthMeters } from './geo';
+import { fingerprintRecord } from './dataImport';
+import { buildCores, hasRecordedLocation } from './defaults';
+import { distanceMeters, randomCode } from './fieldCapture';
+import { boundsOf, polylineLengthMeters } from './geo';
 import { DEFAULT_OSP_SETTINGS, type OspSettings } from './ospSettings';
-import { findPossibleDuplicates, newOspId } from './outsidePlant';
+import { findPossibleDuplicates, hasPlacedPosition, newOspId } from './outsidePlant';
+import { routeOverlapRatio } from './routeGeometry';
+import { DEFAULT_VALIDATION_SETTINGS } from './validationSettings';
 
 /**
  * KML and KMZ import, after the file has been read into plain features (see the web app's
@@ -32,6 +36,8 @@ export interface KmlFeatureInput {
   styleId?: string;
   geometry: KmlGeometryInput | null;
   extendedData: Record<string, string>;
+  /** Phase 21: a core count from a column the person chose (GeoJSON, CSV, Shapefile). Absent means not recorded. */
+  coreCount?: number;
 }
 
 export type KmlGeometryKind = 'point' | 'line';
@@ -196,9 +202,19 @@ export interface KmlImportOptions {
   fileName: string;
   importId?: string;
   now?: Date;
-  /** Import points that look like an existing item anyway, as new records. */
+  /** Import points and lines that look like an existing item anyway, as new records. */
   includePossibleDuplicates?: boolean;
   settings?: OspSettings;
+  /** Phase 21: the kind of file. Default KML. */
+  format?: ImportFormat;
+  /** Phase 21: what else the person chose (column mapping, coordinate system), in words, for the import record. */
+  settingsUsed?: Readonly<Record<string, string>>;
+  /** Phase 21: warnings the person accepted, written out, for the import record. */
+  overrides?: readonly string[];
+  /** Phase 21: line ends the person confirmed, `endKey` → the `ref` of one of that end's candidates. */
+  confirmedEnds?: Readonly<Record<string, string>>;
+  /** Phase 21: how far from a line end a box or chamber is offered. Default: the map check's cable end limit. */
+  endSearchMeters?: number;
 }
 
 export interface KmlHeldBack {
@@ -208,9 +224,44 @@ export interface KmlHeldBack {
   distanceMeters: number;
 }
 
+/** Phase 21: a line that runs along a cable or duct already on the map (or earlier in the file). */
+export interface KmlHeldBackLine {
+  index: number;
+  name: string;
+  collection: 'cables' | 'ducts';
+  existingId: string;
+  existingName: string;
+  /** Share of the shorter line within the "same cable?" distance of the other, in percent. */
+  overlapPercent: number;
+}
+
+/** Phase 21: one item a line end could be connected to. Offered only; never chosen for the person. */
+export interface KmlEndCandidate {
+  /** `id:<record id>` for an item on the map, `new:<placemark index>` for a point in this file. */
+  ref: string;
+  id: string;
+  name: string;
+  type: string;
+  distanceMeters: number;
+  inThisFile: boolean;
+}
+
+export interface KmlEndProposal {
+  key: string;
+  /** The line's placemark index. */
+  index: number;
+  lineName: string;
+  collection: 'cables' | 'ducts';
+  end: 'start' | 'end';
+  candidates: KmlEndCandidate[];
+  /** The candidate the person confirmed, if any. */
+  chosenRef?: string;
+}
+
 export interface KmlImportPlan {
   importId: string;
   fileName: string;
+  format: ImportFormat;
   equipment: Equipment[];
   cables: Cable[];
   ducts: Duct[];
@@ -218,9 +269,27 @@ export interface KmlImportPlan {
   skipped: KmlSkipped[];
   /** Points that look like an existing item of the same kind. Not imported unless asked. */
   possibleDuplicates: KmlHeldBack[];
+  /** Phase 21: lines that run along an existing cable or duct. Not imported unless asked. */
+  possibleDuplicateLines: KmlHeldBackLine[];
+  /** Phase 21: line ends near a box or chamber, for the person to confirm one by one. */
+  endProposals: KmlEndProposal[];
+  /** Phase 21: ends connected because the person confirmed them. */
+  endsConfirmed: number;
+  /** Phase 21: the choices behind this plan, in words, kept in the import record. */
+  settingsUsed: Record<string, string>;
+  overrides: string[];
   /** Groups still waiting for a choice. Import is not allowed until this is empty. */
   unanswered: string[];
 }
+
+/** The key of one line end in `confirmedEnds`. */
+export const endKeyOf = (index: number, end: 'start' | 'end') => `${index}:${end}`;
+
+/** Poles, manholes and chambers carry cables; a cable does not end "at" a pole by being near it. */
+const STRUCTURE_TYPE = /pole|manhole|handhole|chamber/i;
+const CHAMBER_TYPE = /manhole|handhole|chamber/i;
+
+const MAX_END_CANDIDATES = 3;
 
 const categoryOf = (type: string): EquipmentCategory =>
   (Object.entries(EQUIPMENT_TYPES_BY_CATEGORY).find(([, types]) => (types as readonly string[]).includes(type))?.[0] as EquipmentCategory | undefined) ??
@@ -241,14 +310,21 @@ export function planKmlImport(
   const now = options.now ?? new Date();
   const importId = options.importId ?? newOspId('IMP');
   const settings = options.settings ?? DEFAULT_OSP_SETTINGS;
+  const format = options.format ?? 'kml';
   const plan: KmlImportPlan = {
     importId,
     fileName: options.fileName,
+    format,
     equipment: [],
     cables: [],
     ducts: [],
     skipped: [...preview.skipped],
     possibleDuplicates: [],
+    possibleDuplicateLines: [],
+    endProposals: [],
+    endsConfirmed: 0,
+    settingsUsed: { ...(options.settingsUsed ?? {}) },
+    overrides: [...(options.overrides ?? [])],
     unanswered: [],
   };
 
@@ -257,6 +333,19 @@ export function planKmlImport(
     if (!choice?.target || (choice.target !== 'skip' && !choice.status)) plan.unanswered.push(group.key);
   }
   if (plan.unanswered.length > 0) return plan;
+
+  for (const group of preview.groups) {
+    const choice = choices[group.key]!;
+    const where = `${group.kind === 'point' ? 'Points' : 'Lines'} in ${group.folderPath || 'the top of the file'}${group.styleId ? ` (style ${group.styleId})` : ''}`.slice(0, 120);
+    plan.settingsUsed[where] =
+      choice.target === 'skip'
+        ? 'not imported'
+        : `${shortLabel(choice.target!)}, ${choice.status === 'existing' ? 'already in the street' : 'only planned'}${choice.coreCount ? `, ${choice.coreCount} cores` : ''}`;
+  }
+  /** Placemark index → the point made from it, for line ends at a point in the same file. */
+  const pointByIndex = new Map<number, Equipment>();
+  /** Record id → placemark index of the line it came from. */
+  const lineIndex = new Map<string, number>();
 
   for (const feature of preview.features) {
     const choice = choices[feature.groupKey];
@@ -290,7 +379,7 @@ export function planKmlImport(
         plan.possibleDuplicates.push({ index: input.index, name, existing: twin.equipment, distanceMeters: twin.distanceMeters });
         if (!options.includePossibleDuplicates) continue;
       }
-      plan.equipment.push({
+      const made = {
         id: `${target.prefix}-${randomCode()}`,
         name,
         type: target.value as Equipment['type'],
@@ -306,13 +395,26 @@ export function planKmlImport(
         installedDate: '',
         notes: remark,
         importInfo,
-      });
+      } satisfies Equipment;
+      plan.equipment.push(made);
+      pointByIndex.set(input.index, made);
       continue;
     }
 
     if (feature.kind === 'line' && feature.line) {
-      if (choice.target === 'duct') {
-        plan.ducts.push({
+      const collection = choice.target === 'duct' ? 'ducts' : 'cables';
+      if (collection === 'cables' && !choice.target.startsWith('cable:')) {
+        plan.skipped.push({ index: input.index, name, folderPath: input.folderPath, reason: 'A line cannot be imported as a point type.' });
+        continue;
+      }
+      // Phase 21: a line along a cable or duct already on the map (or earlier in this file) is asked about, like a point.
+      const twin = findDuplicateLine(feature.line, collection === 'ducts' ? [...(data.ducts ?? []), ...plan.ducts] : [...data.cables, ...plan.cables], settings);
+      if (twin) {
+        plan.possibleDuplicateLines.push({ index: input.index, name, collection, existingId: twin.id, existingName: twin.name, overlapPercent: twin.overlapPercent });
+        if (!options.includePossibleDuplicates) continue;
+      }
+      if (collection === 'ducts') {
+        const duct: Duct = {
           id: newOspId('DCT'),
           name,
           coordinates: feature.line,
@@ -323,16 +425,16 @@ export function planKmlImport(
           importInfo,
           createdAt: now.toISOString(),
           notes: remark,
-        });
-        continue;
-      }
-      if (!choice.target.startsWith('cable:')) {
-        plan.skipped.push({ index: input.index, name, folderPath: input.folderPath, reason: 'A line cannot be imported as a point type.' });
+        };
+        plan.ducts.push(duct);
+        lineIndex.set(duct.id, input.index);
         continue;
       }
       const type = choice.target.slice('cable:'.length) as CableType;
-      const cores = choice.coreCount && choice.coreCount > 0 ? choice.coreCount : 0;
-      plan.cables.push({
+      // A core count from a column the person chose comes first; else the group's choice; else not recorded.
+      const chosen = input.coreCount ?? choice.coreCount;
+      const cores = chosen && chosen > 0 ? chosen : 0;
+      const cable: Cable = {
         id: `CBL-${randomCode()}`,
         name,
         type,
@@ -347,13 +449,128 @@ export function planKmlImport(
         cableCategory: 'Fiber',
         remarks: `${remark} Its ends are not connected to anything: connect them only where you know they join.`,
         importInfo,
-      });
+      };
+      plan.cables.push(cable);
+      lineIndex.set(cable.id, input.index);
     }
   }
+
+  // Phase 21: line ends near a box (cables) or a chamber (ducts) are offered, never set. Only an end
+  // the person confirmed, naming one of its own candidates, is connected.
+  const searchMeters = options.endSearchMeters ?? DEFAULT_VALIDATION_SETTINGS.cableEndGapMeters;
+  const points = [
+    ...data.equipment.filter((e) => hasPlacedPosition(e) && hasRecordedLocation(e)).map((e) => ({ e, ref: `id:${e.id}`, inThisFile: false })),
+    ...[...pointByIndex].map(([index, e]) => ({ e, ref: `new:${index}`, inThisFile: true })),
+  ];
+  const confirmed = options.confirmedEnds ?? {};
+  const proposeEnds = (collection: 'cables' | 'ducts', record: Cable | Duct): void => {
+    const index = lineIndex.get(record.id);
+    if (index === undefined) return;
+    const fits = collection === 'cables' ? (type: string) => !STRUCTURE_TYPE.test(type) : (type: string) => CHAMBER_TYPE.test(type);
+    for (const end of ['start', 'end'] as const) {
+      const at = end === 'start' ? record.coordinates[0]! : record.coordinates[record.coordinates.length - 1]!;
+      const candidates = points
+        .filter(({ e }) => fits(e.type))
+        .map(({ e, ref, inThisFile }) => ({ ref, id: e.id, name: e.name, type: e.type, inThisFile, distanceMeters: Math.round(distanceMeters(at, [e.lat, e.lng]) * 10) / 10 }))
+        .filter((c) => c.distanceMeters <= searchMeters)
+        .sort((a, b) => a.distanceMeters - b.distanceMeters)
+        .slice(0, MAX_END_CANDIDATES);
+      if (candidates.length === 0) continue;
+      const key = endKeyOf(index, end);
+      const pick = candidates.find((c) => c.ref === confirmed[key]);
+      plan.endProposals.push({ key, index, lineName: record.name, collection, end, candidates, ...(pick ? { chosenRef: pick.ref } : {}) });
+      if (!pick) continue;
+      plan.endsConfirmed += 1;
+      if (collection === 'cables') {
+        const cable = record as Cable;
+        if (end === 'start') cable.startEquipmentId = pick.id;
+        else cable.endEquipmentId = pick.id;
+      } else {
+        const duct = record as Duct;
+        if (end === 'start') duct.fromStructureId = pick.id;
+        else duct.toStructureId = pick.id;
+      }
+    }
+  };
+  for (const cable of plan.cables) proposeEnds('cables', cable);
+  for (const duct of plan.ducts) proposeEnds('ducts', duct);
+  for (const cable of plan.cables) {
+    if (!cable.startEquipmentId && !cable.endEquipmentId) continue;
+    const ends = [cable.startEquipmentId && 'From', cable.endEquipmentId && 'To'].filter(Boolean).join(' and ');
+    cable.remarks = `Imported from ${options.fileName}. ${ends} end connected because a person confirmed it at import; any other end is not connected.`;
+  }
+
+  const held = plan.possibleDuplicates.length + plan.possibleDuplicateLines.length;
+  if (held > 0) {
+    plan.settingsUsed['Items that look like ones already on the map'] = options.includePossibleDuplicates ? 'imported anyway' : 'left out';
+    if (options.includePossibleDuplicates) plan.overrides.push(`${held} item(s) that looked like ones already on the map were imported anyway, as new items.`);
+  }
+  plan.settingsUsed['Line ends offered within'] = `${searchMeters} m (boxes for cables, chambers for ducts); ${plan.endsConfirmed} confirmed by the person`;
   return plan;
 }
 
-/** Adds what the plan holds, as one step that can be undone. */
+interface LineLike {
+  id: string;
+  name: string;
+  coordinates: readonly LatLng[];
+}
+
+/**
+ * A cable or duct whose line runs along this one for most of its length, with about the same
+ * length (both by the "same cable?" settings). Two real cables can share a route, so this only asks.
+ */
+export function findDuplicateLine(
+  line: readonly LatLng[],
+  others: readonly LineLike[],
+  settings: Pick<OspSettings, 'duplicateRouteCorridorMeters' | 'duplicateRouteOverlapRatio'> = DEFAULT_OSP_SETTINGS,
+): { id: string; name: string; overlapPercent: number } | undefined {
+  const corridor = settings.duplicateRouteCorridorMeters;
+  const ratio = settings.duplicateRouteOverlapRatio;
+  const box = boundsOf([...line]);
+  if (!box || !(corridor > 0)) return undefined;
+  // A rough box test first (about 111 km per degree), so long files stay quick.
+  const pad = corridor / 111_000;
+  const length = polylineLengthMeters(line);
+  let best: { id: string; name: string; overlapPercent: number } | undefined;
+  for (const other of others) {
+    if (other.coordinates.length < 2) continue;
+    const b = boundsOf([...other.coordinates]);
+    if (!b || b.south > box.north + pad || b.north < box.south - pad || b.west > box.east + pad * 2 || b.east < box.west - pad * 2) continue;
+    const otherLength = polylineLengthMeters(other.coordinates);
+    if (Math.min(length, otherLength) / Math.max(length, otherLength, 1e-9) < ratio) continue;
+    const overlap = Math.min(routeOverlapRatio(line, other.coordinates, corridor), routeOverlapRatio(other.coordinates, line, corridor));
+    if (overlap >= ratio && (!best || overlap * 100 > best.overlapPercent)) best = { id: other.id, name: other.name, overlapPercent: Math.round(overlap * 100) };
+  }
+  return best;
+}
+
+/** The import record the import writes: who, when, what file, what was chosen, and what it made. */
+export function importRecordFor(plan: KmlImportPlan, ctx: CommandContext = {}): ImportRecord {
+  const created = (['equipment', 'cables', 'ducts'] as const satisfies readonly ImportedCollection[]).flatMap((collection) =>
+    (plan[collection] as readonly { id: string }[]).map((r) => ({ collection, id: r.id, fingerprint: fingerprintRecord(collection, r) })),
+  );
+  return {
+    id: plan.importId,
+    fileName: plan.fileName.trim().slice(0, 260) || 'file with no name',
+    format: plan.format,
+    importedAt: (ctx.now ?? new Date()).toISOString(),
+    importedBy: ctx.actor?.trim().slice(0, 120) || 'Not recorded',
+    counts: {
+      points: plan.equipment.length,
+      cables: plan.cables.length,
+      ducts: plan.ducts.length,
+      skipped: plan.skipped.length,
+      heldBack: plan.possibleDuplicates.length + plan.possibleDuplicateLines.length,
+      endsConfirmed: plan.endsConfirmed,
+    },
+    settingsUsed: Object.fromEntries(Object.entries(plan.settingsUsed).map(([k, v]) => [k.slice(0, 120), v.slice(0, 500)])),
+    overrides: plan.overrides.slice(0, 50).map((o) => o.slice(0, 500)),
+    created,
+    changed: [],
+  };
+}
+
+/** Adds what the plan holds, and its import record, as one step that can be undone. */
 export function importKml(
   data: NetworkData,
   plan: KmlImportPlan,
@@ -363,29 +580,28 @@ export function importKml(
   const count = plan.equipment.length + plan.cables.length + plan.ducts.length;
   if (count === 0) return fail('Nothing to import', 'Every feature was skipped. See the list of reasons.', 'warning');
   const taken = new Set([...data.equipment.map((e) => e.id), ...data.cables.map((c) => c.id), ...(data.ducts ?? []).map((d) => d.id)]);
-  if ([...plan.equipment, ...plan.cables, ...plan.ducts].some((r) => taken.has(r.id))) {
+  if ([...plan.equipment, ...plan.cables, ...plan.ducts].some((r) => taken.has(r.id)) || (data.imports ?? []).some((r) => r.id === plan.importId)) {
     return fail('ID clash', 'This import was already added. Nothing was changed.', 'info');
   }
   const value = { equipment: plan.equipment.length, cables: plan.cables.length, ducts: plan.ducts.length };
+  const record = importRecordFor(plan, ctx);
+  const connected = plan.endsConfirmed > 0 ? `${plan.endsConfirmed} line end(s) connected where you confirmed them; nothing else was connected.` : 'Nothing was connected.';
   return succeed(
     value,
     {
       ...(plan.equipment.length ? { equipment: [...data.equipment, ...plan.equipment] } : {}),
       ...(plan.cables.length ? { cables: [...data.cables, ...plan.cables] } : {}),
       ...(plan.ducts.length ? { ducts: [...(data.ducts ?? []), ...plan.ducts] } : {}),
+      imports: [...(data.imports ?? []), record],
     },
     {
-      notice: notice(
-        'success',
-        'File imported',
-        `${value.equipment} point(s), ${value.cables} cable(s) and ${value.ducts} duct(s) from ${plan.fileName}. ${plan.skipped.length} skipped. Nothing was connected.`,
-      ),
+      notice: notice('success', 'File imported', `${value.equipment} point(s), ${value.cables} cable(s) and ${value.ducts} duct(s) from ${plan.fileName}. ${plan.skipped.length} skipped. ${connected}`),
       audit: [
         {
-          action: 'KML_IMPORTED',
-          details: `${plan.fileName} (${plan.importId}) by ${ctx.actor ?? 'unknown'}: ${value.equipment} points, ${value.cables} cables, ${value.ducts} ducts; ${plan.skipped.length} skipped; ${plan.possibleDuplicates.length} looked like existing items`,
+          action: plan.format === 'kml' || plan.format === 'kmz' ? 'KML_IMPORTED' : 'MAP_FILE_IMPORTED',
+          details: `${plan.fileName} (${plan.importId}, ${plan.format}) by ${ctx.actor ?? 'unknown'}: ${value.equipment} points, ${value.cables} cables, ${value.ducts} ducts; ${plan.skipped.length} skipped; ${record.counts.heldBack} looked like existing items; ${plan.endsConfirmed} end(s) confirmed${plan.overrides.length ? `; accepted: ${plan.overrides.join(' ')}` : ''}`.slice(0, 1000),
           assetId: plan.importId,
-          assetType: 'System',
+          assetType: 'Import',
         },
       ],
     },

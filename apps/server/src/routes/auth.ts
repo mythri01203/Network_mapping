@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 import {
-  ACCOUNT_ROLES,
+  accountRoleInputSchema,
   type AccountRole,
   type AuthStatus,
   displayNameSchema,
@@ -18,12 +18,20 @@ import { type SqliteAuthStore, summaryOf } from '../auth/authStore';
 import { LoginLimiter } from '../auth/loginLimiter';
 import { decoyHash, hashPassword, newSessionToken, temporaryPassword, verifyPassword } from '../auth/passwords';
 import type { AppConfig } from '../config';
+import { isPlatformAdmin, type Tenant, type TenantRegistry } from '../db/tenants';
 import { HttpError, notFound } from '../lib/errors';
 
 export interface AuthRouteOptions {
   config: AppConfig;
+  /** The request's organisation's accounts (Phase 23b: a scoped store). */
   store: SqliteAuthStore;
+  /** Phase 23b: every organisation, for the login screen (one for all) and login names unique on the server. */
+  tenants: TenantRegistry;
 }
+
+/** Phase 23b: the organisation is switched off by the platform administrator. Its data is kept. */
+const organisationSuspended = () =>
+  new HttpError(403, 'organisation_suspended', 'Your organisation is switched off on this server, so nobody in it can log in. Ask the platform administrator. Nothing is lost.');
 
 /** Routes anyone may call, even with login on and no session. */
 /** `/monitoring/ingest` has no session: it checks its own per-source token (Phase 7). */
@@ -56,14 +64,15 @@ const newUserSchema = (min: number) =>
   z.object({
     username: usernameSchema,
     displayName: displayNameSchema,
-    role: z.enum(ACCOUNT_ROLES),
+    /** Phase 23: old or new role names are both taken ("office" or "network_planner"). */
+    role: accountRoleInputSchema,
     /** Left out: the server makes a temporary one and returns it once. */
     password: passwordSchema(min).optional(),
   });
 
 const updateUserSchema = z.object({
   displayName: displayNameSchema.optional(),
-  role: z.enum(ACCOUNT_ROLES).optional(),
+  role: accountRoleInputSchema.optional(),
   active: z.boolean().optional(),
 });
 
@@ -80,7 +89,7 @@ const setPasswordSchema = (min: number) => z.object({ password: passwordSchema(m
  * stays off ("setup" mode) until the first admin account exists, unless `AUTH_REQUIRED=true`.
  */
 export const authRoutes =
-  ({ config, store }: AuthRouteOptions): FastifyPluginAsync =>
+  ({ config, store, tenants }: AuthRouteOptions): FastifyPluginAsync =>
   async (app) => {
     const limiter = new LoginLimiter({ maxFailures: config.loginMaxFailures, windowMs: config.loginLockMinutes * 60_000 });
     const min = config.passwordMinLength;
@@ -98,14 +107,19 @@ export const authRoutes =
       account: request.auth.account,
       ...(request.auth.session?.mustChangePassword ? { mustChangePassword: true } : {}),
       passwordMinLength: min,
-      ...(request.auth.setupPending && store.isEmpty() ? { setupPending: true, ...(config.setupToken ? { setupCodeAccepted: true } : {}) } : {}),
+      ...(request.auth.setupPending && tenants.allEmpty() ? { setupPending: true, ...(config.setupToken ? { setupCodeAccepted: true } : {}) } : {}),
+      // Phase 23b: which organisation's data this is, and whether this person manages the organisations.
+      ...(request.tenant && (request.auth.account || request.auth.mode === 'setup') ? { organisation: { id: request.tenant.id, name: request.tenant.name } } : {}),
+      ...(isPlatformAdmin(request) ? { platformAdmin: true } : {}),
     });
 
-    const startSession = (request: FastifyRequest, reply: FastifyReply, userId: string) => {
+    /** Phase 23b: the session lives in the account's own organisation's database, and the cookie names it. */
+    const startSession = (request: FastifyRequest, reply: FastifyReply, tenant: Tenant, userId: string) => {
       const token = newSessionToken();
-      const session = store.createSession(userId, token, config.sessionDays);
-      reply.setCookie(SESSION_COOKIE, token, cookieOptions(request));
-      request.auth = { mode: store.hasAccounts() || config.authRequired ? 'enforced' : 'setup', account: session.account, session };
+      const session = tenant.repository.auth.createSession(userId, token, config.sessionDays);
+      reply.setCookie(SESSION_COOKIE, tenants.sessionCookie(tenant, token), cookieOptions(request));
+      request.auth = { mode: tenants.hasAccounts() || config.authRequired ? 'enforced' : 'setup', account: session.account, session };
+      request.tenant = tenant;
     };
 
     const requireAdmin = (request: FastifyRequest) => {
@@ -132,7 +146,8 @@ export const authRoutes =
     });
 
     app.post('/auth/setup', small, async (request, reply) => {
-      if (!store.isEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
+      // Phase 23b: only while no organisation has any account; the first administrator is made in the first organisation.
+      if (!tenants.allEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
       // From another device only with the server's setup code; otherwise on the server computer itself.
       if (!isLocalRequest(request) && !config.setupToken) {
         throw forbidden('Create the first administrator on the server computer: open FiberGIS there (http://localhost). Then log in here.');
@@ -141,10 +156,12 @@ export const authRoutes =
       if (config.setupToken && !sameSecret(body.setupToken ?? '', config.setupToken)) throw forbidden('The setup code is not right. It is the SETUP_TOKEN set on the server.');
       const passwordHash = await hashPassword(body.password);
       // Checked again after the slow hash, so two requests at once cannot both make an administrator.
-      if (!store.isEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
-      const user = store.create({ username: body.username, displayName: body.displayName, role: 'admin', passwordHash, mustChangePassword: false });
+      if (!tenants.allEmpty()) throw new HttpError(409, 'setup_done', 'An administrator account already exists. Log in instead.');
+      const host = tenants.host();
+      const user = host.repository.auth.create({ username: body.username, displayName: body.displayName, role: 'admin', passwordHash, mustChangePassword: false });
+      tenants.registerLogin(host, user.username, user.id);
       request.log.info({ userId: user.id }, 'First administrator account created; login is now on');
-      startSession(request, reply, user.id);
+      startSession(request, reply, host, user.id);
       reply.header('cache-control', 'no-store');
       return status(request);
     });
@@ -158,14 +175,18 @@ export const authRoutes =
       }
       // Counted before the slow check, so tries sent all at once are limited too (taken back if right).
       limiter.failed(request.ip, username);
-      const user = store.byUsername(username);
+      // Phase 23b: one login screen for every organisation; the login name says which one.
+      const found = tenants.findLogin(username);
+      const user = found?.user;
       const ok = user && user.active ? await verifyPassword(password, user.passwordHash) : (await verifyPassword(password, await decoyHash()), false);
-      if (!ok || !user) {
+      if (!ok || !user || !found) {
         request.log.info('Login refused: wrong name or password');
         throw wrongLogin();
       }
       limiter.succeeded(request.ip, username);
-      startSession(request, reply, user.id);
+      // Said only after the right password, so a stranger cannot learn which organisations are off.
+      if (found.tenant.status !== 'active') throw organisationSuspended();
+      startSession(request, reply, found.tenant, user.id);
       request.log.info({ userId: user.id }, 'Logged in');
       reply.header('cache-control', 'no-store');
       return status(request);
@@ -219,10 +240,18 @@ export const authRoutes =
     app.post('/users', small, async (request, reply) => {
       requireAdmin(request);
       const body = newUserSchema(min).parse(request.body ?? {});
-      if (store.byUsername(body.username)) throw new HttpError(409, 'username_taken', `The login name "${body.username}" is already used. Choose another.`);
+      // Phase 23b: login names are unique on the whole server (any organisation), so login needs no organisation.
+      const taken = () => new HttpError(409, 'username_taken', `The login name "${body.username}" is already used. Choose another.`);
+      if (tenants.usernameTaken(body.username)) throw taken();
       refuseTakenName(body.displayName);
       const password = body.password ?? temporaryPassword();
-      const user = store.create({ username: body.username, displayName: body.displayName, role: body.role, passwordHash: await hashPassword(password), mustChangePassword: true });
+      const passwordHash = await hashPassword(password);
+      // Checked again after the slow hash; from here to the listing nothing waits, so no other request can claim the name.
+      const tenant = request.tenant;
+      if (!tenant) throw loginRequired();
+      if (tenants.usernameTaken(body.username)) throw taken();
+      const user = store.create({ username: body.username, displayName: body.displayName, role: body.role, passwordHash, mustChangePassword: true });
+      tenants.registerLogin(tenant, user.username, user.id);
       request.log.info({ userId: user.id, role: user.role }, 'Account created');
       reply.code(201).header('cache-control', 'no-store');
       // The temporary password is shown once, to the administrator who made it. It is never stored or logged.

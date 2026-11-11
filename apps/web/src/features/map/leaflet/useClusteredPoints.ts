@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import L from 'leaflet';
 
 import { groupMarkerIcon } from '../markerIcons';
-import { buildPointIndex, type MapPoint, pointsInView } from './clustering';
+import { type MapPoint, type PointIndex, pointsInView, updatePointIndex } from './clustering';
 import { useMapView } from './useMapView';
 import { type MarkerSpec, useMarkerLayer } from './useMarkerLayer';
 
@@ -20,7 +20,14 @@ export function useClusteredPoints(
   kind: 'equipment' | 'customer',
 ): ReadonlySet<string> {
   const view = useMapView(map);
-  const index = useMemo(() => buildPointIndex(points), [points]);
+  // Phase 24b: kept when no pin was added, removed or moved (an edit or a selection rebuilds nothing).
+  const [held, setHeld] = useState<{ points: readonly MapPoint[]; index: PointIndex }>(() => ({ points, index: updatePointIndex(null, points) }));
+  let current = held;
+  if (held.points !== points) {
+    current = { points, index: updatePointIndex(held.index, points) };
+    setHeld(current);
+  }
+  const { index } = current;
   const result = useMemo(() => pointsInView(index, view.bbox, view.zoom, keep), [index, view, keep]);
 
   const groups = useMemo<MarkerSpec[]>(

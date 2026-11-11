@@ -3,17 +3,22 @@ import {
   type AccountSummary,
   API_PREFIX,
   type ApiErrorBody,
+  type AreaResponse,
   type AuthStatus,
   type ChangeResult,
   type ChangeSet,
+  type ChangesResponse,
   COLLECTION_NAMES,
   type CollectionName,
   type HealthResponse,
   type LatLng,
   type NetworkResponse,
   type ParsedBackup,
+  type RecordsResponse,
   type RouteRequest,
   type RouteResponse,
+  SEARCH_MAX_LIMIT,
+  type SearchHit,
   type VersionConflict,
 } from '@fibergis/shared';
 
@@ -118,6 +123,16 @@ export interface DataQualitySummary {
 export interface ApiClient {
   health(options?: RequestOptions): Promise<HealthResponse>;
   getNetwork(options?: RequestOptions): Promise<NetworkResponse>;
+  /** Phase 24: what changed on the server after a revision. Optional: without it the engine loads the whole network. */
+  getChanges?(since: number, options?: RequestOptions): Promise<ChangesResponse>;
+  /** Phase 24b: every collection but these, in full (`GET /network?except=`). For loading big networks by map area. */
+  getNetworkExcept?(except: readonly CollectionName[], options?: RequestOptions): Promise<RecordsResponse>;
+  /** Phase 24b: the records touching a box (south, west, north, east) in these collections (`GET /network/area`). */
+  getArea?(bbox: readonly [number, number, number, number], collections: readonly CollectionName[], options?: RequestOptions): Promise<AreaResponse>;
+  /** Phase 24b: records by id in these collections, at most 1000 ids (`GET /network/records`). */
+  getRecords?(ids: readonly string[], collections: readonly CollectionName[], options?: RequestOptions): Promise<RecordsResponse>;
+  /** Phase 24b: the server's search over the whole network (`GET /search`), for a device loaded by map area. */
+  search?(query: string, options?: RequestOptions): Promise<{ total: number; hits: SearchHit[] }>;
   applyChanges(changes: ChangeSet, options?: RequestOptions): Promise<ChangeResult>;
   restore(backup: ParsedBackup, options?: RestoreOptions): Promise<RestoreResult>;
   /** A `.zip` backup with photos, sent as it is. */
@@ -138,6 +153,16 @@ export interface AuthClient {
   updateUser(id: string, input: { displayName?: string; role?: AccountRole; active?: boolean }): Promise<AccountSummary>;
   setUserPassword(id: string, password?: string): Promise<CreatedAccount>;
   dataQuality(): Promise<DataQualitySummary>;
+  /** Network mapping Phase 15: run the map check on the server and store what it finds. */
+  runValidation?(): Promise<ValidationRunResult>;
+}
+
+export interface ValidationRunResult {
+  revision: number;
+  checkedAt: string;
+  written: number;
+  summary: { found: number; opened: number; foundAgain: number; reopened: number; noLongerFound: number; unchanged: number };
+  counts: { open: number; acknowledged: number; resolved: number; noLongerFound: number; errors: number };
 }
 
 export type RawRequest = <T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, options?: RequestOptions) => Promise<T>;
@@ -160,6 +185,26 @@ const isNetworkResponse = (value: unknown): value is NetworkResponse =>
   typeof value.revision === 'number' &&
   isRecord(value.data) &&
   COLLECTION_NAMES.every((name) => Array.isArray((value.data as Record<string, unknown>)[name]));
+
+/** Phase 24b: `data` holds only known collections, each an array of records; versions per collection. */
+const isPartialResponse = (value: unknown): value is RecordsResponse =>
+  isRecord(value) &&
+  typeof value.revision === 'number' &&
+  isRecord(value.data) &&
+  Object.entries(value.data).every(([name, list]) => COLLECTION_NAMES.includes(name as CollectionName) && Array.isArray(list) && list.every((r) => isRecord(r) && typeof r.id === 'string')) &&
+  isRecord(value.versions);
+
+const isChangesResponse = (value: unknown): value is ChangesResponse => {
+  if (!isRecord(value) || typeof value.revision !== 'number' || typeof value.since !== 'number') return false;
+  if (value.reload === true) return true;
+  const lists = (map: unknown, item: (v: unknown) => boolean) =>
+    isRecord(map) && Object.entries(map).every(([name, list]) => COLLECTION_NAMES.includes(name as CollectionName) && Array.isArray(list) && list.every(item));
+  return (
+    lists(value.upserts, (r) => isRecord(r) && typeof r.id === 'string') &&
+    lists(value.deletes, (id) => typeof id === 'string') &&
+    isRecord(value.versions)
+  );
+};
 
 export function createApiClient({
   baseUrl = '',
@@ -230,6 +275,37 @@ export function createApiClient({
       if (!isNetworkResponse(payload)) throw new ApiUnavailableError('The server sent malformed network data.');
       return payload;
     },
+    getChanges: async (since, options) => {
+      const payload = await request<unknown>('GET', `/changes?since=${encodeURIComponent(String(since))}`, undefined, options);
+      if (!isChangesResponse(payload)) throw new ApiUnavailableError('The server sent malformed change data.');
+      return payload;
+    },
+    getNetworkExcept: async (except, options) => {
+      const payload = await request<unknown>('GET', `/network?except=${encodeURIComponent(except.join(','))}`, undefined, options);
+      if (!isPartialResponse(payload)) throw new ApiUnavailableError('The server sent malformed network data.');
+      return payload;
+    },
+    getArea: async (bbox, collections, options) => {
+      // Rounded outwards, so the box asked for always covers the box meant.
+      const [s, w, n, e] = bbox;
+      const edges = [Math.floor(s * 1e6) / 1e6, Math.floor(w * 1e6) / 1e6, Math.ceil(n * 1e6) / 1e6, Math.ceil(e * 1e6) / 1e6];
+      const query = `bbox=${edges.join(',')}&collections=${encodeURIComponent(collections.join(','))}`;
+      const payload = await request<unknown>('GET', `/network/area?${query}`, undefined, options);
+      if (!isPartialResponse(payload) || typeof (payload as unknown as AreaResponse).truncated !== 'boolean') throw new ApiUnavailableError('The server sent malformed map-area data.');
+      return payload as unknown as AreaResponse;
+    },
+    getRecords: async (ids, collections, options) => {
+      const query = `ids=${encodeURIComponent(ids.join(','))}&collections=${encodeURIComponent(collections.join(','))}`;
+      const payload = await request<unknown>('GET', `/network/records?${query}`, undefined, options);
+      if (!isPartialResponse(payload)) throw new ApiUnavailableError('The server sent malformed record data.');
+      return payload;
+    },
+    search: async (query, options) => {
+      const payload = await request<unknown>('GET', `/search?q=${encodeURIComponent(query.slice(0, 200))}&limit=${SEARCH_MAX_LIMIT}`, undefined, options);
+      const body = payload as { total?: unknown; hits?: unknown };
+      if (!isRecord(payload) || typeof body.total !== 'number' || !Array.isArray(body.hits)) throw new ApiUnavailableError('The server sent malformed search results.');
+      return payload as unknown as { total: number; hits: SearchHit[] };
+    },
     applyChanges: (changes, options) => request<ChangeResult>('POST', '/changes', changes, options),
     restore: (backup, options) =>
       request<RestoreResult>(
@@ -261,6 +337,7 @@ export function createAuthClient(options: ApiClientOptions = {}): AuthClient {
     updateUser: (id, input) => call<AccountSummary>('PATCH', `/users/${encodeURIComponent(id)}`, input),
     setUserPassword: (id, password) => call<CreatedAccount>('POST', `/users/${encodeURIComponent(id)}/password`, password ? { password } : {}),
     dataQuality: () => call<DataQualitySummary>('GET', '/reports/data-quality', undefined, { timeoutMs: 60_000 }),
+    runValidation: () => call<ValidationRunResult>('POST', '/reports/validation-run', undefined, { timeoutMs: 120_000 }),
   };
 }
 

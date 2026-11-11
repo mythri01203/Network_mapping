@@ -82,7 +82,7 @@ If the server computer has no screen, set `SETUP_TOKEN`: the first administrator
 
 **What else the server enforces:** a reset always needs its confirm word; changes from another website (including a sandboxed page) are refused; a light reading marked "reported by the device" can come only from the monitoring connection; trips, routes and conflict records belong to the person who made them (an engineer or the administrator may change anyone's; the office may record its decision on a conflict); unsent changes on a shared phone are sent only under the login of the person who made them; logging out removes the stored network copy from the device when nothing is waiting; a restore never removes audit entries. `/health` gives counts and the revision only to someone logged in.
 
-**Nobody can log in?** On the server's own computer: `npm run user -w @fibergis/server -- list`, and `npm run user -w @fibergis/server -- reset-password <login name>`, which prints a temporary password once.
+**Nobody can log in?** On the server's own computer: `npm run user -w @fibergis/server -- list`, and `npm run user -w @fibergis/server -- reset-password <login name>`, which prints a temporary password once. Phase 23b: both cover every organisation (the list shows which one), and `npm run user -w @fibergis/server -- organisations` lists the organisations.
 
 **Unsent work is kept.** If a phone's session ends while it holds unsent changes, the app asks the person to log in again and then sends them.
 
@@ -100,12 +100,77 @@ If the server computer has no screen, set `SETUP_TOKEN`: the first administrator
 | `CORS_ORIGINS` | not set | Other web addresses allowed to call the API. When not set, the dev addresses (`localhost:3000`, `:5173`) are allowed only if `NODE_ENV` is not `production` |
 | `HTTPS_CERT_FILE`, `HTTPS_KEY_FILE` | not set | Let the server serve https itself |
 | `CSP`, `CSP_IMG_SOURCES` | `on`, not set | Security policy for the web app; add other map tile hosts here |
-| `BACKUPS_DIR`, `BACKUP_KEEP` | `backups` beside the database, 20 | Safety copies made before each reset and restore |
+| `BACKUPS_DIR`, `BACKUP_KEEP` | `backups` beside the database, 20 | Safety copies made before each reset and restore; also how many scheduled backups are kept (counted apart) |
+| `BACKUP_EVERY_HOURS` | 0 (off) | Phase 24: a scheduled backup every this many hours (0 to 168, may be a fraction) |
 | `RESTORE_MAX_MB` | 200 | Largest backup file accepted |
 
 ## Backups and restore (Phase 9)
 
 Administration, **Backup & KML**. A backup with photos is a zip (`GET /api/v1/backup?photos=1`); without photos it is the JSON file as before. A safety copy is saved before every reset and restore. A restore is checked first: if the backup would leave broken links, double-used fibers or other rule errors, nothing is restored and the problems are listed; the administrator may then restore anyway, and that choice is written to the audit log. A restore never removes or changes an audit entry already stored (older entries from the backup are added), and who made each record is kept.
+
+**Scheduled backups (Phase 24).** Off unless `BACKUP_EVERY_HOURS` is set (for example `BACKUP_EVERY_HOURS=6`). Every that many hours the server saves `fibergis-scheduled-<time>.zip` in the backups folder: the same zip as a safety copy and as `GET /api/v1/backup?photos=1` (`backup.json` plus every photo), so it is restored the same way (Administration, **Backup & KML**). If nothing changed since the last scheduled copy, none is made. The newest `BACKUP_KEEP` scheduled copies are kept; they are counted apart from the copies made before a reset or restore, so they never push one of those out. The first copy is made one interval after the server starts. A failed copy (disk full, folder not writable) is written to the server log and tried again at the next interval; nothing else stops. The backups folder is on the same disk as the database: copy it to another place as well.
+
+## Database upgrade (Phase 23 and Phase 24)
+
+Copy the database file (and its `-wal` file) before the first start of a new version. Tables are described in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md), routes in [API_DOCUMENTATION.md](API_DOCUMENTATION.md).
+
+- **Phase 23** adds the history and change request tables (schema number 2). Retention of whole-record versions: `REVISION_KEEP_DAYS` (default 365, 1 to 36,500) and `REVISION_KEEP_PER_RECORD` (default 50, 1 to 10,000); older versions are removed at start and then at most once an hour. The audit events are never removed.
+- **Phase 24** adds the spatial index and the change log (schema number 3). The first start builds the index from every record (for 100,000 records, a few seconds); nothing in `records` changes. After this, a Phase 23 server refuses to open the file ("schema v3 is newer than this server supports"), because it would write without keeping the change log, and phones would miss changes. To go back, use the copy made before the upgrade or restore a backup.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `REVISION_KEEP_DAYS` | 365 | Phase 23: whole-record versions older than this are removed |
+| `REVISION_KEEP_PER_RECORD` | 50 | Phase 23: most versions kept for one record |
+| `BACKUP_EVERY_HOURS` | 0 (off) | Phase 24: scheduled backups, see above |
+
+**Large networks (Phase 24).** Phones and browsers no longer download the whole network every time something changes: after the first load they ask only for the changes since their revision (`GET /changes`), and fall back to the whole network after a restore or reset. The map-area query (`GET /network/area`) and paging (`GET /<collection>?limit=`) are there for screens that need only part of the network. To measure a server computer, run `npm run benchmark -w @fibergis/server` (it builds 100,000 synthetic records in a temporary database, never the real one).
+
+**Big networks in the browser (Phase 24b).** Nothing to set up. When the server holds 30,000 or more equipment, cable, customer, span, duct, slack loop and building records, browsers and phones load only the map areas a person looks at, plus everything else (splitters, closures, settings, the catalogue, ...) in full. The top bar then shows **Part loaded**: tapping it explains that lists, counts, checks and reports use only what is loaded, and offers **Load the whole network on this device** (for an office computer that needs whole-network reports; the choice is kept on that device, and the sync menu offers to go back). On 100,000 records the measured first load was 2 s and 57 MB of browser memory by map area, against 24 to 56 s and over 900 MB for the whole network (see [NETWORK_MAPPING_TEST_PLAN.md](NETWORK_MAPPING_TEST_PLAN.md), Workflow L). The server needs no new setting; the two read routes it adds are in [API_DOCUMENTATION.md](API_DOCUMENTATION.md). An edit of an item's plain details (a pole renamed, a note, a photo) is now checked in milliseconds on a big network; moving an item still takes the whole-network fibre check (seconds on 100,000 records).
+
+## Other settings
+
+Every server setting is read from the environment at start (`apps/server/src/config.ts`). Those not described in a section above:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `HOST`, `PORT` | `127.0.0.1`, `5000` | Where the server listens. Use `0.0.0.0` only behind the reverse proxy or on a trusted network |
+| `DATABASE_PATH` | `apps/server/data/fibergis.db` | The first organisation's database. Its photos, voice, backups, `control.db` and `organisations/` sit beside it unless set apart |
+| `STATIC_DIR` | `apps/web/dist` | The built web app the server hands out |
+| `SEED_SAMPLE_DATA` | `true` | Puts the demo network in an empty database at the first start. Set `false` for a real installation |
+| `OSRM_URL`, `ROUTING_TIMEOUT_MS` | public OSRM demo server, 5000 | Road routing for "follow the road" (`POST /routing/route`). The public server is for testing only: run your own for real use |
+| `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
+| `SARVAM_API_KEY`, `SARVAM_MODEL`, `SARVAM_DAILY_CHAR_LIMIT`, `SARVAM_TIMEOUT_MS` | none, `bulbul:v4-flash`, 20000, 30000 | Voice lessons in Telugu and Kannada. Without a key no clip is made; the daily limit is a spending guard |
+| `VOICE_DIR` | `voice` beside the database | Where generated voice clips are kept |
+
+The browser tests in `e2e/` start their own temporary server with `PORT=5056`, a temporary `DATABASE_PATH` and `SEED_SAMPLE_DATA=false`; see `e2e/README.md`.
+
+## Organisations: several ISPs on one server (Phase 23b)
+
+One server can hold several organisations. Each has its own database file, photos, voice clips and backups; nobody in one can see or change another's. Rules and tables: [SECURITY_AND_PERMISSIONS.md](SECURITY_AND_PERMISSIONS.md#organisations-phase-23b), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md#organisations-phase-23b-controldb).
+
+**Upgrade.** Nothing to do. On the first start of this version the server makes `control.db` beside the database and lists the existing database as the first organisation, named by `ORGANISATION_NAME` (default "My organisation"; rename it later on the screen). The database, its `photos`, `voice` and `backups` folders, every account, every login and every push token stay as they are: nothing is copied, moved or renamed, and nobody has to log in again. As before any upgrade, copy the data folder first. A server with only one organisation works exactly as before, including setup mode on the server computer.
+
+**Adding an organisation.** Log in as an administrator (Super Admin) of the first organisation; you are then the platform administrator. Administration, **Users and roles**, "Organisations on this server": type the organisation's name, its administrator's name and login name, and press **Add organisation**. Give that person the temporary password shown once; they choose their own at first login and add their own people. Login names are unique on the whole server, and everyone uses the same login screen. **Switch off** stops every login and push token of that organisation and logs everyone in it out, and keeps all its data; **Switch on** brings it back. The first organisation cannot be switched off.
+
+**Folders.**
+
+| Path (default, beside `DATABASE_PATH`) | What |
+|---|---|
+| `fibergis.db`, `photos/`, `voice/`, `backups/` | The first organisation, as before |
+| `control.db` | The organisations list and which organisation each login name belongs to (`CONTROL_DATABASE_PATH`) |
+| `organisations/ORG-…/fibergis.db`, `photos/`, `voice/`, `backups/` | Each added organisation (`ORGANISATIONS_DIR`) |
+
+**Backing up.** Back up the whole data folder (with every `-wal` file, or with the server stopped), `control.db` included: it is what lists the added organisations. For **one organisation**, either its administrator downloads Administration, **Backup & KML** (only their network and photos), or copy its folder `organisations/ORG-…/` (database with accounts, photos, voice, backups) with the server stopped. Scheduled backups (`BACKUP_EVERY_HOURS`) run for every organisation, each into its own `backups/` folder. A restore or reset changes only the organisation of the person doing it, and its safety copy goes into that organisation's folder.
+
+**Monitoring.** Each organisation makes its own sources and push tokens. A token now names its organisation (`fgm_ORG-….<secret>`); put the whole token in the device or script. Tokens of the first organisation look as before and keep working.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `ORGANISATION_NAME` | My organisation | Name given to the first organisation when it is first listed |
+| `CONTROL_DATABASE_PATH` | `control.db` beside the database | The organisations list |
+| `ORGANISATIONS_DIR` | `organisations` beside the database | One folder per added organisation |
+
+If `control.db` is lost, the first organisation is listed again by itself on the next start (its data is untouched), and the added organisations are not opened: the server reports their folders. Restore `control.db` from the backup to bring them back.
 
 ## Live monitoring (Phase 7)
 

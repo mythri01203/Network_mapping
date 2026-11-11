@@ -1,7 +1,7 @@
 import './capture.css';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Camera, CheckCircle2, HelpCircle, Languages, Map as MapIcon, Phone, Save, Tag, Trash2, Undo2, Users, Wrench } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, HelpCircle, History, Languages, Map as MapIcon, Phone, Save, Tag, Trash2, Undo2, Users, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 import {
@@ -33,6 +33,7 @@ import { requestPersistentStorage } from '../../lib/idb';
 import { currentAccount, useAuthStore } from '../../stores/authStore';
 import { getNetworkData, selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useLoadPlace } from '../area-loading/AreaLoadNotice';
 import { CameraStep, type GuideShape, TagStep } from './CameraStep';
 import { captureService } from './captureRuntime';
 import { stepsFor } from './captureService';
@@ -40,6 +41,7 @@ import type { CaptureDraft, OutboxEntry } from './captureStorage';
 import { BOX_QUESTION, MATERIAL_QUESTION, OWNER_QUESTION, TILE_PICTURES } from './choices';
 import { celebrateSave, cx } from './feedback';
 import { PermissionHelp } from './HelpPictures';
+import { HistoryScreen } from './HistoryScreen';
 import { MiniMap } from './MiniMap';
 import { preloadQrReader } from './qrScanner';
 import { ChoiceStep, CustomerStep, GpsBadge, GpsStep, PadStep, SameStep, StepTitle } from './steps';
@@ -53,6 +55,7 @@ type Screen =
   | { name: 'home'; note?: MessageKey }
   | { name: 'flow'; resumed?: boolean }
   | { name: 'fix' }
+  | { name: 'history' }
   | { name: 'saved'; entry: OutboxEntry; draft: CaptureDraft }
   | { name: 'already'; record: Equipment; draft: CaptureDraft };
 
@@ -185,6 +188,8 @@ export function CaptureApp() {
 
   const inFlow = screen.name === 'flow' && draft !== null;
   const gpsActive = inFlow && (draft.kind === 'light' ? draft.step === 'customer' : !draft.location);
+  // Phase 24b: on a big network loaded by map area, load the place where the worker stands.
+  useLoadPlace(draft?.location);
   const gps = useGpsSampler(gpsActive, draft?.id ?? '', field.gps, (decision, samples) => onGpsUpdate(decision, samples));
 
   const placeholder = useCallback(
@@ -460,12 +465,16 @@ export function CaptureApp() {
                 <Phone className="h-7 w-7" aria-hidden /> {t('home.callSupervisor')}
               </a>
             )}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <MidButton icon={HelpCircle} onClick={() => setScreen({ name: 'help' })}>
                 {t('home.help')}
               </MidButton>
               <MidButton icon={Languages} onClick={() => setScreen({ name: 'language' })} testId="open-language">
                 {t('home.language')}
+              </MidButton>
+              {/* Phase 19: what this phone sent and what came back. */}
+              <MidButton icon={History} onClick={() => setScreen({ name: 'history' })} testId="open-history">
+                {t('home.history')}
               </MidButton>
               <MidButton icon={MapIcon} onClick={() => navigate('/')}>
                 {t('home.officeMap')}
@@ -529,6 +538,9 @@ export function CaptureApp() {
         );
       }
 
+      case 'history':
+        return <HistoryScreen />;
+
       case 'saved': {
         const { entry, draft: savedDraft } = screen;
         return (
@@ -542,6 +554,12 @@ export function CaptureApp() {
                 {entry.label}
               </p>
               {entry.photoIds[0] && <PhotoView photoId={entry.photoIds[0]} className="h-32 w-32 rounded-2xl border-2 border-slate-900" />}
+              {/* Phase 19: a pole, box or drop waits for the office before it joins the network map. */}
+              {entry.collection === 'equipment' && (
+                <p className="text-[1.125rem] font-semibold text-slate-900" data-testid="saved-review">
+                  <Say k="saved.review" />
+                </p>
+              )}
               {entry.kind === 'danger' && (
                 <>
                   <p className="text-[1.25rem] font-bold text-red-900">{t('danger.saved')}</p>
@@ -642,7 +660,8 @@ export function CaptureApp() {
             key={`${d.id}-tag`}
             onTag={(code) => {
               const tagCode = normalizeTag(code);
-              const known = findByTag(equipment, tagCode);
+              // A capture the office rejected is not "already saved" (Phase 19).
+              const known = findByTag(equipment.filter((e) => e.reviewStatus !== 'rejected'), tagCode);
               if (known && assetGroupOf(known.type) !== null) void showAlready(known, d);
               else advance({ ...d, tagCode });
             }}

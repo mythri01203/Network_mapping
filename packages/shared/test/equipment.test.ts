@@ -34,12 +34,16 @@ describe('createEquipment', () => {
     if (!result.ok) throw new Error(result.error.message);
 
     expect(result.value.id).toMatch(/^FAT-[0-9A-HJKMNP-TV-Z]{10}$/);
+    // Placing a pin is not installing it: no install date or notes are made up (Phase 2).
     expect(result.value).toMatchObject({
       name: 'New FAT',
       status: 'Active',
-      installedDate: '2026-11-04',
+      installedDate: '',
       usedPorts: 0,
     });
+    expect(result.value.notes).toBeUndefined();
+    const dated = createEquipment(data, { name: 'Dated', type: 'FAT', lat: 17.5, lng: 78.5, installedDate: '2025-03-01' }, ctx);
+    expect(dated.ok && dated.value.installedDate).toBe('2025-03-01');
     expect(result.value.totalPorts).toBeGreaterThan(0);
     expect(result.value.availablePorts).toBe(result.value.totalPorts);
     expect(result.value.logicalPorts).toHaveLength(result.value.totalPorts!);

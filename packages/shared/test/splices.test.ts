@@ -35,11 +35,22 @@ describe('addSplice', () => {
 });
 
 describe('removeSplice', () => {
-  it('removes an existing splice', () => {
+  it('keeps the splice as history, struck out as entered by mistake (Phase 8: no hard delete)', () => {
     const data = network();
-    const result = removeSplice(data, 'JC-1', 'S1');
+    const result = removeSplice(data, 'JC-1', 'S1', 'Wrong fiber chosen', { actor: 'Asha', now: new Date('2026-11-10T09:00:00.000Z') });
     if (!result.ok) throw new Error(result.error.message);
-    expect(applyPatch(data, result.patch).closures[0].splices).toEqual([]);
+    const [kept] = applyPatch(data, result.patch).closures[0].splices;
+    expect(kept).toMatchObject({ id: 'S1', enteredInError: true, retiredAt: '2026-11-10T09:00:00.000Z', retiredBy: 'Asha', retiredReason: 'Wrong fiber chosen' });
+    expect(result.audit[0]).toMatchObject({ action: 'SPLICE_ENTERED_BY_MISTAKE', assetId: 'JC-1' });
+  });
+
+  it('lets the same fibers be spliced again once the mistaken record is struck out', () => {
+    const data = network();
+    const removed = removeSplice(data, 'JC-1', 'S1');
+    if (!removed.ok) throw new Error(removed.error.message);
+    const after = applyPatch(data, removed.patch);
+    const again = addSplice(after, 'JC-1', splice({ id: 'S2' }));
+    expect(again.ok).toBe(true);
   });
 
   it('fails for an unknown splice', () => {

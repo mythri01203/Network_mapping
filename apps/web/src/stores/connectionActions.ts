@@ -23,6 +23,12 @@ export const swapCustomerOnt = (customerId: string, draft: domain.OntDraft, reas
 export const disconnect = (customerId: string, reason: string) => run((d, ctx) => domain.disconnectCustomer(d, customerId, reason, ctx));
 export const moveTo = (customerId: string, target: domain.MoveTarget, reason: string) => run((d, ctx) => domain.moveCustomer(d, customerId, target, reason, ctx));
 
+// --- Phase 12: customer paths from the fibre links ----------------------------------------------
+/** Takes the chosen customers' path fields from the fibre links, after a person confirmed the list. */
+export const fixCustomerPaths = (customerIds: readonly string[]) => run((d, ctx) => domain.reconcileCustomerPaths(d, customerIds, ctx));
+/** Records the drop fiber a customer is on; the OLT side then comes from the links. */
+export const linkDropToCustomer = (customerId: string, link: domain.CustomerDropLink) => run((d, ctx) => domain.linkCustomerDrop(d, customerId, link, ctx));
+
 // --- Services ------------------------------------------------------------------------------------
 export const saveCustomerService = (draft: domain.ServiceDraft) => run((d, ctx) => domain.saveService(d, draft, ctx));
 export const endCustomerService = (serviceId: string, reason: string) => run((d, ctx) => domain.endService(d, serviceId, reason, ctx));

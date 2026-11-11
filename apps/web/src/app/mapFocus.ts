@@ -1,10 +1,17 @@
-import { hasRecordedLocation } from '@fibergis/shared';
+import { boundsOf, hasRecordedLocation, type LatLngBounds } from '@fibergis/shared';
 
 import type { FlyToTarget } from '../stores/mapStore';
 import type { SelectedObject } from '../stores/uiStore';
 
 export const POINT_FOCUS_ZOOM = 18;
 export const ROUTE_FOCUS_ZOOM = 17;
+
+/** The box that shows the whole of a route (cable or duct), or `null` for anything else or a route of under two points. */
+export function boundsFor(selection: SelectedObject): LatLngBounds | null {
+  if (selection.type !== 'cable' && selection.type !== 'duct') return null;
+  const coords = selection.data.coordinates;
+  return coords.length >= 2 ? boundsOf(coords) : null;
+}
 
 /** Where the map should centre to show a selected object, or `null` when it has no usable location. */
 export function focusFor(selection: SelectedObject): FlyToTarget | null {

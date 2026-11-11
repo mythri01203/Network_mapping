@@ -1,11 +1,71 @@
 import { useState } from 'react';
 import { AlertTriangle, Search } from 'lucide-react';
 
-import { affectedByElement, type CorrelationResult, type ImpactIndex, type ImpactResult, type NetworkElementRef, SERVICE_KIND_LABELS } from '@fibergis/shared';
+import {
+  affectedByElement,
+  type CorrelationResult,
+  CUSTOMER_HIDDEN_TEXT,
+  type DownstreamImpact,
+  type DownstreamPortKind,
+  type ImpactIndex,
+  type ImpactResult,
+  type NetworkElementRef,
+  SERVICE_KIND_LABELS,
+} from '@fibergis/shared';
 
 import { openFaultFor } from '../../stores/faultActions';
 import { elementReady } from './faultFormat';
 import { buttonClass, ConfidenceBadge, ElementPicker, NoLiveConnection, Section, TestBadge } from './faultUi';
+
+/** A name hidden for the reader's role is shown as such, never as if it were the name. */
+const shownName = (c: { name: string; nameHidden?: true }) => (c.nameHidden ? CUSTOMER_HIDDEN_TEXT : c.name);
+
+/** Phase 20: equipment, ports and fibres below the element, from recorded links. */
+function DownstreamList({ downstream }: { downstream: DownstreamImpact }) {
+  const [open, setOpen] = useState(false);
+  const byKind = (kind: DownstreamPortKind) => downstream.ports.filter((p) => p.kind === kind);
+  const groups: { title: string; items: string[]; testId: string }[] = [
+    { title: 'Equipment', items: downstream.equipment.map((e) => e.label), testId: 'downstream-equipment' },
+    { title: 'PON ports', items: byKind('pon_port').map((p) => p.label), testId: 'downstream-pon' },
+    { title: 'ODF ports', items: byKind('odf_port').map((p) => p.label), testId: 'downstream-odf' },
+    { title: 'Splitter outputs', items: byKind('splitter_output').map((p) => p.label), testId: 'downstream-splitter-outputs' },
+    { title: 'Fibres', items: downstream.cores.map((c) => `${c.label} (${c.status === 'Not recorded' ? 'state not recorded' : c.status})`), testId: 'downstream-cores' },
+    { title: 'Fibres already marked faulty, retired or damaged', items: downstream.outOfUseCores.map((c) => `${c.label} (${c.status})`), testId: 'downstream-out-of-use' },
+  ];
+  const counts = `${downstream.equipment.length} item(s), ${downstream.ports.length} port(s), ${downstream.cores.length} fibre(s)${downstream.outOfUseCores.length ? `, ${downstream.outOfUseCores.length} already out of use` : ''}`;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2" data-testid="downstream">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[11px] font-semibold text-slate-800">
+        <span>Below it on recorded links: {counts}</span>
+        <span className="text-blue-700">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && (
+        <div className="mt-1 space-y-2">
+          {groups
+            .filter((g) => g.items.length > 0)
+            .map((g) => (
+              <div key={g.title} data-testid={g.testId}>
+                <div className="text-[11px] font-bold text-slate-700">
+                  {g.title} ({g.items.length})
+                </div>
+                <ul className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 text-[11px] text-slate-700">
+                  {g.items.slice(0, 300).map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                  {g.items.length > 300 && <li>… and {g.items.length - 300} more</li>}
+                </ul>
+              </div>
+            ))}
+          {downstream.notes.map((n) => (
+            <p key={n} className="text-[10px] text-slate-500">
+              {n}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Who depends on an element, from recorded paths, with the uncertain ones apart. */
 export function ImpactList({ impact }: { impact: ImpactResult }) {
@@ -14,11 +74,12 @@ export function ImpactList({ impact }: { impact: ImpactResult }) {
       <div className="text-[11px] font-semibold text-slate-800" data-testid="impact-summary">
         {impact.affected.length} customer(s) on recorded paths through {impact.label} · {impact.activeServices} active service(s)
       </div>
+      {impact.downstream && <DownstreamList downstream={impact.downstream} />}
       <div className="grid gap-1 sm:grid-cols-2">
         {impact.affected.map((c) => (
           <div key={c.customerId} className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px]" data-testid="affected-customer">
             <div className="font-semibold text-slate-900">
-              {c.name} <span className="font-mono text-slate-500">{c.customerId}</span>
+              <span className={c.nameHidden ? 'italic text-slate-500' : ''}>{shownName(c)}</span> <span className="font-mono text-slate-500">{c.customerId}</span>
             </div>
             <div className="text-slate-500">
               {c.services.length ? c.services.map((s) => `${SERVICE_KIND_LABELS[s.kind]} (${s.status})`).join(', ') : 'No service record'}
@@ -32,7 +93,7 @@ export function ImpactList({ impact }: { impact: ImpactResult }) {
           <div className="text-[11px] font-bold text-amber-900">May be affected: path not fully recorded ({impact.mayBeAffected.length})</div>
           {impact.mayBeAffected.map((c) => (
             <div key={c.customerId} className="text-[11px] text-amber-900">
-              {c.name} <span className="font-mono">{c.customerId}</span>: {c.reason}. First missing link: {c.firstGap}
+              {shownName(c)} <span className="font-mono">{c.customerId}</span>: {c.reason}. First missing link: {c.firstGap}
             </div>
           ))}
         </div>
@@ -48,7 +109,7 @@ export function ImpactList({ impact }: { impact: ImpactResult }) {
 
 export function ImpactTab({ ix }: { ix: ImpactIndex }) {
   const [element, setElement] = useState<NetworkElementRef | null>({ type: 'splitter', id: '' });
-  const impact = elementReady(element) ? affectedByElement(ix, element) : null;
+  const impact = elementReady(element) ? affectedByElement(ix, element, { downstream: true }) : null;
   return (
     <div className="space-y-3">
       <Section title="Who is affected if this fails?" testId="impact-tab">

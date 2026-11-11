@@ -3,6 +3,7 @@ import type { Building, BuildingUnit, Customer, Ont, Service, Splitter } from '.
 import { customersOnOnt, isActiveCustomer, isLiveOnt } from './connectionRules';
 import { buildFiberIndex, type CoreKey, coreKey, describeCore, type FiberData, type FiberIndex, ponKey, splitterCapacity } from './fiberIndex';
 import { traceCoreUpstream, traceCustomerCores } from './fiberPath';
+import { type CombinedTarget, customerLabel, type PonRef, ponText, serviceBindingLine } from './logicalTopology';
 import type { OpticalSettings } from './opticalSettings';
 
 /**
@@ -25,13 +26,37 @@ export interface LogicalNode {
   status: 'ok' | 'gap' | 'warning';
   ref?: { type: 'equipment' | 'customer' | 'cable'; id: string };
   children: LogicalNode[];
+  /**
+   * Phase 14: `logical` nodes (services, "no service") come from what a person wrote about the
+   * service, not from the fibre links; the screen shows them only with the logical layer on.
+   */
+  layer?: 'physical' | 'logical';
+  /** Phase 14: the logical record of this node (an ONT's registration), shown with the logical layer. */
+  logicalDetail?: string;
+  /** Phase 14: where the logical record disagrees with the fibre links, in plain words. */
+  mismatch?: string;
+  /** Phase 14: the box a splitter sits in, when it is on record. */
+  box?: { id: string; name: string };
+  /** Phase 14: what is below this node in the tree. */
+  counts?: NodeCounts;
+  /** Phase 14: what the physical-and-logical view opens for this node. */
+  target?: CombinedTarget;
+}
+
+export interface NodeCounts {
+  customers: number;
+  onts: number;
+  splitters: number;
+  gaps: number;
+  /** Logical records that disagree with the links. */
+  mismatches: number;
 }
 
 export interface ServiceTopology {
   roots: LogicalNode[];
   /** Active customers and splitters no PON port reaches, each with the first missing link. */
   unreached: LogicalNode[];
-  counts: { ponPorts: number; splitters: number; customersReached: number; customersUnreached: number; gaps: number };
+  counts: { ponPorts: number; splitters: number; customersReached: number; customersUnreached: number; gaps: number; mismatches: number };
 }
 
 const node = (kind: LogicalNodeKind, key: string, label: string, extra: Partial<LogicalNode> = {}): LogicalNode => ({ kind, key, label, status: 'ok', children: [], ...extra });
@@ -39,32 +64,42 @@ const cap = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
 function servicesNodes(customer: Customer, services: readonly Service[]): LogicalNode[] {
   const list = services.filter((s) => s.customerId === customer.id && s.status !== 'ended');
-  if (list.length === 0) return [node('note', `${customer.id}/no-service`, 'No service recorded', { status: 'warning' })];
+  if (list.length === 0) return [node('note', `${customer.id}/no-service`, 'No service recorded', { status: 'warning', layer: 'logical' })];
   return list.map((s) =>
     node('service', s.id, SERVICE_KIND_LABELS[s.kind], {
       detail: [SERVICE_STATUS_LABELS[s.status], s.planName ? `plan "${s.planName}" as written` : 'plan not recorded', s.ontPort ? `ONT port ${s.ontPort}` : undefined].filter(Boolean).join(' · '),
+      logicalDetail: serviceBindingLine(s),
+      layer: 'logical',
     }),
   );
 }
 
 function customerNode(customer: Customer, services: readonly Service[], keyBase: string): LogicalNode {
-  return node('customer', `${keyBase}/${customer.id}`, customer.name, {
-    detail: [customer.id, customer.status !== 'Active' ? customer.status : undefined, customer.flatNumber ? `unit ${customer.flatNumber}` : undefined].filter(Boolean).join(' · '),
+  // Phase 12/14: the server already hid what the role may not see; a hidden unit is not shown at all.
+  const addressHidden = !!customer.hiddenFields?.includes('address');
+  return node('customer', `${keyBase}/${customer.id}`, customerLabel(customer), {
+    target: { kind: 'customer', id: customer.id },
+    detail: [customer.id, customer.status !== 'Active' ? customer.status : undefined, customer.flatNumber && !addressHidden ? `unit ${customer.flatNumber}` : undefined].filter(Boolean).join(' · '),
     ref: { type: 'customer', id: customer.id },
     children: servicesNodes(customer, services),
   });
 }
 
 /** The ONT a customer sink leads to, with every customer on it (several for a shared MDU ONT). */
-function ontNode(customer: Customer, data: TopologyData, keyBase: string, shown: Set<string>): LogicalNode {
+function ontNode(customer: Customer, data: TopologyData, keyBase: string, shown: Set<string>, walking?: PonRef): LogicalNode {
   const services = data.services ?? [];
   const record = customer.ontId ? (data.onts ?? []).find((o) => o.id === customer.ontId) : undefined;
   if (record) {
     const users = customersOnOnt({ customers: data.customers }, record.id);
     for (const u of users) shown.add(u.id);
+    // Phase 14: the PON port the ONT is recorded as registered on, against the port these links come from.
+    const registered = record.oltId && record.ponPortId ? { oltId: record.oltId, ponPortId: record.ponPortId } : undefined;
+    const differs = !!registered && !!walking && (registered.oltId !== walking.oltId || registered.ponPortId !== walking.ponPortId);
     return node('ont', `${keyBase}/${record.id}`, `ONT ${record.serialNumber ?? '(serial not recorded)'}`, {
       detail: [[record.vendor, record.model].filter(Boolean).join(' ') || 'make not recorded', record.onuAddress ? `OLT address ${record.onuAddress}` : undefined, ONT_STATUS_SOURCE_LABELS[record.statusSource]].filter(Boolean).join(' · '),
       status: isLiveOnt(record) ? 'ok' : 'warning',
+      logicalDetail: registered ? `Registered on ${ponText(data.equipment, registered)} (ONT record)` : 'Registration on the OLT not recorded',
+      ...(differs ? { mismatch: `The ONT record says ${ponText(data.equipment, registered!)}, but the fibre links reach it from ${ponText(data.equipment, walking!)}.` } : {}),
       children: (users.length ? users : [customer]).map((u) => customerNode(u, services, `${keyBase}/${record.id}`)),
     });
   }
@@ -73,6 +108,7 @@ function ontNode(customer: Customer, data: TopologyData, keyBase: string, shown:
   return node('ont', `${keyBase}/ont-${customer.id}`, serial ? `ONT ${serial}` : 'ONT not recorded', {
     detail: serial ? 'Serial written on the customer record; no ONT record yet' : 'No ONT serial recorded',
     status: serial ? 'ok' : 'warning',
+    logicalDetail: 'Registration on the OLT not recorded (no ONT record)',
     children: [customerNode(customer, services, keyBase)],
   });
 }
@@ -81,6 +117,7 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
   const index = options.index ?? buildFiberIndex(data);
   const reached = new Set<string>();
   const seenSplitters = new Set<string>();
+  let walking: PonRef | undefined;
   let gaps = 0;
   let splitterCount = 0;
   const gap = (key: string, message: string): LogicalNode => {
@@ -103,7 +140,7 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
       else if (sink.kind === 'customer') {
         reached.add(sink.customer.id);
         if (shown.has(sink.customer.id)) continue;
-        out.push(ontNode(sink.customer, data, `${keyBase}/${key}`, shown));
+        out.push(ontNode(sink.customer, data, `${keyBase}/${key}`, shown, walking));
       }
     }
     return out;
@@ -113,9 +150,11 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
   const splitterNode = (sp: Splitter, keyBase: string, seen: Set<CoreKey>, depth: number): LogicalNode => {
     const host = index.equipment.get(sp.terminalBoxId);
     const base = node('splitter', `${keyBase}/${sp.id}`, `Splitter ${sp.name}`, {
+      target: { kind: 'splitter', id: sp.id },
       detail: [sp.couplerRatio ? `coupler ${sp.couplerRatio}` : sp.ratio, host ? `in ${host.name}` : 'box not on record'].join(' · '),
       ref: host ? { type: 'equipment', id: host.id } : undefined,
       status: sp.status === 'Faulty' ? 'warning' : 'ok',
+      ...(host ? { box: { id: host.id, name: host.name } } : {}),
     });
     if (seenSplitters.has(sp.id)) {
       base.children.push(gap(`${base.key}/twice`, `Splitter ${sp.name} is reached twice: its output loops back into its own tree.`));
@@ -151,10 +190,11 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
   const roots: LogicalNode[] = [];
   let ponPorts = 0;
   for (const olt of data.equipment.filter((e) => e.type === 'OLT')) {
-    const oltNode = node('olt', olt.id, olt.name, { detail: [olt.manufacturer, olt.model, olt.site].filter(Boolean).join(' · ') || undefined, ref: { type: 'equipment', id: olt.id } });
+    const oltNode = node('olt', olt.id, olt.name, { detail: [olt.manufacturer, olt.model, olt.site].filter(Boolean).join(' · ') || undefined, ref: { type: 'equipment', id: olt.id }, target: { kind: 'olt', id: olt.id } });
     for (const pon of olt.ponPorts ?? []) {
       ponPorts += 1;
       const ponNode = node('pon', `${olt.id}/${pon.id}`, pon.id, {
+        target: { kind: 'pon', oltId: olt.id, ponPortId: pon.id },
         detail: [pon.vendorAddress ? `OLT address ${pon.vendorAddress}` : 'vendor address not recorded', pon.technology ?? olt.technology, pon.opticsClass].filter(Boolean).join(' · '),
       });
       const feeders: { cableId: string; core: number; via: string }[] = [];
@@ -167,10 +207,12 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
         // An idle port with nothing recorded is not a gap; say so plainly.
         ponNode.children.push(node('note', `${ponNode.key}/idle`, 'No patch or feeder fiber recorded on this port'));
       }
+      walking = { oltId: olt.id, ponPortId: pon.id };
       for (const f of feeders) {
         ponNode.detail = `${ponNode.detail} · ${f.via}`;
         ponNode.children.push(...followCore(f.cableId, f.core, ponNode.key, new Set(), 0));
       }
+      walking = undefined;
       oltNode.children.push(ponNode);
     }
     if ((olt.ponPorts ?? []).length === 0) oltNode.children.push(node('note', `${olt.id}/noports`, 'No PON ports recorded on this OLT'));
@@ -189,7 +231,8 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
     const first = trace.gaps[0] ?? (trace.pon ? 'Not reached downstream from its PON port.' : 'Does not reach a PON port.');
     gaps += 1;
     unreached.push(
-      node('customer', `unreached/${c.id}`, c.name, {
+      node('customer', `unreached/${c.id}`, customerLabel(c), {
+        target: { kind: 'customer', id: c.id },
         detail: c.id,
         status: 'gap',
         ref: { type: 'customer', id: c.id },
@@ -208,6 +251,7 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
     gaps += 1;
     unreached.push(
       node('splitter', `unreached/${sp.id}`, `Splitter ${sp.name}`, {
+        target: { kind: 'splitter', id: sp.id },
         detail: host ? `in ${host.name}` : undefined,
         status: 'gap',
         ref: host ? { type: 'equipment', id: host.id } : undefined,
@@ -217,7 +261,30 @@ export function serviceTopology(data: TopologyData, options: { settings?: Optica
   }
   const active = data.customers.filter(isActiveCustomer).length;
   const unreachedCustomers = unreached.filter((n) => n.kind === 'customer').length;
-  return { roots, unreached, counts: { ponPorts, splitters: splitterCount, customersReached: active - unreachedCustomers, customersUnreached: unreachedCustomers, gaps } };
+  let mismatches = 0;
+  for (const r of [...roots, ...unreached]) mismatches += countNodes(r).mismatches;
+  return { roots, unreached, counts: { ponPorts, splitters: splitterCount, customersReached: active - unreachedCustomers, customersUnreached: unreachedCustomers, gaps, mismatches } };
+}
+
+/** Phase 14: fills `counts` on a node and everything below it, and returns the node's counts. */
+function countNodes(n: LogicalNode): NodeCounts {
+  const own: NodeCounts = {
+    customers: n.kind === 'customer' && n.status !== 'gap' ? 1 : 0,
+    onts: n.kind === 'ont' ? 1 : 0,
+    splitters: n.kind === 'splitter' && n.status !== 'gap' ? 1 : 0,
+    gaps: n.kind === 'gap' ? 1 : 0,
+    mismatches: n.mismatch ? 1 : 0,
+  };
+  for (const c of n.children) {
+    const k = countNodes(c);
+    own.customers += k.customers;
+    own.onts += k.onts;
+    own.splitters += k.splitters;
+    own.gaps += k.gaps;
+    own.mismatches += k.mismatches;
+  }
+  n.counts = own;
+  return own;
 }
 
 /* ------------------------------------------------------------------ */

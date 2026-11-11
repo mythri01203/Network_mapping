@@ -346,7 +346,9 @@ export interface NearbyAsset {
 
 /**
  * Same-group assets within 1.5 × accuracy plus a margin (both settings), nearest first, at most
- * `limit`. A point the office has not placed is skipped, since its position means nothing.
+ * `limit`. A point the office has not placed is skipped, since its position means nothing. A
+ * capture the office rejected (Phase 19) is skipped too; one still awaiting review counts, since
+ * another worker may have captured the same pole.
  */
 export function findNearbySameType(
   equipment: readonly Equipment[],
@@ -358,7 +360,7 @@ export function findNearbySameType(
 ): NearbyAsset[] {
   const radius = duplicateRadiusMeters(accuracyMeters, settings);
   return equipment
-    .filter((e) => assetGroupOf(e.type) === group && !e.officeMustPlace && e.locationMethod !== 'not_placed')
+    .filter((e) => assetGroupOf(e.type) === group && !e.officeMustPlace && e.locationMethod !== 'not_placed' && e.reviewStatus !== 'rejected')
     .map((e) => ({ equipment: e, distanceMeters: distanceMeters(point, [e.lat, e.lng]) }))
     .filter((n) => n.distanceMeters <= radius)
     .sort((a, b) => a.distanceMeters - b.distanceMeters)
@@ -491,7 +493,9 @@ const locationFields = (location: CaptureLocation) => ({
 
 /**
  * The equipment record a capture creates. Facts the worker did not give stay empty: no installed
- * date, no ports, no maker, no street. Status is Active because the item was seen standing there.
+ * date, no ports, no maker, no street. Phase 19: it goes in as a proposal, `awaiting_review` with
+ * status Planned (not yet part of the working network), and waits in the office review queue.
+ * Accepting it makes it Active, as captures were before, because the item was seen standing there.
  */
 export function buildCapturedEquipment(input: CapturedEquipmentInput): Equipment {
   const { type, category } = capturedEquipmentType(input);
@@ -504,7 +508,8 @@ export function buildCapturedEquipment(input: CapturedEquipmentInput): Equipment
     ...locationFields(input.location),
     area: '',
     street: '',
-    status: 'Active',
+    status: 'Planned',
+    reviewStatus: 'awaiting_review',
     images: [
       {
         id: input.photoId,
@@ -595,7 +600,9 @@ export function addCapturedEquipment(data: NetworkData, record: Equipment, now: 
           action: 'FIELD_CAPTURE_ADDED',
           details: `${record.type} ${record.name} (${record.id}) by phone capture, ${
             record.officeMustPlace ? 'office must place it' : `${record.locationMethod ?? 'gps'}${record.locationAccuracyMeters !== undefined ? ` within about ${Math.round(record.locationAccuracyMeters)} m` : ''}`
-          }${record.previousAssetId ? `, captured after ${record.previousAssetId} (order only${span ? `; proposed span ${span.id} for the office to confirm` : ''})` : ''}`,
+          }${record.previousAssetId ? `, captured after ${record.previousAssetId} (order only${span ? `; proposed span ${span.id} for the office to confirm` : ''})` : ''}${
+            record.reviewStatus === 'awaiting_review' ? '; waits for office review' : ''
+          }`,
           assetId: record.id,
           assetType: 'Equipment',
         },
@@ -633,10 +640,14 @@ export function removeCapturedRecord(
   collection: 'equipment' | 'faults',
   id: string,
 ): CommandResult<{ removed: boolean }> {
-  const list = data[collection] as readonly { id: string; captureSource?: string }[];
+  const list = data[collection] as readonly { id: string; captureSource?: string; reviewStatus?: string }[];
   const record = list.find((r) => r.id === id);
   if (!record) return succeed({ removed: false }, {});
   if (record.captureSource !== 'field_capture') return fail('Not a field capture', `${id} was not added from the phone.`);
+  // Phase 19: once the office has accepted or rejected it, the record is the office's to change.
+  if (record.reviewStatus === 'accepted' || record.reviewStatus === 'rejected') {
+    return fail('Already checked by the office', `The office has already checked ${id}, so it was kept. Call the office if it is wrong.`);
+  }
   const kept = list.filter((r) => r.id !== id);
   // Spans and records that name the pole go with it, so nothing is left pointing to nothing.
   const cascade = collection === 'equipment' ? ospCascadeForEquipment(data, id).patch : {};
@@ -762,10 +773,13 @@ type Positioned = {
   locationCheckedAt?: string;
   locationCapturedAt?: string;
   photoIds?: string[];
+  reviewStatus?: string;
 };
 
 const followUpReason = (r: Positioned, limits: GpsLimits): FollowUpReason | null => {
   if (r.captureSource !== 'field_capture' || r.locationCheckedAt) return null;
+  // Phase 19: a capture the office rejected is not placed or checked any more.
+  if (r.reviewStatus === 'rejected') return null;
   if (r.officeMustPlace || r.locationMethod === 'not_placed') return 'office_must_place';
   if (r.locationMethod === 'map_pick') return null;
   if (r.locationAccuracyMeters === undefined || r.locationAccuracyMeters > limits.acceptMeters) return 'rough_location';

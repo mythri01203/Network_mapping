@@ -171,14 +171,24 @@ export function schemeColorAt(scheme: ColorScheme | undefined, position: number)
   if (!scheme || scheme.colors.length === 0 || !Number.isInteger(position) || position < 1) return undefined;
   const index = (position - 1) % scheme.colors.length;
   const repeat = Math.floor((position - 1) / scheme.colors.length);
-  const name = scheme.colors[index];
+  return {
+    ...namedColor(scheme.colors[index]),
+    repeat,
+    repeatNote: repeat > 0 ? 'second set: check the stripe, ring or binder on the drum sheet' : undefined,
+  };
+}
+
+/**
+ * A colour a person wrote down (a tube colour from the drum sheet). Only the swatch is looked up;
+ * a name with no swatch is drawn grey and still shown by its name.
+ */
+export function namedColor(name: string): SchemeColor {
   const key = name.toLowerCase().split(/\s+/)[0];
   return {
     name,
     hex: SWATCHES[key] ?? '#cbd5e1',
     textColor: DARK_TEXT.has(key) || !SWATCHES[key] ? '#1e293b' : '#ffffff',
-    repeat,
-    repeatNote: repeat > 0 ? 'second set: check the stripe, ring or binder on the drum sheet' : undefined,
+    repeat: 0,
   };
 }
 
@@ -193,6 +203,68 @@ export interface FiberLayout {
   tubeColorScheme?: string;
   fibersPerTube?: number;
   tubeCount?: number;
+  /** Phase 7: tube records, for tubes of different sizes. They win over fibersPerTube. */
+  tubes?: readonly TubeRecord[];
+}
+
+/** One recorded tube: its number, how many fibers it holds and, if written down, its colour. */
+export interface TubeRecord {
+  number: number;
+  fiberCount: number;
+  colorName?: string;
+}
+
+/** A tube with the cable-wide fiber numbers it holds. */
+export interface TubeSpan extends TubeRecord {
+  firstCore: number;
+  lastCore: number;
+}
+
+/**
+ * Why the recorded tubes cannot be used, in plain words, or undefined when they add up. Tube
+ * numbers must run 1, 2, 3 ... with no gap or repeat, each tube must hold at least one fiber, and
+ * the sizes must add up to the cable's fiber count.
+ */
+export function tubeRecordsProblem(layout: FiberLayout): string | undefined {
+  const tubes = layout.tubes;
+  if (!tubes || tubes.length === 0) return undefined;
+  const numbers = tubes.map((t) => t.number).sort((a, b) => a - b);
+  const gap = numbers.findIndex((n, i) => n !== i + 1);
+  if (gap >= 0) {
+    const repeated = numbers.find((n, i) => numbers.indexOf(n) !== i);
+    return repeated !== undefined ? `tube ${repeated} is listed twice` : `the tubes should be numbered 1 to ${tubes.length}, but tube ${gap + 1} is missing`;
+  }
+  const empty = tubes.find((t) => !Number.isInteger(t.fiberCount) || t.fiberCount < 1);
+  if (empty) return `tube ${empty.number} has no fibers`;
+  const sum = tubes.reduce((total, t) => total + t.fiberCount, 0);
+  if (sum !== layout.fiberCount) return `the tubes hold ${sum} fibers in all, but the cable has ${layout.fiberCount}`;
+  if (layout.tubeCount !== undefined && layout.tubeCount !== tubes.length) return `${tubes.length} tubes are listed, but the tube count says ${layout.tubeCount}`;
+  if (layout.fibersPerTube !== undefined && tubes.some((t) => t.fiberCount !== layout.fibersPerTube)) {
+    return `the tubes are of different sizes, but fibers per tube says ${layout.fibersPerTube}`;
+  }
+  return undefined;
+}
+
+/**
+ * The cable's tubes, from tube records when present, otherwise from fibersPerTube. Undefined when
+ * the tubes are not recorded or do not add up: then no tube is given, never a guess.
+ */
+export function tubeSpans(layout: FiberLayout): TubeSpan[] | undefined {
+  let records: readonly TubeRecord[] | undefined;
+  if (layout.tubes && layout.tubes.length > 0) {
+    if (tubeRecordsProblem(layout)) return undefined;
+    records = [...layout.tubes].sort((a, b) => a.number - b.number);
+  } else {
+    const fpt = usableFibersPerTube(layout);
+    if (!fpt) return undefined;
+    records = Array.from({ length: layout.fiberCount / fpt }, (_, i) => ({ number: i + 1, fiberCount: fpt }));
+  }
+  let next = 1;
+  return records.map((t) => {
+    const span: TubeSpan = { ...t, firstCore: next, lastCore: next + t.fiberCount - 1 };
+    next += t.fiberCount;
+    return span;
+  });
 }
 
 export interface CoreIdentity {
@@ -234,19 +306,20 @@ export function coreIdentity(
   schemes: readonly ColorScheme[] = DEFAULT_COLOR_SCHEMES,
 ): CoreIdentity {
   const exists = Number.isInteger(coreNumber) && coreNumber >= 1 && coreNumber <= layout.fiberCount;
-  const fpt = usableFibersPerTube(layout);
-  const tubeNumber = fpt && exists ? Math.floor((coreNumber - 1) / fpt) + 1 : undefined;
-  const fiberInTube = fpt && exists ? ((coreNumber - 1) % fpt) + 1 : undefined;
+  const spans = tubeSpans(layout);
+  const tube = exists ? spans?.find((t) => coreNumber >= t.firstCore && coreNumber <= t.lastCore) : undefined;
+  const tubeNumber = tube?.number;
+  const fiberInTube = tube ? coreNumber - tube.firstCore + 1 : undefined;
   const scheme = findColorScheme(layout.colorScheme, schemes);
   const tubeScheme = findColorScheme(layout.tubeColorScheme, schemes);
   const schemeKnown = !!scheme && scheme.colors.length > 0;
   const tubeSchemeKnown = !!tubeScheme && tubeScheme.colors.length > 0;
-  // With no tube layout the position in the colour sequence is the cable-wide number only for a
-  // single-tube cable, which is itself unknown, so no colour is given.
-  const singleTube = layout.fiberCount > 0 && fpt === layout.fiberCount;
-  const position = fiberInTube ?? (singleTube ? coreNumber : undefined);
+  // With no tube layout the position in the colour sequence is not known (a single-tube cable is
+  // itself a recorded layout), so no colour is given.
+  const position = fiberInTube;
   const fiberColor = schemeKnown && position !== undefined ? schemeColorAt(scheme, position) : undefined;
-  const tubeColor = tubeSchemeKnown && tubeNumber !== undefined ? schemeColorAt(tubeScheme, tubeNumber) : undefined;
+  // A tube colour written on the tube record is what the drum sheet says; otherwise the tube scheme.
+  const tubeColor = tube?.colorName ? namedColor(tube.colorName) : tubeSchemeKnown && tubeNumber !== undefined ? schemeColorAt(tubeScheme, tubeNumber) : undefined;
 
   const parts: string[] = [];
   if (tubeNumber !== undefined) parts.push(`tube ${tubeNumber}${tubeColor ? ` ${tubeColor.name}` : ''}`);
@@ -269,7 +342,7 @@ export function coreIdentity(
     tubeColor,
     schemeKnown,
     tubeSchemeKnown,
-    layoutKnown: fpt !== undefined,
+    layoutKnown: spans !== undefined,
     exists,
     label,
     shortLabel,

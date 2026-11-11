@@ -1,15 +1,12 @@
-import type { CatalogComponent, Equipment } from '@fibergis/shared';
+import { type CatalogComponent, catalogPlacementTemplate, type Equipment } from '@fibergis/shared';
 
 /**
- * What a picked catalog item contributes to the equipment placed from it. Poles leave out the name
- * so they keep their automatic sequential numbering.
+ * What a picked catalog item contributes to the equipment placed from it (Phase 2). Never its name:
+ * each item gets its own (poles the next number), so a street of boxes is not ten "PLC Splitter"s.
+ * Never its description as notes: that describes the product, not this item.
  */
 export function placementTemplate(
-  item: Pick<CatalogComponent, 'type' | 'name' | 'description' | 'defaultPorts'>,
+  item: Pick<CatalogComponent, 'id' | 'type' | 'category' | 'defaultPorts' | 'manufacturer' | 'model'>,
 ): Partial<Equipment> {
-  return {
-    ...(item.type.includes('Pole') ? {} : { name: item.name }),
-    totalPorts: item.defaultPorts,
-    notes: item.description,
-  };
+  return catalogPlacementTemplate({ name: '', description: '', iconBg: '', ...item } as CatalogComponent);
 }

@@ -146,6 +146,15 @@ Standard 12-color sequence displayed with visual color badges and text labels fo
 
 ---
 
+### 12. 3D Network View
+
+- **2D Map | 3D View** in the top bar opens `/3d`, a three.js view of the same records: the OLT and switch in a 19" rack, poles with power lines and the strand, splitter closures, FAT boxes, cabinets, every other toolbox type, and one house per customer.
+- Camera presets, fiber filters by splitter level, a house lookup with the exact fiber path, loss budget and port counts per PON, splitter-box and inside-house cutaways, live status from monitoring.
+- The selection follows you between 2D and 3D. **Load demo network** shows a 100-house sample without saving anything.
+- Details, data mapping and the checklist against the prototype: [`docs/3D-VIEW.md`](docs/3D-VIEW.md).
+
+---
+
 ## 🧭 Complete User Journey Walkthrough
 
 To experience the full prototype workflow:

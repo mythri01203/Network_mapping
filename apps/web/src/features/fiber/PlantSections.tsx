@@ -1,37 +1,43 @@
 import { useState } from 'react';
-import { Box, Cable as CableGlyph, GitMerge, Network, Split } from 'lucide-react';
+import { Box, Cable as CableGlyph, GitMerge, Split } from 'lucide-react';
 
 import {
   type Cable,
   CLOSURE_CONDITIONS,
   CLOSURE_TYPES,
   type ClosureCondition,
+  describeSplitterOutputLink,
   type Equipment,
   type JointClosure,
   OPTICS_CLASSES,
   type OpticsClass,
+  pickerEntries,
   PON_TECHNOLOGIES,
+  ponCapacityText,
+  ponPortPlace,
+  type PonPortUsage,
+  ponPortUsage,
   type PonTechnology,
+  ponTreeSplits,
   SEAL_STATUSES,
   type SealStatus,
   type Splitter,
+  SPLITTER_OUTPUT_STATE_WORDS,
   SPLITTER_RATIOS,
-  splitterCapacity,
+  splitterOutputSummary,
+  splitterOutputUse,
+  splitterPlace,
   type SplitterRatio,
   tracePonTree,
 } from '@fibergis/shared';
 
 import { Button, Field, Input, Select } from '../../components/ui';
 import {
-  addPanel,
   addSplitter,
   saveClosure,
   savePonPort,
   saveSplitter,
-  setPortFeeder,
-  setPortPatch,
   setSplitterInput,
-  setSplitterOutput,
   setUpClosure,
 } from '../../stores/fiberActions';
 import { getNetworkData, selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
@@ -40,6 +46,7 @@ import { InspectorSection } from '../inspector/sections';
 import { ClosurePhotos } from './ClosurePhotos';
 import { FiberPicker } from './FiberPicker';
 import { emptyFiber, type FiberChoice, fiberOf, parsePartsText } from './fiberUi';
+import { BIG, BTN, OUTPUT_MARK, OUTPUT_TILE, SplitterOutputDetail, SplitterPlaceBlock } from './SplitterParts';
 
 const ADDRESS_PART_HINT = 'Each level as the vendor names it, separated by commas. Shapes differ by vendor; nothing is converted.';
 
@@ -213,154 +220,8 @@ export function ClosureDetailsSection({ closure }: { closure: JointClosure }) {
 /* ODF                                                                 */
 /* ------------------------------------------------------------------ */
 
-export function OdfSection({ odf }: { odf: Equipment }) {
-  const cables = useNetworkStore((s) => s.cables);
-  const equipment = useNetworkStore((s) => s.equipment);
-  const olts = equipment.filter((e) => e.type === 'OLT');
-  const [label, setLabel] = useState('');
-  const [ports, setPorts] = useState('24');
-  const [connector, setConnector] = useState('SC/APC');
-  const [open, setOpen] = useState<{ panelId: string; number: number } | null>(null);
-  const [feeder, setFeeder] = useState<FiberChoice>(emptyFiber);
-  const [oltId, setOltId] = useState('');
-  const [ponId, setPonId] = useState('');
-  const [cord, setCord] = useState('');
-  const panels = odf.odfPanels ?? [];
-  const panel = panels.find((p) => p.id === open?.panelId);
-  const port = panel?.ports.find((p) => p.number === open?.number);
-  const olt = olts.find((o) => o.id === oltId);
-  const local = cablesAt(cables, odf.id);
-
-  return (
-    <InspectorSection title="ODF panels and patches" icon={Network}>
-      <div className="space-y-3 text-[13px]">
-        {panels.length === 0 && <p className="text-xs text-slate-600">No panels recorded. Add each panel with the number of adapters it has.</p>}
-        {panels.map((p) => (
-          <div key={p.id} data-testid={`odf-panel-${p.label}`}>
-            <p className="mb-1 text-xs font-semibold text-slate-600">
-              {p.label}
-              {p.connectorType ? ` · ${p.connectorType}` : ''} · {p.ports.filter((x) => x.patch).length} patched, {p.ports.filter((x) => x.feederCableId).length} with a feeder fiber
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {p.ports.map((x) => (
-                <button
-                  key={x.id}
-                  type="button"
-                  data-testid={`odf-port-${x.number}`}
-                  title={`${x.feederCableId ? `Back: ${x.feederCableId} fiber ${x.feederCore}` : 'No feeder fiber'}${x.patch ? `; front: ${x.patch.oltId} ${x.patch.ponPortId}` : ''}`}
-                  onClick={() => {
-                    setOpen({ panelId: p.id, number: x.number });
-                    setFeeder(emptyFiber);
-                    setOltId('');
-                    setPonId('');
-                  }}
-                  className={`min-h-8 min-w-8 rounded border px-1 text-[11px] tabular-nums ${x.patch && x.feederCableId ? 'border-blue-300 bg-blue-50' : x.patch || x.feederCableId ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'} ${open?.panelId === p.id && open.number === x.number ? 'ring-2 ring-blue-500/40' : ''}`}
-                >
-                  {x.number}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-        {panel && port && (
-          <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/40 p-2.5" data-testid="odf-port-detail">
-            <p className="font-semibold">
-              {panel.label}, port {port.number}
-            </p>
-            <p className="text-xs text-slate-700">
-              Back (feeder fiber): {port.feederCableId ? `${cables.find((c) => c.id === port.feederCableId)?.name ?? port.feederCableId}, fiber ${port.feederCore}` : 'not recorded'}
-              <br />
-              Front (patch cord): {port.patch ? `${port.patch.oltId} ${port.patch.ponPortId}${port.patch.cordLabel ? `, cord ${port.patch.cordLabel}` : ''}` : 'no patch'}
-            </p>
-            {port.feederCableId ? (
-              <Button size="sm" onClick={() => void setPortFeeder(odf.id, panel.id, port.number, null)}>
-                Remove feeder fiber
-              </Button>
-            ) : (
-              <>
-                <FiberPicker label="Feeder fiber behind this port" value={feeder} onChange={setFeeder} cables={local} testId="odf-feeder" />
-                <Button size="sm" variant="primary" data-testid="odf-feeder-save" disabled={!fiberOf(feeder)} onClick={() => void setPortFeeder(odf.id, panel.id, port.number, fiberOf(feeder))}>
-                  Save feeder fiber
-                </Button>
-              </>
-            )}
-            {port.patch ? (
-              <Button size="sm" data-testid="odf-unpatch" onClick={() => void setPortPatch(odf.id, panel.id, port.number, null)}>
-                Remove patch
-              </Button>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Patch to OLT">
-                  <Select data-testid="odf-patch-olt" value={oltId} onChange={(e) => { setOltId(e.target.value); setPonId(''); }}>
-                    <option value="">Choose…</option>
-                    {olts.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="PON port">
-                  <Select data-testid="odf-patch-pon" value={ponId} disabled={!olt} onChange={(e) => setPonId(e.target.value)}>
-                    <option value="">Choose…</option>
-                    {(olt?.ponPorts ?? []).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.id}
-                        {p.vendorAddress ? ` (${p.vendorAddress})` : ''}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Cord label (optional)" className="col-span-2">
-                  <Input data-testid="odf-patch-cord" value={cord} onChange={(e) => setCord(e.target.value)} />
-                </Field>
-                {olt && !olt.ponPorts?.length && <p className="col-span-2 text-[11px] text-amber-800">{olt.name} has no PON ports recorded. Set them up in Configure OLT.</p>}
-                <Button size="sm" variant="primary" data-testid="odf-patch-save" className="col-span-2" disabled={!oltId || !ponId} onClick={() => void setPortPatch(odf.id, panel.id, port.number, { oltId, ponPortId: ponId, cordLabel: cord })}>
-                  Save patch
-                </Button>
-              </div>
-            )}
-            {(port.history ?? []).length > 0 && (
-              <details className="text-[11px] text-slate-600">
-                <summary className="cursor-pointer">History</summary>
-                <ul className="mt-1 space-y-0.5">
-                  {port.history!.map((h, i) => (
-                    <li key={i}>
-                      {h.at.slice(0, 10)}: {h.details}
-                      {h.by ? ` (${h.by})` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </div>
-        )}
-        <div className="grid grid-cols-3 gap-2">
-          <Field label="Panel name">
-            <Input data-testid="odf-panel-label" value={label} placeholder="Panel A" onChange={(e) => setLabel(e.target.value)} />
-          </Field>
-          <Field label="Ports">
-            <Input data-testid="odf-panel-ports" inputMode="numeric" value={ports} onChange={(e) => setPorts(e.target.value.replace(/\D/g, ''))} />
-          </Field>
-          <Field label="Connector">
-            <Input value={connector} onChange={(e) => setConnector(e.target.value)} />
-          </Field>
-        </div>
-        <Button
-          size="sm"
-          data-testid="odf-panel-add"
-          disabled={!label.trim() || !ports}
-          onClick={() => {
-            void addPanel(odf.id, { label, portCount: Number(ports), connectorType: connector });
-            setLabel('');
-          }}
-        >
-          Add panel
-        </Button>
-      </div>
-    </InspectorSection>
-  );
-}
+/** Phase 9: the ODF section lives in its own file; kept exported here for the inspector. */
+export { OdfSection } from './OdfSection';
 
 /* ------------------------------------------------------------------ */
 /* OLT PON ports                                                       */
@@ -395,6 +256,14 @@ export function PonPortSection({ olt }: { olt: Equipment }) {
     setDirect({ cableId: p?.connectedFeederCableId ?? '', core: p?.feederCore ? String(p.feederCore) : '' });
   };
   const tree = pon ? tracePonTree(olt.id, pon.id, getNetworkData(), { settings: optical }) : undefined;
+  // Phase 11: splitter levels and split product on this port's tree, from each splitter's recorded links.
+  const splits = pon ? ponTreeSplits(getNetworkData(), olt.id, pon.id, { settings: optical }) : undefined;
+  // Phase 10: ONT, customer and service counts worked out from the records each time.
+  useNetworkStore((s) => s.customers);
+  useNetworkStore((s) => s.onts);
+  useNetworkStore((s) => s.services);
+  const usage = pon ? ponPortUsage(getNetworkData(), olt.id, pon.id, { trace: true, settings: optical }) : undefined;
+  const place = pon ? ponPortPlace(olt, pon.id) : undefined;
 
   return (
     <InspectorSection title="PON ports: address, optics and path" icon={CableGlyph}>
@@ -416,6 +285,7 @@ export function PonPortSection({ olt }: { olt: Equipment }) {
           </Field>
           {pon && (
             <div className="space-y-2" data-testid="pon-detail">
+              {usage && <PonUsageBlock usage={usage} place={place?.text} />}
               <p className="text-[11px] text-slate-500">Online, offline and LOS counts need a live OLT connection: No live connection.</p>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Address as the OLT writes it" className="col-span-2" hint="Kept exactly as typed, such as gpon 0/5/0">
@@ -446,8 +316,8 @@ export function PonPortSection({ olt }: { olt: Equipment }) {
                 <Field label="Vendor's own budget (dB)" hint="Kept apart from the class">
                   <Input data-testid="pon-vendor-budget" inputMode="decimal" value={vendorBudget} onChange={(e) => setVendorBudget(e.target.value.replace(/[^\d.]/g, ''))} />
                 </Field>
-                <Field label="ONU limit (vendor)">
-                  <Input inputMode="numeric" value={maxOnu} onChange={(e) => setMaxOnu(e.target.value.replace(/\D/g, ''))} />
+                <Field label="ONU limit (vendor)" hint="From the OLT's datasheet. Blank: not recorded">
+                  <Input data-testid="pon-max-onu" inputMode="numeric" value={maxOnu} onChange={(e) => setMaxOnu(e.target.value.replace(/\D/g, ''))} />
                 </Field>
               </div>
               <FiberPicker label="Straight onto a feeder fiber (no ODF)" value={direct} onChange={setDirect} cables={cablesAt(cables, olt.id)} testId="pon-direct" />
@@ -473,6 +343,21 @@ export function PonPortSection({ olt }: { olt: Equipment }) {
               {tree && (
                 <p className="text-xs text-slate-700" data-testid="pon-tree">
                   Fiber by fiber this port reaches {tree.coreKeys.length} fiber(s), {tree.splitterIds.length} splitter(s) and {tree.customers.length} customer(s).
+                  {splits && (
+                    <span className="block" data-testid="pon-tree-splits">
+                      {splits.levels === undefined
+                        ? 'Splitter levels: no splitter is recorded on this port yet.'
+                        : `Splitter levels: ${splits.levels} (${splits.architecture === 'distributed' ? 'distributed, cascaded' : 'centralised'}). Splits multiply up to 1:${splits.maxProduct}${splits.maxFactors.length > 1 ? ` (${splits.maxFactors.join(' × ')})` : ''}; limit ${splits.splitLimit} in Optical settings.`}
+                    </span>
+                  )}
+                  {splits?.overSplitLimit && (
+                    <span className="block text-amber-800" data-testid="pon-tree-split-warning">
+                      Check: splits multiply to 1:{splits.maxProduct}, above the limit of {splits.splitLimit}. Customers at the end may get too little light.
+                    </span>
+                  )}
+                  {splits && splits.differs.length > 0 && (
+                    <span className="block text-amber-800">Check: {splits.differs.length} splitter(s) have a recorded arrangement that differs from these records.</span>
+                  )}
                   {tree.problems.map((p) => (
                     <span key={p} className="block text-amber-800">
                       Check: {p}
@@ -488,6 +373,41 @@ export function PonPortSection({ olt }: { olt: Equipment }) {
   );
 }
 
+/**
+ * Phase 10: what one PON port serves, counted from the records. The old stored counter is shown
+ * only when it differs, labelled as an old saved number.
+ */
+function PonUsageBlock({ usage, place }: { usage: PonPortUsage; place?: string }) {
+  const rows: [string, string][] = [
+    ['On card', place ?? 'Not recorded'],
+    ['Customers on record', String(usage.customers.length)],
+    ['ONTs', `${usage.ontCount}${usage.customersWithoutOnt.length ? ` (${usage.customersWithoutOnt.length} customer(s) have no ONT record; each counted as one)` : ''}`],
+    ['Services running', String(usage.services.length)],
+    ['Capacity', ponCapacityText(usage)],
+  ];
+  if (usage.reached) rows.push(['Reached by the fibers', `${usage.reached.customers.length} customer(s), ${usage.reached.splitterIds.length} splitter(s)`]);
+  return (
+    <div className="space-y-1 rounded-md border border-slate-200 bg-white p-2" data-testid="pon-usage">
+      <dl className="grid grid-cols-[8.5rem_1fr] gap-x-2 gap-y-1 text-xs">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className={label === 'Capacity' && usage.overLimit ? 'font-semibold text-red-700' : 'font-semibold text-slate-800'}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {usage.notes.map((n) => (
+        <p key={n} className="text-xs text-amber-800">
+          Check: {n}
+        </p>
+      ))}
+      {usage.storedCount !== usage.customers.length && (
+        <p className="text-[11px] text-slate-500">An older saved count said {usage.storedCount}. It is not used; the counts above come from the records.</p>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Splitters                                                           */
 /* ------------------------------------------------------------------ */
@@ -497,12 +417,11 @@ function SplitterCard({ splitter, host }: { splitter: Splitter; host: Equipment 
   const splitters = useNetworkStore((s) => s.splitters);
   const [input, setInput] = useState<FiberChoice>(emptyFiber);
   const [parent, setParent] = useState('');
+  const [parentReason, setParentReason] = useState('');
   const [portOpen, setPortOpen] = useState<number | null>(null);
-  const [out, setOut] = useState<FiberChoice>(emptyFiber);
   const [loss, setLoss] = useState(String(splitter.insertionLossDb));
   const [lossSource, setLossSource] = useState(splitter.lossSource ?? '');
   const local = cablesAt(cables, host.id);
-  const n = splitterCapacity(splitter);
   const inp = splitter.inputPort;
   const inputText = inp.connectedSplitterId
     ? `output ${inp.connectedSplitterPort} of ${splitters.find((s) => s.id === inp.connectedSplitterId)?.name ?? inp.connectedSplitterId}`
@@ -510,6 +429,22 @@ function SplitterCard({ splitter, host }: { splitter: Splitter; host: Equipment 
       ? `${cables.find((c) => c.id === inp.connectedCableId)?.name ?? inp.connectedCableId}, ${inp.connectedCore ? `fiber ${inp.connectedCore}` : 'fiber not recorded'}`
       : 'not linked';
   const others = splitters.filter((s) => s.id !== splitter.id);
+  // Phase 11: where it sits and what is on each output, worked out from the records every time.
+  useNetworkStore((s) => s.customers);
+  useNetworkStore((s) => s.closures);
+  useNetworkStore((s) => s.equipment);
+  const optical = useNetworkStore(selectOpticalSettings);
+  const data = getNetworkData();
+  const place = splitterPlace(data, splitter.id, { settings: optical });
+  const { outputs, counts } = splitterOutputUse(data, splitter);
+  const openUse = outputs.find((o) => o.portNumber === portOpen);
+  // Outputs of other splitters a cascade may hang on: free ones, and faulty ones with a reason.
+  const parentChoices = others.flatMap((s) =>
+    splitterOutputUse(data, s)
+      .outputs.filter((o) => o.links.length === 0 && !o.markedOnly && (o.state === 'free' || o.state === 'faulty' || o.state === 'reserved'))
+      .map((o) => ({ value: `${s.id}#${o.portNumber}`, label: `${s.name} output ${o.portNumber}${o.state === 'free' ? '' : ` (${SPLITTER_OUTPUT_STATE_WORDS[o.state].toLowerCase()})`}`, faulty: o.state === 'faulty' })),
+  );
+  const parentFaulty = parentChoices.find((c) => c.value === parent)?.faulty ?? false;
 
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-2.5" data-testid={`splitter-${splitter.id}`}>
@@ -522,104 +457,90 @@ function SplitterCard({ splitter, host }: { splitter: Splitter; host: Equipment 
       {!inp.connectedCableId && !inp.connectedSplitterId ? (
         <div className="space-y-2">
           <FiberPicker label="Fiber that feeds the input" value={input} onChange={setInput} cables={local} testId="splitter-input" />
-          <Button size="sm" variant="primary" data-testid="splitter-input-save" disabled={!fiberOf(input)} onClick={() => void setSplitterInput(splitter.id, fiberOf(input))}>
+          <button type="button" className={BTN.main} data-testid="splitter-input-save" disabled={!fiberOf(input)} onClick={() => void setSplitterInput(splitter.id, fiberOf(input))}>
             Link input to this fiber
-          </Button>
-          {others.length > 0 && (
-            <div className="grid grid-cols-[1fr_auto] gap-2">
-              <Select data-testid="splitter-parent" value={parent} onChange={(e) => setParent(e.target.value)}>
-                <option value="">Or fed by another splitter's output…</option>
-                {others.flatMap((s) =>
-                  s.outputPorts
-                    .filter((p) => p.status === 'Available')
-                    .map((p) => (
-                      <option key={`${s.id}#${p.portNumber}`} value={`${s.id}#${p.portNumber}`}>
-                        {s.name} output {p.portNumber}
-                      </option>
-                    )),
-                )}
-              </Select>
-              <Button
-                size="sm"
-                disabled={!parent}
-                onClick={() => {
-                  const [splitterId, port] = parent.split('#');
-                  void setSplitterInput(splitter.id, { splitterId, port: Number(port) });
-                }}
-              >
-                Link
-              </Button>
+          </button>
+          {parentChoices.length > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <Select data-testid="splitter-parent" className={BIG} value={parent} onChange={(e) => { setParent(e.target.value); setParentReason(''); }}>
+                  <option value="">Or fed by another splitter's output…</option>
+                  {parentChoices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+                <button
+                  type="button"
+                  className={BTN.plain}
+                  data-testid="splitter-parent-link"
+                  disabled={!parent || (parentFaulty && !parentReason.trim())}
+                  onClick={() => {
+                    const [splitterId, port] = parent.split('#');
+                    void setSplitterInput(splitter.id, { splitterId, port: Number(port), ...(parentFaulty ? { overrideReason: parentReason } : {}) });
+                  }}
+                >
+                  Link
+                </button>
+              </div>
+              {parentFaulty && (
+                <Field label="That output is marked faulty. Why use it anyway?">
+                  <Input data-testid="splitter-parent-override" className={BIG} value={parentReason} maxLength={300} onChange={(e) => setParentReason(e.target.value)} />
+                </Field>
+              )}
             </div>
           )}
         </div>
       ) : (
-        <Button size="sm" onClick={() => void setSplitterInput(splitter.id, null)}>
+        <button type="button" className={BTN.plain} onClick={() => void setSplitterInput(splitter.id, null)}>
           Unlink input
-        </Button>
+        </button>
       )}
-      <div className="flex flex-wrap gap-1">
-        {Array.from({ length: n }, (_, i) => i + 1).map((num) => {
-          const p = splitter.outputPorts.find((x) => x.portNumber === num);
-          const child = splitters.find((s) => s.inputPort.connectedSplitterId === splitter.id && s.inputPort.connectedSplitterPort === num);
-          const used = !!p?.connectedDropCableId || !!p?.connectedCustomerId || !!child;
+      {place && <SplitterPlaceBlock place={place} />}
+      <p className="text-xs text-slate-700" data-testid="splitter-out-counts">
+        {splitterOutputSummary(counts)}.
+        {counts.faultyInUse > 0 ? ` ${counts.faultyInUse} faulty output(s) still have something connected.` : ''}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {outputs.map((o) => {
+          const p = o.port;
+          const word = SPLITTER_OUTPUT_STATE_WORDS[o.state];
           return (
             <button
-              key={num}
+              key={o.portNumber}
               type="button"
-              data-testid={`splitter-out-${num}`}
-              title={p?.connectedDropCableId ? `${p.connectedDropCableId} fiber ${p.connectedCore ?? '?'}${p.connectedCustomerName ? `, ${p.connectedCustomerName}` : ''}` : child ? `Feeds ${child.name}` : 'Available'}
+              data-testid={`splitter-out-${o.portNumber}`}
+              aria-label={`Output ${o.portNumber}: ${word}`}
+              title={`Output ${o.portNumber}: ${word}${o.links.length ? `, ${o.links.map((l) => describeSplitterOutputLink(l)).join(', ')}` : ''}`}
               onClick={() => {
-                setPortOpen(num === portOpen ? null : num);
-                setOut(emptyFiber);
+                setPortOpen(o.portNumber === portOpen ? null : o.portNumber);
               }}
-              className={`min-h-8 min-w-8 rounded border px-1 text-[11px] tabular-nums ${used ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white'} ${portOpen === num ? 'ring-2 ring-blue-500/40' : ''}`}
+              className={`flex min-h-12 min-w-12 flex-col items-center justify-center rounded-md border px-1 text-[12px] font-semibold tabular-nums md:min-h-9 md:min-w-9 md:text-[11px] ${OUTPUT_TILE[o.state]} ${portOpen === o.portNumber ? 'ring-2 ring-blue-500/60' : ''}`}
             >
-              {p?.label?.includes('%') ? p.label.replace(' leg', '') : num}
+              <span>{p?.label?.includes('%') ? p.label.replace(' leg', '') : o.portNumber}</span>
+              {OUTPUT_MARK[o.state] && (
+                <span className="text-[10px] leading-none" aria-hidden>
+                  {OUTPUT_MARK[o.state]}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
-      {portOpen !== null && (
-        <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50/40 p-2" data-testid="splitter-out-detail">
-          {(() => {
-            const p = splitter.outputPorts.find((x) => x.portNumber === portOpen);
-            if (p?.connectedDropCableId) {
-              return (
-                <>
-                  <p className="text-xs">
-                    Output {portOpen} → {cables.find((c) => c.id === p.connectedDropCableId)?.name ?? p.connectedDropCableId}, fiber {p.connectedCore ?? 'not recorded'}
-                    {p.connectedCustomerName ? ` (${p.connectedCustomerName})` : ''}. Loss {p.lossDb ?? splitter.insertionLossDb} dB configured.
-                  </p>
-                  {!p.connectedCustomerId && (
-                    <Button size="sm" onClick={() => void setSplitterOutput(splitter.id, portOpen, null)}>
-                      Free this output
-                    </Button>
-                  )}
-                </>
-              );
-            }
-            return (
-              <>
-                <FiberPicker label={`Output ${portOpen} goes to`} value={out} onChange={setOut} cables={local} testId="splitter-out" />
-                <Button size="sm" variant="primary" data-testid="splitter-out-save" disabled={!fiberOf(out)} onClick={() => void setSplitterOutput(splitter.id, portOpen, fiberOf(out))}>
-                  Connect output
-                </Button>
-              </>
-            );
-          })()}
-        </div>
-      )}
+      <p className="text-[11px] text-slate-500">● in use · ✕ faulty · R reserved · ? not recorded · blank free</p>
+      {openUse && <SplitterOutputDetail key={`${splitter.id}#${openUse.portNumber}`} splitter={splitter} use={openUse} cables={local} />}
       {!splitter.couplerRatio && (
         <div className="grid grid-cols-[5rem_1fr_auto] items-end gap-2">
           <Field label="Loss dB">
-            <Input data-testid="splitter-loss" inputMode="decimal" value={loss} onChange={(e) => setLoss(e.target.value.replace(/[^\d.]/g, ''))} />
+            <Input data-testid="splitter-loss" className={BIG} inputMode="decimal" value={loss} onChange={(e) => setLoss(e.target.value.replace(/[^\d.]/g, ''))} />
           </Field>
           <Field label="From">
-            <Input value={lossSource} placeholder="Datasheet" onChange={(e) => setLossSource(e.target.value)} />
+            <Input className={BIG} value={lossSource} placeholder="Datasheet" onChange={(e) => setLossSource(e.target.value)} />
           </Field>
-          <Button size="sm" data-testid="splitter-loss-save" onClick={() => void saveSplitter(splitter.id, { insertionLossDb: Number(loss), lossSource })}>
+          <button type="button" className={BTN.plain} data-testid="splitter-loss-save" onClick={() => void saveSplitter(splitter.id, { insertionLossDb: Number(loss), lossSource })}>
             Save
-          </Button>
+          </button>
         </div>
       )}
     </div>
@@ -633,6 +554,9 @@ export function SplitterSection({ host }: { host: Equipment }) {
   const [ratio, setRatio] = useState<SplitterRatio | ''>('');
   const [coupler, setCoupler] = useState('');
   const [input, setInput] = useState<FiberChoice>(emptyFiber);
+  // Phase 11: the owner's names for ratios (Phase 23 editable list); the ratios themselves are fixed.
+  const settings = useNetworkStore((s) => s.settings);
+  const ratioEntries = pickerEntries('splitterRatios', settings);
   return (
     <InspectorSection title="Splitters and ports" icon={Split} aside={splitters.length || undefined}>
       <div className="space-y-2 text-[13px]">
@@ -644,21 +568,26 @@ export function SplitterSection({ host }: { host: Equipment }) {
           <p className="text-xs font-semibold text-slate-600">Add a splitter</p>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Equal split">
-              <Select data-testid="splitter-add-ratio" value={ratio} onChange={(e) => { setRatio(e.target.value as SplitterRatio); setCoupler(''); }}>
+              <Select data-testid="splitter-add-ratio" className={BIG} value={ratio} onChange={(e) => { setRatio(e.target.value as SplitterRatio); setCoupler(''); }}>
                 <option value="">Choose…</option>
-                {SPLITTER_RATIOS.map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
+                {ratioEntries
+                  .filter((r) => (SPLITTER_RATIOS as readonly string[]).includes(r.value))
+                  .map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label === r.value ? r.value : `${r.label} (${r.value})`}
+                    </option>
+                  ))}
               </Select>
             </Field>
             <Field label="Or unequal coupler">
-              <Input data-testid="splitter-add-coupler" value={coupler} placeholder="90/10" onChange={(e) => { setCoupler(e.target.value); setRatio(''); }} />
+              <Input data-testid="splitter-add-coupler" className={BIG} value={coupler} placeholder="90/10" onChange={(e) => { setCoupler(e.target.value); setRatio(''); }} />
             </Field>
           </div>
           <FiberPicker label="Fiber that feeds it (optional now)" value={input} onChange={setInput} cables={cablesAt(cables, host.id)} testId="splitter-add-input" />
           <Button
             size="sm"
             variant="primary"
+            className={BIG}
             data-testid="splitter-add"
             disabled={!ratio && !coupler.trim()}
             onClick={() =>

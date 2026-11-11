@@ -4,8 +4,11 @@ import type { AuditLog, LatLng } from '../model/types';
 import type { OpticalSettings } from './opticalSettings';
 import type { RfSettings } from './rfSettings';
 
-/** Outside-plant collections added in Phase 3. Optional so callers built before them keep working. */
-export const OSP_COLLECTIONS = ['spans', 'attachments', 'ducts', 'slackLoops', 'permissions'] as const;
+/**
+ * Outside-plant collections added in Phase 3 (inspections in Phase 4, cable stretches in network
+ * mapping Phase 6). Optional so callers built before them keep working.
+ */
+export const OSP_COLLECTIONS = ['spans', 'attachments', 'ducts', 'slackLoops', 'permissions', 'inspections', 'cableSegments'] as const;
 export type OspCollection = (typeof OSP_COLLECTIONS)[number];
 
 /** Customer and connection collections added in Phase 5. Optional for the same reason. */
@@ -21,15 +24,43 @@ export const RF_COLLECTIONS = ['rfElements', 'rfLinks', 'rfLevels'] as const;
 export type RfCollection = (typeof RF_COLLECTIONS)[number];
 
 /** Live monitoring added in Phase 7, written only by the monitoring routes. Optional for the same reason. */
-export const MONITORING_COLLECTIONS = ['monitoringSources', 'onuReadings', 'onuStatuses'] as const;
+export const MONITORING_COLLECTIONS = ['monitoringSources', 'onuReadings', 'onuStatuses', 'deviceStatuses'] as const;
 export type MonitoringCollection = (typeof MONITORING_COLLECTIONS)[number];
+
+/** Sites and racks added in Phase 9 (ODF and patch management). Optional for the same reason. */
+export const PLANT_COLLECTIONS = ['sites', 'racks'] as const;
+export type PlantCollection = (typeof PLANT_COLLECTIONS)[number];
+
+/** Checks of physical links added in network mapping Phase 13. Optional for the same reason. */
+export const CHECK_COLLECTIONS = ['linkVerifications'] as const;
+export type CheckCollection = (typeof CHECK_COLLECTIONS)[number];
+
+/** Expansion scenarios added in network mapping Phase 18: plans only, never the built network. Optional for the same reason. */
+export const PLANNING_COLLECTIONS = ['planningScenarios'] as const;
+export type PlanningCollection = (typeof PLANNING_COLLECTIONS)[number];
 
 /** The mutable network collections that domain commands read and patch. */
 export type NetworkData = Pick<
   NetworkSnapshot,
   'equipment' | 'cables' | 'splitters' | 'closures' | 'customers' | 'faults' | 'workOrders' | 'zones' | 'documents'
 > &
-  Partial<Pick<NetworkSnapshot, OspCollection | ConnectionCollection | FaultCollection | RfCollection | MonitoringCollection>>;
+  Partial<Pick<NetworkSnapshot, OspCollection | ConnectionCollection | FaultCollection | RfCollection | MonitoringCollection | PlantCollection | CheckCollection>> &
+  Partial<Pick<NetworkSnapshot, PlanningCollection>> &
+  Partial<Pick<NetworkSnapshot, ValidationCollection>> &
+  Partial<Pick<NetworkSnapshot, BudgetCollection>> &
+  Partial<Pick<NetworkSnapshot, ImportCollection>>;
+
+/** Import history added in network mapping Phase 21 (undo by import). Optional for the same reason. */
+export const IMPORT_COLLECTIONS = ['imports'] as const;
+export type ImportCollection = (typeof IMPORT_COLLECTIONS)[number];
+
+/** Stored optical budget runs added in network mapping Phase 17: history only, never a network record. Optional for the same reason. */
+export const BUDGET_COLLECTIONS = ['opticalBudgetRuns'] as const;
+export type BudgetCollection = (typeof BUDGET_COLLECTIONS)[number];
+
+/** Stored map-check findings added in network mapping Phase 15. Optional for the same reason. */
+export const VALIDATION_COLLECTIONS = ['validationFindings'] as const;
+export type ValidationCollection = (typeof VALIDATION_COLLECTIONS)[number];
 
 /** Replacement arrays for the collections a command changed. Untouched collections are omitted. */
 export type NetworkPatch = Partial<NetworkData>;

@@ -24,7 +24,9 @@ import { ReportsModal } from '../features/reports/ReportsModal';
 import { SpliceModal } from '../features/splicing/SpliceModal';
 import { SplicingModal } from '../features/splicing/SplicingModal';
 import { FiberTraceModal } from '../features/trace/FiberTraceModal';
+import { NetworkTraceModal } from '../features/trace/NetworkTraceModal';
 import { RouteTraceModal } from '../features/trace/RouteTraceModal';
+import { ValidationFindingsModal } from '../features/validation/ValidationFindingsModal';
 import { useUiStore } from '../stores/uiStore';
 
 /** Global dialogs and drawers. Each one reads its own open state from the UI store. */
@@ -47,6 +49,8 @@ export const ModalHost: React.FC = () => {
       <SpliceModal />
       <RouteTraceModal />
       <FiberTraceModal />
+      <NetworkTraceModal />
+      <ValidationFindingsModal />
       <OnuFleetModal />
       <OltConfigModal />
       <FaultManagementModal />

@@ -431,15 +431,19 @@ export function CableDuctsSection({ cable }: { cable: Cable }) {
   return (
     <InspectorSection title="Ducts" icon={Waypoints} aside={ducts.length}>
       <ul className="divide-y divide-slate-100">
-        {ducts.map(({ duct, subduct }) => (
+        {ducts.map(({ duct, subduct, microduct }) => (
           <li key={duct.id} className="py-1.5 text-[13px]">
             <RecordLink name={duct.name} id={duct.id} onSelect={() => select({ type: 'duct', data: duct })} />
             <span className="block text-[11px] text-slate-500">
-              {subduct ? `In sub-duct ${subduct.label}` : 'In the duct'} · {STRUCTURE_STATUS_LABELS[duct.status]} · {LINK_BASIS_LABELS[duct.basis]}
+              {microduct ? `In microduct ${microduct.label} of sub-duct ${subduct?.label}` : subduct ? `In sub-duct ${subduct.label}` : 'In the duct'} ·{' '}
+              {STRUCTURE_STATUS_LABELS[duct.status]} · {LINK_BASIS_LABELS[duct.basis]}
             </span>
           </li>
         ))}
       </ul>
+      <p className="mt-1 text-[11px] text-slate-500">
+        Outside diameter of this cable: {cable.outerDiameterMm ? `${cable.outerDiameterMm} mm` : 'Not recorded'}. It is used for duct fill; record it on the duct&apos;s panel.
+      </p>
     </InspectorSection>
   );
 }

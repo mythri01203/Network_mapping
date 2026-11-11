@@ -152,7 +152,8 @@ function stateClasses(state: MarkerState, status?: string): string {
 export function equipmentMarkerSize(eq: Pick<Equipment, 'type' | 'category'>): number {
   if (eq.type === 'OLT') return 38;
   const layer = equipmentLayerKey(eq);
-  return layer === 'poles' || layer === 'manholes' ? 26 : 34;
+  if (layer === 'poles') return 18;
+  return layer === 'manholes' ? 26 : 34;
 }
 
 export function equipmentMarkerIcon(
@@ -183,12 +184,15 @@ export function equipmentMarkerIcon(
   });
 }
 
-export function customerMarkerIcon(status: Customer['status'], state: MarkerState): L.DivIcon {
+/** `ponRing`: the colour of the PON serving this customer, drawn as a ring. */
+export function customerMarkerIcon(status: Customer['status'], state: MarkerState, ponRing?: string): L.DivIcon {
   const color = CUSTOMER_STATUS_COLORS[status] ?? '#dc2626';
-  return cached(`cust:${color}:${state.selected ? 1 : 0}${state.traced ? 1 : 0}`, () => {
+  const inactive = status !== 'Active';
+  return cached(`cust:${color}:${state.selected ? 1 : 0}${state.traced ? 1 : 0}:${ponRing ?? ''}`, () => {
     const size = 20;
+    const extra = `${ponRing ? ' has-pon' : ''}${inactive ? ' is-inactive' : ''}`;
     return L.divIcon({
-      html: `<div class="gis-pin gis-pin--customer ${stateClasses(state)}" style="--pin-color:${color};background:${color};width:${size}px;height:${size}px">${iconSvg(House, 11, 2.5)}</div>`,
+      html: `<div class="gis-pin gis-pin--customer ${stateClasses(state)}${extra}" style="--pin-color:${color};background:${color};width:${size}px;height:${size}px${ponRing ? `;--pon-ring:${ponRing}` : ''}">${iconSvg(House, 11, 2.5)}</div>`,
       className: 'gis-marker',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
@@ -288,6 +292,43 @@ export function formatDistance(meters: number): string {
   if (!Number.isFinite(meters) || meters <= 0) return '0 m';
   if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(meters < 10000 ? 2 : 1)} km`;
+}
+
+/**
+ * A pin whose position is not confirmed (a capture with no good GPS fix, waiting for the office):
+ * a dashed amber ring with a question mark, so it can never be taken for a placed pin.
+ */
+export function unplacedMarkerIcon(selected: boolean): L.DivIcon {
+  return cached(`unplaced:${selected ? 1 : 0}`, () =>
+    L.divIcon({
+      html: `<div class="gis-pin-unplaced${selected ? ' is-selected' : ''}" style="width:30px;height:30px;border-radius:9999px;border:2.5px dashed #b45309;background:#fffbeb;color:#92400e;display:flex;align-items:center;justify-content:center;font:700 16px/1 system-ui,sans-serif;box-shadow:${selected ? '0 0 0 4px rgb(59 130 246 / .45)' : '0 1px 3px rgb(0 0 0 / .3)'}">?</div>`,
+      className: 'gis-marker gis-marker--unplaced',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    }),
+  );
+}
+
+/**
+ * Phase 19: a phone capture waiting for office review. A dashed violet ring with a small clock, so
+ * it never looks like a placed, accepted pin (the amber "?" stays for "office must place").
+ */
+export function awaitingReviewMarkerIcon(selected: boolean): L.DivIcon {
+  return cached(`review:${selected ? 1 : 0}`, () =>
+    L.divIcon({
+      html: `<div class="gis-pin-review${selected ? ' is-selected' : ''}" style="width:30px;height:30px;border-radius:9999px;border:2.5px dashed #6d28d9;background:#f5f3ff;color:#5b21b6;display:flex;align-items:center;justify-content:center;box-shadow:${selected ? '0 0 0 4px rgb(59 130 246 / .45)' : '0 1px 3px rgb(0 0 0 / .3)'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>`,
+      className: 'gis-marker gis-marker--review',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+    }),
+  );
+}
+
+/** Square metres under one square kilometre, then km². */
+export function formatArea(sqMeters: number): string {
+  if (!Number.isFinite(sqMeters) || sqMeters <= 0) return '0 m²';
+  if (sqMeters < 1_000_000) return `${Math.round(sqMeters).toLocaleString('en-IN')} m²`;
+  return `${(sqMeters / 1_000_000).toFixed(sqMeters < 10_000_000 ? 2 : 1)} km²`;
 }
 
 /**

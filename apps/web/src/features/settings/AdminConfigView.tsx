@@ -11,11 +11,16 @@ import { FaultSettingsPanel, FieldSettingsPanel, MonitoringSettingsPanel, OspSet
 import { OpticalSettingsPanel } from '../admin/OpticalSettingsPanel';
 import { RfSettingsPanel } from '../admin/RfSettingsPanel';
 import { UsersPanel } from '../admin/UsersPanel';
+import { ChangeRequestsPanel } from '../admin/ChangeRequestsPanel';
+import { ListsRulesPanel } from '../admin/ListsRulesPanel';
+import { RecordHistoryPanel } from '../admin/RecordHistoryPanel';
 
 export const AdminConfigView: React.FC = () => {
   const auditLogs = useNetworkStore((s) => s.auditLogs);
 
-  const [activeTab, setActiveTab] = useState<'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'monitoring' | 'cable_tv' | 'audit_logs' | 'backup'>('roles');
+  const [activeTab, setActiveTab] = useState<
+    'roles' | 'color_standards' | 'optical' | 'field' | 'routes' | 'faults' | 'monitoring' | 'cable_tv' | 'audit_logs' | 'backup' | 'change_requests' | 'server_history' | 'lists'
+  >('roles');
   const [auditSearch, setAuditSearch] = useState('');
 
   const filteredLogs = auditLogs.filter(
@@ -111,6 +116,23 @@ export const AdminConfigView: React.FC = () => {
           >
             Cable TV settings
           </button>
+          {/* Phase 23 */}
+          {(
+            [
+              ['change_requests', 'Change requests'],
+              ['server_history', 'Server history'],
+              ['lists', 'Lists and rules'],
+            ] as const
+          ).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              data-testid={`admin-${tab}-tab`}
+              className={`px-3 py-1.5 rounded-lg transition-all ${activeTab === tab ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              {label}
+            </button>
+          ))}
           <button
             onClick={() => setActiveTab('audit_logs')}
             className={`px-3 py-1.5 rounded-lg transition-all ${
@@ -134,6 +156,9 @@ export const AdminConfigView: React.FC = () => {
       <div className="flex-1 overflow-auto p-6">
         {/* Tab 1: Roles Matrix */}
         {activeTab === 'roles' && <UsersPanel />}
+        {activeTab === 'change_requests' && <ChangeRequestsPanel />}
+        {activeTab === 'server_history' && <RecordHistoryPanel />}
+        {activeTab === 'lists' && <ListsRulesPanel />}
 
         {/* Tab 2: Color Standards */}
         {activeTab === 'color_standards' && (
@@ -292,7 +317,7 @@ export const AdminConfigView: React.FC = () => {
                   className="mt-2 w-full py-2.5 bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Import KML or KMZ (preview first)</span>
+                  <span>Import, undo imports, or save as KMZ or Excel</span>
                 </button>
               </div>
             </div>

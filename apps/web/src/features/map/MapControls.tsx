@@ -7,10 +7,13 @@ import {
   LocateFixed,
   type LucideIcon,
   Map as MapIcon,
-  Maximize2,
+  Maximize,
+  Minimize,
   Minus,
   Plus,
+  Printer,
   Satellite,
+  Scan,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -170,13 +173,32 @@ export interface MapControlsProps {
   onZoomOut: () => void;
   onLocate: () => void;
   isLocating: boolean;
-  onResetView: () => void;
+  /** Fits everything placed on the network on screen. */
+  onFitNetwork: () => void;
+  onPrint: () => void;
 }
 
-export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onResetView }: MapControlsProps) {
+/** Whole-app full screen: modals and forms live outside the map, so only the whole page may go full screen. */
+function useFullscreen() {
+  const [on, setOn] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
+  useEffect(() => {
+    const onChange = () => setOn(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const supported = typeof document !== 'undefined' && !!document.documentElement.requestFullscreen;
+  const toggle = () => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void document.documentElement.requestFullscreen().catch(() => {});
+  };
+  return { on, supported, toggle };
+}
+
+export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onFitNetwork, onPrint }: MapControlsProps) {
   const setIsLayersDrawerOpen = useMapStore((s) => s.setLayersDrawerOpen);
+  const fullscreen = useFullscreen();
   return (
-    <div className="absolute bottom-[72px] right-2 z-[400] flex flex-col items-end gap-2 md:bottom-5 md:right-4">
+    <div className="gis-no-print absolute bottom-[72px] right-2 z-[400] flex flex-col items-end gap-2 md:bottom-5 md:right-4">
       <div className={cn(panel, 'flex flex-col overflow-hidden')}>
         <ControlButton icon={Layers} label="Map layers" onClick={() => setIsLayersDrawerOpen(true)} />
       </div>
@@ -188,8 +210,14 @@ export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onReset
           disabled={isLocating}
           spinning={isLocating}
         />
+        <ControlButton icon={Scan} label="Show whole network" onClick={onFitNetwork} />
+        {fullscreen.supported && (
+          <span className="hidden md:block">
+            <ControlButton icon={fullscreen.on ? Minimize : Maximize} label={fullscreen.on ? 'Leave full screen' : 'Full screen'} onClick={fullscreen.toggle} />
+          </span>
+        )}
         <span className="hidden md:block">
-          <ControlButton icon={Maximize2} label="Reset view" onClick={onResetView} />
+          <ControlButton icon={Printer} label="Print map" onClick={onPrint} />
         </span>
       </div>
       <div className={cn(panel, 'flex flex-col divide-y divide-slate-100 overflow-hidden')}>

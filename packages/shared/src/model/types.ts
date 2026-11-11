@@ -12,7 +12,9 @@ import type {
   cableCoreLinkSchema,
   cableEntrySchema,
   cableSchema,
+  cableSegmentSchema,
   catalogComponentSchema,
+  specLineSchema,
   coreAssignmentSchema,
   customerConnectionSchema,
   customerSchema,
@@ -22,11 +24,13 @@ import type {
   equipmentSchema,
   faultSchema,
   fiberCoreSchema,
+  fiberTerminationSchema,
   fiberTraceHopSchema,
   gpsRouteSchema,
   historyEntrySchema,
   imageAnnotationSchema,
   importInfoSchema,
+  inspectionSchema,
   jobEventSchema,
   jobMaterialSchema,
   jobNoteSchema,
@@ -34,20 +38,27 @@ import type {
   jobStepSchema,
   jointClosureSchema,
   latLngSchema,
+  microductSchema,
   networkDocumentSchema,
   networkElementRefSchema,
   networkZoneSchema,
   odfPanelSchema,
   odfPortSchema,
+  oltCardSchema,
+  oltChassisSchema,
   oltConfigSchema,
+  oltShelfSchema,
+  oltSlotSchema,
   ontSchema,
   opticalPortSchema,
   opticalPowerInfoSchema,
   opticalPowerSampleSchema,
   permissionSchema,
   ponPortSchema,
+  rackSchema,
   serviceSchema,
   settingSchema,
+  siteSchema,
   slackLoopSchema,
   spanSchema,
   spliceMatrixEntrySchema,
@@ -69,6 +80,7 @@ export type EquipmentPort = z.infer<typeof equipmentPortSchema>;
 export type OpticalPowerSample = z.infer<typeof opticalPowerSampleSchema>;
 export type OpticalPowerInfo = z.infer<typeof opticalPowerInfoSchema>;
 export type CatalogComponent = z.infer<typeof catalogComponentSchema>;
+export type SpecLine = z.infer<typeof specLineSchema>;
 export type ImageAnnotation = z.infer<typeof imageAnnotationSchema>;
 export type EquipmentImage = z.infer<typeof equipmentImageSchema>;
 export type PonPort = z.infer<typeof ponPortSchema>;
@@ -92,18 +104,29 @@ export type AgentTrackPoint = z.infer<typeof agentTrackPointSchema>;
 export type AgentTrip = z.infer<typeof agentTripSchema>;
 export type Setting = z.infer<typeof settingSchema>;
 export type OltConfig = z.infer<typeof oltConfigSchema>;
+export type OltCard = z.infer<typeof oltCardSchema>;
+export type OltSlot = z.infer<typeof oltSlotSchema>;
+export type OltShelf = z.infer<typeof oltShelfSchema>;
+export type OltChassis = z.infer<typeof oltChassisSchema>;
 export type ImportInfo = z.infer<typeof importInfoSchema>;
 export type Span = z.infer<typeof spanSchema>;
 export type Attachment = z.infer<typeof attachmentSchema>;
 export type Subduct = z.infer<typeof subductSchema>;
+export type Microduct = z.infer<typeof microductSchema>;
 export type Duct = z.infer<typeof ductSchema>;
+export type Inspection = z.infer<typeof inspectionSchema>;
 export type SlackLoop = z.infer<typeof slackLoopSchema>;
 export type Permission = z.infer<typeof permissionSchema>;
 export type HistoryEntry = z.infer<typeof historyEntrySchema>;
 export type CoreAssignment = z.infer<typeof coreAssignmentSchema>;
 export type OdfPort = z.infer<typeof odfPortSchema>;
 export type OdfPanel = z.infer<typeof odfPanelSchema>;
+export type Site = z.infer<typeof siteSchema>;
+export type Rack = z.infer<typeof rackSchema>;
+/** Phase 6: one stretch of one cable (install method, duct or spans, measured length). */
+export type CableSegment = z.infer<typeof cableSegmentSchema>;
 export type SpliceTray = z.infer<typeof spliceTraySchema>;
+export type FiberTermination = z.infer<typeof fiberTerminationSchema>;
 export type CableEntry = z.infer<typeof cableEntrySchema>;
 export type CustomerConnection = z.infer<typeof customerConnectionSchema>;
 export type Ont = z.infer<typeof ontSchema>;

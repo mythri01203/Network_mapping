@@ -54,6 +54,12 @@ export interface CorePathStep {
   lengthBasis?: 'optical' | 'sheath' | 'drawn';
   /** Loss of this step at the downstream wavelength, for the hop list. Estimated. */
   lossDb?: number;
+  /**
+   * Network mapping Phase 17: where a splice's or splitter's own loss came from, for the budget
+   * inputs (`opticalBudget.ts`). `db` is the part's loss alone (no output adapter); undefined when
+   * nothing gives it. `recordId` is the splice id, or the splitter id and output.
+   */
+  partLoss?: { db?: number; origin: 'recorded' | 'setting' | 'not_recorded'; settingId?: string; source?: string; recordId: string };
   lat?: number;
   lng?: number;
 }
@@ -84,7 +90,10 @@ export interface CorePathResult {
   opticsClassRecorded: boolean;
   /** Only on a complete path. */
   directions: DirectionBudget[];
-  /** Worst of the directions, only on a complete path. */
+  /**
+   * Worst of the directions, only on a complete path whose PON port records its optics class.
+   * Network mapping Phase 17: with an assumed class there is no verdict ("Estimated with default class").
+   */
   verdict?: LinkVerdict;
   coreKeys: CoreKey[];
   cableIds: string[];
@@ -210,8 +219,12 @@ class StepCollector {
     this.coreKeys.push(coreKey(cableId, core));
     this.cableIds.push(cableId);
     const coreRecord = cable.cores.find((k) => k.coreNumber === core);
-    const broken = cable.status === 'Damaged' || coreRecord?.status === 'Damaged';
-    if (broken) this.warnings.push(`${describeCore(this.index, cableId, core)} is marked damaged.`);
+    const coreBad = coreRecord?.status === 'Damaged' || coreRecord?.status === 'Faulty' || coreRecord?.status === 'Retired';
+    const broken = cable.status === 'Damaged' || coreBad;
+    if (broken) {
+      const word = coreBad && coreRecord.status !== 'Damaged' ? (coreRecord.status === 'Retired' ? 'retired (out of use)' : 'faulty') : 'damaged';
+      this.warnings.push(`${describeCore(this.index, cableId, core)} is marked ${word}.`);
+    }
     if (length.meters <= 0) this.gap(`${cable.name} has no length recorded, so its loss cannot be counted.`);
     if (!identity.schemeKnown) this.notes.push(`${cable.name}: colour scheme not recorded, so fibers are shown by number only.`);
     const coords = cable.coordinates;
@@ -289,6 +302,10 @@ function walkUpstream(col: StepCollector, index: FiberIndex, settings: OpticalSe
           detail: `${describeCore(index, splice.inputCableId, splice.inputCore)} → ${describeCore(index, splice.outputCableId, splice.outputCore)} · ${type} · ${lossText}${splice.otdrRef ? ` · OTDR ${splice.otdrRef}` : ''}`,
           status: failed ? 'broken' : splice.status === 'Pending' ? 'warning' : 'ok',
           lossDb: loss,
+          partLoss:
+            splice.spliceLossDb === undefined
+              ? { db: loss, origin: 'setting', settingId: `optical.splice.${type === 'mechanical' ? 'mechanical' : 'fusion'}`, recordId: splice.id }
+              : { db: splice.spliceLossDb, origin: 'recorded', source: recorded ? splice.lossSource : 'origin not recorded', recordId: splice.id },
           lat: closure.lat,
           lng: closure.lng,
         });
@@ -422,6 +439,12 @@ function walkSplitter(
       detail: `${sp.couplerRatio ? `Coupler ${sp.couplerRatio}` : `${sp.kind ?? 'PLC'} ${sp.ratio}`} · output ${port}${portRecord?.label ? ` (${portRecord.label})` : ''} · ${loss !== undefined ? `${loss} dB configured${sp.lossSource ? ` (${sp.lossSource})` : ''}` : 'loss not recorded'}${connectorLoss ? ` · output adapter, estimated ${connectorLoss} dB` : ''}`,
       status: sp.status === 'Faulty' || portRecord?.status === 'Faulty' ? 'broken' : 'ok',
       lossDb: round2((loss ?? 0) + connectorLoss),
+      partLoss: {
+        db: loss,
+        origin: loss === undefined ? 'not_recorded' : 'recorded',
+        source: portRecord?.lossDb !== undefined ? `output ${port} loss on the record` : sp.lossSource,
+        recordId: `${sp.id} output ${port}`,
+      },
       lat: host?.lat,
       lng: host?.lng,
     });
@@ -504,6 +527,7 @@ function finish(
           connectorsCount: col.parts.connectorPairs,
           recordedSpliceLossDb: col.parts.spliceLossDb,
           opticsClass,
+          opticsClassRecorded,
           oltTxPowerDbm: direction === 'downstream' ? pon?.txPowerDbm : undefined,
           measuredRxDbm: direction === 'downstream' ? opts.measuredRxDbm : undefined,
         },
@@ -521,7 +545,7 @@ function finish(
             : undefined,
       });
       const v = checkLinkBudget(budget.totalLossDb, opticsClass, settings).verdict;
-      if (verdict === undefined || VERDICT_RANK[v] > VERDICT_RANK[verdict]) verdict = v;
+      if (opticsClassRecorded && (verdict === undefined || VERDICT_RANK[v] > VERDICT_RANK[verdict])) verdict = v;
     }
   }
   return {

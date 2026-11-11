@@ -251,6 +251,19 @@ describe('example A, core by core', () => {
     expect(checkChangeSetFiber(released, { upserts: { cables: [bad] } }).map((p) => p.code)).toContain('core_two_assignments');
   });
 
+  it('does not give away a fiber marked Reserved with no record of what for, until it is released', () => {
+    const { data } = exampleA();
+    const fdr = data.cables.find((c) => c.id === 'FDR-1')!;
+    // As the cable form leaves it: Reserved, with no assignment saying for what.
+    const held = { ...fdr, cores: fdr.cores.map((k) => (k.coreNumber === 7 ? { ...k, status: 'Reserved' as const, assignments: [] } : k)) };
+    const stored = { ...data, cables: data.cables.map((c) => (c.id === 'FDR-1' ? held : c)) };
+    const refused = assignCore(stored, { cableId: 'FDR-1', coreNumber: 7, kind: 'in_use', use: 'Customer X' }, ctx);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error.message).toMatch(/marked Reserved, with no record of what for. Release it first/);
+    const freed = applyPatch(stored, ok(releaseCore(stored, 'FDR-1', 7, 'Checked on site: free', ctx)).patch);
+    expect(assignCore(freed, { cableId: 'FDR-1', coreNumber: 7, kind: 'in_use', use: 'Customer X' }, ctx).ok).toBe(true);
+  });
+
   it('refuses a second patch on one PON port and a class that does not fit the technology', () => {
     const { data, panel } = exampleA();
     expect(patchOdfPort(data, 'ODF-1', panel.id, 4, { oltId: 'OLT-1', ponPortId: 'PON-01' }, ctx).ok).toBe(false);
@@ -376,6 +389,9 @@ describe('budget against the worked example', () => {
         }),
         equipment({ id: 'JC', type: 'Splice Closure' }),
         equipment({ id: 'FAT', type: 'FAT' }),
+        // The cable ends the fixture names ('X', 'Y'): a cable end must be on record.
+        equipment({ id: 'X', type: 'Fiber Joint Closure' }),
+        equipment({ id: 'Y', type: 'Fiber Joint Closure' }),
       ],
       cables,
       closures: [{ id: 'JC-R', name: 'Joints', closureType: 'Dome Splice Closure', lat: 0, lng: 0, area: '', entryPortsCount: 0, exitPortsCount: 0, installationDate: '', technician: '', splices, images: [] }],

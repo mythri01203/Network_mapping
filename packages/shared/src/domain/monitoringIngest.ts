@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { type MonitoringSource, type OnuReading, onuStateSchema, type OnuStatus, type ReadingDirection } from '../model/monitoringSchemas';
+import { deviceIngestRowSchema, type MonitoringSource, type OnuReading, onuStateSchema, type OnuStatus, type ReadingDirection } from '../model/monitoringSchemas';
 import type { Ont } from '../model/types';
 import { isLiveOnt } from './connectionRules';
 import { DEFAULT_MONITORING_SETTINGS, type MonitoringSettings } from './monitoringSettings';
@@ -33,7 +33,16 @@ export const ingestRowSchema = z.strictObject({
 export type IngestRow = z.infer<typeof ingestRowSchema>;
 
 export const MAX_INGEST_ROWS = 2000;
-export const ingestBodySchema = z.strictObject({ rows: z.array(ingestRowSchema).min(1).max(MAX_INGEST_ROWS) });
+/**
+ * A push: ONU rows, and (Phase 20) OLT, card, PON port and uplink rows in `devices`. At least one
+ * row in all, at most `MAX_INGEST_ROWS` of each.
+ */
+export const ingestBodySchema = z
+  .strictObject({
+    rows: z.array(ingestRowSchema).max(MAX_INGEST_ROWS).optional(),
+    devices: z.array(deviceIngestRowSchema).max(MAX_INGEST_ROWS).optional(),
+  })
+  .refine((b) => (b.rows?.length ?? 0) + (b.devices?.length ?? 0) > 0, { message: 'Send at least one row in "rows" or "devices".' });
 
 export interface SkippedRow {
   /** 1-based position in what was sent. */
@@ -53,6 +62,14 @@ export interface IngestPlan {
 }
 
 const ZONE = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
+
+/** Why a device time cannot be stored (no time zone, unreadable, ahead of the server clock), or null. */
+export function deviceTimeProblem(deviceTime: string, now: Date, settings: MonitoringSettings = DEFAULT_MONITORING_SETTINGS): string | null {
+  if (!ZONE.test(deviceTime) || !Number.isFinite(Date.parse(deviceTime))) return `Time "${deviceTime.slice(0, 30)}" is not a full date and time with a time zone`;
+  const ahead = (Date.parse(deviceTime) - now.getTime()) / 60_000;
+  if (ahead > settings.maxFutureMinutes) return `Device time is ${Math.round(ahead)} min ahead of the server clock; check the device clock`;
+  return null;
+}
 
 /** A short stable id from the row's content, so the same row sent twice gets the same id. */
 export function contentId(prefix: string, parts: readonly (string | number | undefined)[]): string {

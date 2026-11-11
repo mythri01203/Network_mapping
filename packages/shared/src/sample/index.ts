@@ -12,7 +12,9 @@ import {
   SAMPLE_ZONES,
 } from './sampleNetwork';
 
+export * from './dasanV5808';
 export * from './sampleNetwork';
+export * from './vijayawadaNetwork';
 
 /** A fresh, independently mutable copy of the bundled demo network, used to seed new databases. */
 export function createSampleNetwork(): NetworkSnapshot {
@@ -47,6 +49,16 @@ export function createSampleNetwork(): NetworkSnapshot {
     monitoringSources: [],
     onuReadings: [],
     onuStatuses: [],
+    deviceStatuses: [],
+    inspections: [],
+    sites: [],
+    racks: [],
+    cableSegments: [],
+    linkVerifications: [],
+    validationFindings: [],
+    planningScenarios: [],
+    opticalBudgetRuns: [],
+    imports: [],
   };
   return JSON.parse(JSON.stringify(snapshot)) as NetworkSnapshot;
 }

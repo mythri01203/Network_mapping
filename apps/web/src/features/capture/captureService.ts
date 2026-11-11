@@ -59,6 +59,8 @@ export interface CaptureServiceDeps {
   };
   now?: () => number;
   status?: { setState: (partial: Partial<CaptureStatus>) => void };
+  /** Phase 19: a line in this device's sync history for each photo the office took or refused. */
+  history?: (line: { result: 'sent' | 'refused'; kind: 'photo'; count: number; labels: string[]; reason?: string }) => void;
 }
 
 /** Wait before the next upload try: 5 s, 10 s, 20 s ... up to 5 minutes. */
@@ -212,6 +214,7 @@ export function createCaptureService(deps: CaptureServiceDeps): CaptureService {
     }
     const outbox = await deps.storage.listOutbox().catch(() => [] as OutboxEntry[]);
     const committed = new Map(outbox.map((e) => [e.id, e.status]));
+    const labelOf = new Map(outbox.map((e) => [e.id, e.label]));
     const due = photos
       .filter((p) => p.uploadedAt === undefined && !p.refused && committed.get(p.captureId) === 'saved')
       .filter((p) => force || p.nextAttemptAt <= now())
@@ -222,10 +225,14 @@ export function createCaptureService(deps: CaptureServiceDeps): CaptureService {
       for (const photo of due) {
         const outcome = await deps.uploadPhoto(photo);
         const attempts = photo.attempts + 1;
+        // The capture's name, such as "Pole-08"; screens say "photo" in the person's language.
+        const labels = [labelOf.get(photo.captureId) ?? photo.captureId];
         if (outcome.kind === 'stored') {
           await deps.storage.putPhoto({ ...photo, attempts, uploadedAt: now() });
+          deps.history?.({ result: 'sent', kind: 'photo', count: 1, labels });
         } else if (outcome.kind === 'refused') {
           await deps.storage.putPhoto({ ...photo, attempts, refused: outcome.reason });
+          deps.history?.({ result: 'refused', kind: 'photo', count: 1, labels, reason: outcome.reason });
         } else {
           await deps.storage.putPhoto({ ...photo, attempts, nextAttemptAt: now() + retryDelayMs(attempts) });
           // The server is not reachable: the rest would fail the same way.

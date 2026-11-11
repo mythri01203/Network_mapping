@@ -1,7 +1,8 @@
-import type { NetworkElementType } from '../model/enums';
+import type { CoreStatus, NetworkElementType } from '../model/enums';
 import type { RfElement, RfLink } from '../model/rfSchemas';
 import type { Attachment, Customer, NetworkElementRef, Ont, Service, Span } from '../model/types';
 import type { NetworkData } from './command';
+import { buildConnectionIndex, type Connection, type ConnectionEnd, type ConnectionIndex, endKey } from './connectionIndex';
 import { isActiveCustomer, isLiveService } from './connectionRules';
 import { buildFiberIndex, coreKey, describeCore, type FiberData, type FiberIndex } from './fiberIndex';
 import { type CorePathResult, traceCustomerCores } from './fiberPath';
@@ -17,6 +18,10 @@ import { customerRfPath, indexRf, type RfIndex } from './rfTree';
  * listed apart as "may be affected, path not fully recorded". Nothing is worked out from distance.
  * Cable TV customers (Phase 6) are not on a PON path at all: they are followed up the recorded RF
  * links from their set top box or modem (`customerRfPath`), never counted as a broken PON path.
+ * Phase 20: `impactDownstream` also lists the equipment, ports (PON, ODF, splitter outputs) and
+ * fibres below the element, following the directed links of the Phase 13 connection index only.
+ * Fibres already marked Faulty, Retired or Damaged are listed apart. Names hidden for the reader's
+ * role (Phase 12) are flagged and never repeated in messages.
  */
 
 export type ImpactData = FiberData & {
@@ -126,7 +131,8 @@ export function elementLabel(data: ImpactData, el: NetworkElementRef): string {
   switch (el.type) {
     case 'customer': {
       const c = data.customers.find((x) => x.id === el.id);
-      return c ? `customer ${c.name} (${c.id})` : `customer ${el.id}`;
+      // Phase 20: a name hidden for the reader's role is not repeated in messages.
+      return c && !c.hiddenFields?.includes('name') ? `customer ${c.name} (${c.id})` : `customer ${el.id}`;
     }
     case 'ont': {
       const o = data.onts?.find((x) => x.id === el.id);
@@ -338,6 +344,8 @@ export function recordNamesElement(ix: ImpactIndex, customer: Customer, el: Netw
 export interface AffectedCustomer {
   customerId: string;
   name: string;
+  /** Phase 20: the name is hidden for the reader's role (the server sent "Hidden for your role"). */
+  nameHidden?: true;
   /** False when the path breaks further up: the element is on its recorded part, the rest is not. */
   pathComplete: boolean;
   /** `hfc`: a Cable TV customer, found through recorded RF links rather than a fiber path. */
@@ -348,6 +356,7 @@ export interface AffectedCustomer {
 export interface MaybeAffectedCustomer {
   customerId: string;
   name: string;
+  nameHidden?: true;
   reason: string;
   /** The first missing link on their path, in plain words. */
   firstGap: string;
@@ -363,13 +372,246 @@ export interface ImpactResult {
   activeServices: number;
   /** Cables recorded on a pole or span, which is how its customers are found. */
   structureCables?: string[];
+  /** Phase 20: equipment, ports and fibers below the element on recorded links. Only when asked for. */
+  downstream?: DownstreamImpact;
   notes: string[];
 }
 
 const SERVICE_FIELDS = (s: Service) => ({ id: s.id, kind: s.kind, status: s.status });
+const hiddenName = (c: Customer): { nameHidden?: true } => (c.hiddenFields?.includes('name') ? { nameHidden: true } : {});
 
-/** Customers and services that depend on the element, from recorded links only. */
-export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): ImpactResult {
+/* ------------------------------------------------------------------ */
+/* Phase 20: what lies below the element on recorded links              */
+/* ------------------------------------------------------------------ */
+
+export interface DownstreamItem {
+  ref: NetworkElementRef;
+  label: string;
+}
+
+export type DownstreamPortKind = 'pon_port' | 'odf_port' | 'splitter_output';
+
+export interface DownstreamPort {
+  kind: DownstreamPortKind;
+  label: string;
+  /** The record that holds the port: the OLT, the ODF or the splitter. */
+  recordId: string;
+  /** PON port id, ODF port id or splitter output number. */
+  port: string;
+}
+
+export interface DownstreamCore {
+  cableId: string;
+  core: number;
+  label: string;
+  /** The fibre's state as recorded, or "Not recorded" when the cable has no row for it. */
+  status: CoreStatus | 'Not recorded';
+}
+
+export interface DownstreamImpact {
+  /** OLTs, ODFs, closures, boxes, splitters and ONTs below the element (the element itself left out). */
+  equipment: DownstreamItem[];
+  ports: DownstreamPort[];
+  /** Fibres below the element (and in it, for a cable, fibre, pole or span) that are not marked out of use. */
+  cores: DownstreamCore[];
+  /** Fibres there already marked Faulty, Retired or Damaged. Listed apart, not counted as newly lost. */
+  outOfUseCores: DownstreamCore[];
+  notes: string[];
+}
+
+const OUT_OF_USE: readonly CoreStatus[] = ['Faulty', 'Retired', 'Damaged'];
+const MAX_DOWNSTREAM_ENDS = 50_000;
+const connectionIndexCache = new WeakMap<ImpactIndex, ConnectionIndex>();
+
+function connectionsOf(ix: ImpactIndex): ConnectionIndex {
+  let index = connectionIndexCache.get(ix);
+  if (!index) {
+    const d = ix.data;
+    index = buildConnectionIndex(
+      { equipment: d.equipment, cables: d.cables, splitters: d.splitters, closures: d.closures, customers: d.customers, onts: d.onts, rfElements: d.rfElements, rfLinks: d.rfLinks },
+      undefined,
+      { customerNames: false },
+    );
+    connectionIndexCache.set(ix, index);
+  }
+  return index;
+}
+
+/** Where the walk starts for each kind of element: the ends the element feeds (or holds). */
+function startEnds(ix: ImpactIndex, conns: ConnectionIndex, el: NetworkElementRef, structureCables: readonly string[] | undefined): ConnectionEnd[] {
+  const d = ix.data;
+  const coresOf = (cableId: string): ConnectionEnd[] => {
+    const cable = ix.fiber.cables.get(cableId);
+    return cable ? Array.from({ length: cable.fiberCount }, (_, i) => ({ type: 'core' as const, cableId, core: i + 1 })) : [];
+  };
+  const oltPorts = (oltId: string): ConnectionEnd[] => (d.equipment.find((e) => e.id === oltId)?.ponPorts ?? []).map((p) => ({ type: 'pon_port' as const, oltId, ponPortId: p.id }));
+  const closureOutputs = (closureId: string): ConnectionEnd[] =>
+    conns.connections.filter((c) => c.kind === 'splice' && c.state === 'current' && c.recordedIn.recordId === closureId).map((c) => c.to.ref);
+  switch (el.type) {
+    case 'pon_port':
+      return el.ponPortId ? [{ type: 'pon_port', oltId: el.id, ponPortId: el.ponPortId }] : [];
+    case 'olt':
+      return oltPorts(el.id);
+    case 'splitter':
+      return [{ type: 'splitter_input', splitterId: el.id }];
+    case 'core':
+      return el.fiberNumber ? [{ type: 'core', cableId: el.id, core: el.fiberNumber }] : [];
+    case 'cable':
+      return coresOf(el.id);
+    case 'closure':
+      return closureOutputs(el.id);
+    case 'span':
+      return (structureCables ?? []).flatMap(coresOf);
+    case 'equipment': {
+      const pin = ix.fiber.equipment.get(el.id);
+      if (pin && isStructurePin(pin.type)) return (structureCables ?? []).flatMap(coresOf);
+      const ends: ConnectionEnd[] = [];
+      if (pin?.type === 'OLT') ends.push(...oltPorts(el.id));
+      for (const panel of pin?.odfPanels ?? []) {
+        for (const port of panel.ports) ends.push({ type: 'odf_port', equipmentId: el.id, panelId: panel.id, portId: port.id, portNumber: port.number, side: 'rear' });
+      }
+      for (const sp of d.splitters) if (sp.terminalBoxId === el.id) ends.push({ type: 'splitter_input', splitterId: sp.id });
+      for (const closure of d.closures) if (closure.equipmentId === el.id) ends.push(...closureOutputs(closure.id));
+      return ends;
+    }
+    case 'customer':
+    case 'ont':
+      return [];
+  }
+}
+
+/**
+ * Equipment, ports and fibres below the element, following only recorded links in the Phase 13
+ * connection index that say which way the light goes (splices, ODF patches and feeders, splitter
+ * inputs, outputs and cascades, drops). Planned and taken-out links are not followed. Nothing is
+ * worked out from position. Cable TV (RF) links are not followed here.
+ */
+export function impactDownstream(ix: ImpactIndex, el: NetworkElementRef, structureCables?: readonly string[]): DownstreamImpact {
+  const conns = connectionsOf(ix);
+  const d = ix.data;
+  const structure = el.type === 'span' || (el.type === 'equipment' && isStructurePin(ix.fiber.equipment.get(el.id)?.type));
+  const cablesOnIt = structure ? (structureCables ?? cablesRecordedOn(d, el)) : structureCables;
+  const outgoing = new Map<string, Connection[]>();
+  for (const c of conns.connections) {
+    if (!c.directed || c.kind === 'rf_link') continue;
+    if (c.state !== 'current' || !c.from.onRecord || !c.to.onRecord) continue;
+    const key = endKey(c.from.ref);
+    const list = outgoing.get(key);
+    if (list) list.push(c);
+    else outgoing.set(key, [c]);
+  }
+  const selfKey = elementKey(el);
+  const equipment = new Map<string, DownstreamItem>();
+  const ports = new Map<string, DownstreamPort>();
+  const cores = new Map<string, DownstreamCore>();
+  const addItem = (ref: NetworkElementRef) => {
+    const key = elementKey(ref);
+    if (key === selfKey || equipment.has(key)) return;
+    equipment.set(key, { ref, label: elementLabel(d, ref) });
+  };
+  const addPort = (port: DownstreamPort) => {
+    const key = `${port.kind}:${port.recordId}/${port.port}`;
+    if (!ports.has(key)) ports.set(key, port);
+  };
+  const plannedFrom = new Set(conns.connections.filter((c) => c.state === 'planned').map((c) => endKey(c.from.ref)));
+  let plannedSkipped = 0;
+
+  const seen = new Set<string>();
+  const queue: { ref: ConnectionEnd; label?: string }[] = startEnds(ix, conns, el, cablesOnIt).map((ref) => ({ ref }));
+  let truncated = false;
+  for (let qi = 0; qi < queue.length; qi += 1) {
+    const { ref, label } = queue[qi];
+    const key = endKey(ref);
+    if (seen.has(key)) continue;
+    if (seen.size >= MAX_DOWNSTREAM_ENDS) {
+      truncated = true;
+      break;
+    }
+    seen.add(key);
+    if (plannedFrom.has(key)) plannedSkipped += 1;
+    const next: { ref: ConnectionEnd; label?: string }[] = [];
+    switch (ref.type) {
+      case 'core': {
+        const cable = ix.fiber.cables.get(ref.cableId);
+        const record = cable?.cores.find((k) => k.coreNumber === ref.core);
+        cores.set(coreKey(ref.cableId, ref.core), { cableId: ref.cableId, core: ref.core, label: describeCore(ix.fiber, ref.cableId, ref.core), status: record?.status ?? 'Not recorded' });
+        break;
+      }
+      case 'pon_port':
+        // A PON port is only ever a start (the element, or a port of the OLT that is the element).
+        if (!(el.type === 'pon_port' && el.id === ref.oltId && el.ponPortId === ref.ponPortId)) {
+          addPort({ kind: 'pon_port', label: label ?? elementLabel(d, { type: 'pon_port', id: ref.oltId, ponPortId: ref.ponPortId }), recordId: ref.oltId, port: ref.ponPortId });
+        }
+        break;
+      case 'odf_port': {
+        addItem({ type: 'equipment', id: ref.equipmentId });
+        const odf = ix.fiber.equipment.get(ref.equipmentId);
+        const panel = odf?.odfPanels?.find((p) => p.id === ref.panelId);
+        addPort({ kind: 'odf_port', label: `${odf?.name ?? ref.equipmentId} ${panel?.label ?? ref.panelId} port ${ref.portNumber}`, recordId: ref.equipmentId, port: ref.portId });
+        // The patch cord arrives at the front; the feeder fibre leaves from the back of the same adapter.
+        if (ref.side === 'front') next.push({ ref: { ...ref, side: 'rear' } });
+        break;
+      }
+      case 'splitter':
+      case 'splitter_input': {
+        addItem({ type: 'splitter', id: ref.splitterId });
+        const sp = ix.fiber.splitters.get(ref.splitterId);
+        if (sp?.terminalBoxId) addItem({ type: 'equipment', id: sp.terminalBoxId });
+        // Light entering a splitter leaves by every output that has a recorded link.
+        for (const port of sp?.outputPorts ?? []) next.push({ ref: { type: 'splitter_output', splitterId: ref.splitterId, port: port.portNumber } });
+        break;
+      }
+      case 'splitter_output': {
+        if (!(outgoing.get(key)?.length)) break;
+        const sp = ix.fiber.splitters.get(ref.splitterId);
+        addPort({ kind: 'splitter_output', label: `output ${ref.port} of splitter ${sp?.name ?? ref.splitterId}`, recordId: ref.splitterId, port: String(ref.port) });
+        break;
+      }
+      case 'ont':
+        addItem({ type: 'ont', id: ref.ontId });
+        break;
+      case 'customer': {
+        const ontId = d.customers.find((c) => c.id === ref.customerId)?.ontId;
+        if (ontId && (d.onts ?? []).some((o) => o.id === ontId)) addItem({ type: 'ont', id: ontId });
+        break;
+      }
+      default:
+        break;
+    }
+    for (const c of outgoing.get(key) ?? []) {
+      if (c.kind === 'splice' && c.place?.ids[0]) addItem({ type: 'closure', id: c.place.ids[0] });
+      next.push({ ref: c.to.ref, label: c.to.label });
+    }
+    queue.push(...next);
+  }
+
+  const all = [...cores.values()];
+  const notes: string[] = [];
+  const outOfUseCores = all.filter((c) => c.status !== 'Not recorded' && OUT_OF_USE.includes(c.status));
+  if (outOfUseCores.length > 0) {
+    notes.push(`${outOfUseCores.length} fibre(s) below it are already marked faulty, retired or damaged. They are listed apart and not counted as newly lost; a recorded path through a retired fibre means the records disagree.`);
+  }
+  if (plannedSkipped > 0) notes.push(`${plannedSkipped} planned link(s) below it are not built yet, so they are not followed.`);
+  if (truncated) notes.push(`The list stops after ${MAX_DOWNSTREAM_ENDS} items.`);
+  if (equipment.size === 0 && cores.size === 0 && [...ports.values()].every((p) => p.kind === 'pon_port')) {
+    notes.push('No link below it is recorded (such as the fibre on the OLT port, an ODF patch or a splice), so nothing further can be listed.');
+  }
+  if (el.type === 'cable' || el.type === 'span' || structure) notes.push('Every fibre in the cable is counted, used or not; spare fibres have nothing below them.');
+  notes.push('Only links recorded with a direction (OLT side to customer side) are followed. Cable TV links are not listed here.');
+  return {
+    equipment: [...equipment.values()],
+    ports: [...ports.values()],
+    cores: all.filter((c) => !outOfUseCores.includes(c)),
+    outOfUseCores,
+    notes,
+  };
+}
+
+/**
+ * Customers and services that depend on the element, from recorded links only. With
+ * `downstream: true` (Phase 20) the equipment, ports and fibres below it are listed too.
+ */
+export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef, options: { downstream?: boolean } = {}): ImpactResult {
   const label = elementLabel(ix.data, el);
   const exists = elementExists(ix.data, el);
   const notes: string[] = [];
@@ -391,6 +633,7 @@ export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): Impac
         affected.push({
           customerId: customer.id,
           name: customer.name,
+          ...hiddenName(customer),
           pathComplete: path.complete,
           services: services.filter((s) => s.customerId === customer.id && isLiveService(s)).map(SERVICE_FIELDS),
         });
@@ -399,7 +642,7 @@ export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): Impac
       if (path.complete) continue;
       if (!customer.dropCableId) noPath += 1;
       const reason = recordNamesElement(ix, customer, el, structureCables);
-      if (reason) mayBeAffected.push({ customerId: customer.id, name: customer.name, reason, firstGap: path.gaps[0] ?? 'path not recorded' });
+      if (reason) mayBeAffected.push({ customerId: customer.id, name: customer.name, ...hiddenName(customer), reason, firstGap: path.gaps[0] ?? 'path not recorded' });
     }
     let tvGaps = 0;
     for (const info of ix.tv.values()) {
@@ -407,6 +650,7 @@ export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): Impac
         affected.push({
           customerId: info.customer.id,
           name: info.customer.name,
+          ...hiddenName(info.customer),
           pathComplete: info.complete,
           network: 'hfc',
           services: services.filter((s) => s.customerId === info.customer.id && isLiveService(s)).map(SERVICE_FIELDS),
@@ -421,7 +665,8 @@ export function affectedByElement(ix: ImpactIndex, el: NetworkElementRef): Impac
   if (noPath > 0) notes.push(`${noPath} active customer(s) have no drop fiber recorded at all, so they cannot be placed on any element.`);
   notes.push('Only recorded links are followed: splices, splitter ports, ODF ports and patches. Nothing is worked out from distance.');
   const activeServices = affected.reduce((n, a) => n + a.services.filter((s) => s.status === 'active').length, 0);
-  return { element: el, label, exists, affected, mayBeAffected, activeServices, structureCables, notes };
+  const downstream = options.downstream && exists ? { downstream: impactDownstream(ix, el, structureCables) } : {};
+  return { element: el, label, exists, affected, mayBeAffected, activeServices, structureCables, ...downstream, notes };
 }
 
 /** Plain next checks for a crew, by what is suspected. Never a claim of what broke. */

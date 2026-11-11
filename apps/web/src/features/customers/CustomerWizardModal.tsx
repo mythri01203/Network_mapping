@@ -8,6 +8,7 @@ import {
   estimateRxForSplitter,
   hasRecordedLocation,
   isCustomerTerminal,
+  linkedUpstreamOfSplitter,
   polylineLengthMeters,
   SPLITTER_RATIOS,
   type SplitterRatio,
@@ -69,6 +70,8 @@ export const CustomerWizardModal: React.FC = () => {
   const [selectedTerminalId, setSelectedTerminalId] = useState<string>('');
   const [selectedSplitterId, setSelectedSplitterId] = useState<string>('');
   const [selectedPortNumber, setSelectedPortNumber] = useState<number | null>(null);
+  // Which fiber of the new 2-fiber drop carries the service. Empty until the person chooses.
+  const [dropFiber, setDropFiber] = useState<'' | '1' | '2'>('');
 
   const [ontSerial, setOntSerial] = useState('');
   const [routerModel, setRouterModel] = useState('');
@@ -140,6 +143,7 @@ export const CustomerWizardModal: React.FC = () => {
     setLng('');
     setLocationMethod(undefined);
     setLocationAccuracy(undefined);
+    setDropFiber('');
     // Only the box the person opened this from on the map. Never the first box or the first with a free port.
     const selectedId = selectedObject?.type === 'equipment' ? selectedObject.data?.id : undefined;
     const preferred = availableTerminals.find((t) => t.id === selectedId);
@@ -176,6 +180,34 @@ export const CustomerWizardModal: React.FC = () => {
     );
   }, [selectedTerminal, activeSplitter, lat, lng, equipments, cables, splitters, closures, customers, faults, optical]);
 
+  /*
+   * Phase 12: the path the fibre links give, shown step by step before saving. OLT first, then each
+   * cable, the box and output, the new drop fiber, the house. Anything the links do not give is
+   * "Not recorded"; nothing is filled from a cable that only ends near the box.
+   */
+  const tracedPath = (() => {
+    if (!isCustomerWizardOpen || !activeSplitter) return null;
+    const up = linkedUpstreamOfSplitter({ equipment: equipments, cables, splitters, closures, customers }, activeSplitter.id);
+    if (!up) return null;
+    const olt = up.oltId ? equipments.find((e) => e.id === up.oltId) : undefined;
+    const steps: { key: string; label: string; detail: string; missing?: boolean }[] = [
+      up.oltId
+        ? { key: 'olt', label: 'OLT', detail: `${olt?.name ?? up.oltId}${up.ponPortId ? `, port ${up.ponPortId}` : ', port not recorded'}` }
+        : { key: 'olt', label: 'OLT', detail: 'Not recorded', missing: true },
+      ...(up.oltId ? [] : [{ key: 'gap', label: 'Links stop', detail: up.gap ?? 'The fibre links do not reach an OLT.', missing: true }]),
+      ...up.cablesOltFirst.map((id, i) => ({ key: `cable-${i}`, label: i === up.cablesOltFirst.length - 1 ? 'Into the splitter' : 'Cable', detail: cables.find((c) => c.id === id)?.name ?? id })),
+      {
+        key: 'splitter',
+        label: 'Box and splitter',
+        detail: `${selectedTerminal?.name ?? selectedTerminalId}, ${activeSplitter.name}, ${selectedPortNumber !== null ? `output ${selectedPortNumber}` : 'output not chosen yet'}`,
+        missing: selectedPortNumber === null,
+      },
+      { key: 'drop', label: 'New drop', detail: dropFiber ? `Fiber ${dropFiber}` : 'Fiber not chosen yet', missing: !dropFiber },
+      { key: 'house', label: 'House', detail: name.trim() || 'New customer' },
+    ];
+    return { steps, complete: !!up.oltId };
+  })();
+
   // Hidden, not closed, while the person taps the house, so nothing typed is lost.
   if (!isCustomerWizardOpen || picking) return null;
 
@@ -188,6 +220,10 @@ export const CustomerWizardModal: React.FC = () => {
     }
     if (!selectedTerminalId || !activeSplitter || selectedPortNumber === null) {
       showToast('error', 'Choose the connection', 'Choose the box, the splitter and a free output port.');
+      return;
+    }
+    if (dropFiber === '') {
+      showToast('error', 'Choose the drop fiber', 'Choose which fiber of the new drop carries the service: fiber 1 or fiber 2.');
       return;
     }
     const noLocation = lat.trim() === '' && lng.trim() === '';
@@ -233,6 +269,7 @@ export const CustomerWizardModal: React.FC = () => {
       terminalBoxId: selectedTerminalId,
       splitterId: activeSplitter.id,
       splitterOutputPort: selectedPortNumber,
+      fiberCore: Number(dropFiber),
       ontSerialNumber: ontSerial.trim(),
       routerModel,
     });
@@ -491,6 +528,25 @@ export const CustomerWizardModal: React.FC = () => {
                     <span className="w-2 h-2 rounded-full bg-blue-600"></span> Selected
                   </span>
                 </div>
+                {/* The new drop has 2 fibers. Which one carries the service is the person's choice, never assumed. */}
+                <div className="mt-3">
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Fiber in the new drop that carries the service:</label>
+                  <div className="flex gap-2" role="group" aria-label="Drop fiber">
+                    {(['1', '2'] as const).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        data-testid={`drop-fiber-${n}`}
+                        aria-pressed={dropFiber === n}
+                        onClick={() => setDropFiber(n)}
+                        className={`min-h-12 flex-1 rounded-lg border text-xs font-bold ${dropFiber === n ? 'border-blue-700 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        Fiber {n}
+                      </button>
+                    ))}
+                  </div>
+                  {dropFiber === '' && <p className="mt-1 text-[10px] text-slate-500">Choose the fiber the installer connects. The other stays spare.</p>}
+                </div>
               </div>
             )}
             {estimate && (
@@ -505,14 +561,20 @@ export const CustomerWizardModal: React.FC = () => {
                         : 'border-slate-200 bg-slate-50 text-slate-600'
                 }`}
               >
-                <div className="font-bold">Upstream path</div>
+                <div className="font-bold">Path from the fibre links (check before saving)</div>
+                {tracedPath && (
+                  <ol className="my-1 space-y-0.5" data-testid="traced-path">
+                    {tracedPath.steps.map((step, i) => (
+                      <li key={step.key} className={`flex gap-2 ${step.missing ? 'font-semibold text-amber-800' : ''}`}>
+                        <span className="w-5 shrink-0 text-right font-mono">{i + 1}.</span>
+                        <span className="w-28 shrink-0 font-semibold">{step.label}</span>
+                        <span className="min-w-0 break-words">{step.detail}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
                 {estimate.level === 'core' ? (
-                  <div>
-                    {`${estimate.olt?.id ?? ''}${estimate.pon ? ` / ${estimate.pon.id}` : ''}`}
-                    {estimate.cableIds.length > 0 && ` → ${estimate.cableIds.join(' → ')}`}
-                    {` → ${selectedTerminalId} / ${activeSplitter?.id}`}
-                    {' · fibers recorded end to end'}
-                  </div>
+                  <div>Fibers recorded end to end.</div>
                 ) : (
                   <div className="font-semibold">
                     Not complete: the fibers from this splitter to the OLT are not recorded.

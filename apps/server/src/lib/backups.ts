@@ -112,14 +112,16 @@ export async function restorePhotos(photos: readonly BackupPhoto[], photosDir: s
  * Saves a safety copy in the backups folder before a reset or restore, then removes the oldest
  * copies beyond `keep`. The file name says when and why, never who.
  */
-export async function writeSafetyCopy(dir: string, zip: Uint8Array, reason: 'before-reset' | 'before-restore', keep: number, now = new Date()): Promise<string> {
+export async function writeSafetyCopy(dir: string, zip: Uint8Array, reason: 'before-reset' | 'before-restore' | 'scheduled', keep: number, now = new Date()): Promise<string> {
   await mkdir(dir, { recursive: true });
   const stamp = now.toISOString().replace(/[:.]/g, '-');
   const name = `fibergis-${reason}-${stamp}.zip`;
   const target = join(dir, name);
   await writeFile(`${target}.part`, zip, { flag: 'wx' });
   await rename(`${target}.part`, target);
-  const copies = (await readdir(dir)).filter((n) => /^fibergis-before-(reset|restore)-.+\.zip$/.test(n));
+  // Phase 24: scheduled copies are counted apart, so they never push out a copy made before a restore.
+  const kind = reason === 'scheduled' ? /^fibergis-scheduled-.+\.zip$/ : /^fibergis-before-(reset|restore)-.+\.zip$/;
+  const copies = (await readdir(dir)).filter((n) => kind.test(n));
   if (copies.length > keep) {
     const dated = await Promise.all(copies.map(async (n) => ({ n, t: (await stat(join(dir, n))).mtimeMs })));
     dated.sort((a, b) => a.t - b.t || a.n.localeCompare(b.n));

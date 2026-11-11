@@ -16,6 +16,8 @@ export function useOspData(): NetworkData {
       ducts: s.ducts,
       slackLoops: s.slackLoops,
       permissions: s.permissions,
+      inspections: s.inspections,
+      buildings: s.buildings,
     })),
   );
   return useMemo(

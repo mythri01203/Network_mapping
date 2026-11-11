@@ -45,3 +45,6 @@ test-results/
 
 # Local https certificates for dev:https (never commit private keys)
 certs/
+
+# 3D view browser check output (npm run check:3d)
+view3d-check/

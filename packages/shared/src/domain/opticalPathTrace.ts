@@ -105,6 +105,8 @@ function resultFromCorePath(
       connectorsCount: core.parts.connectorPairs,
       recordedSpliceLossDb: core.parts.spliceLossDb,
       opticsClass: options.opticsClass ?? core.opticsClass,
+      // Network mapping Phase 17: an assumed class gives no pass or fail.
+      opticsClassRecorded: options.opticsClass ? true : core.opticsClassRecorded,
       oltTxPowerDbm: options.oltTxPowerDbm ?? core.pon?.txPowerDbm,
       measuredRxDbm: rxReading.isMeasured && wavelengthNm !== 1310 ? rxReading.valueDbm : undefined,
     },
@@ -246,6 +248,8 @@ export function traceOpticalPath(
     const spec: SplitterLossSpec = { ratio: sp.ratio, lossDb: sp.insertionLossDb };
     splitterLosses.push(spec);
     const loss = sp.insertionLossDb > 0 ? sp.insertionLossDb : settings.splitterDb[sp.ratio];
+    // Network mapping Phase 17: say when a setting stands in for a loss nobody recorded.
+    if (!(sp.insertionLossDb > 0)) notes.push(`Splitter ${sp.name}: no loss recorded, so the ${sp.ratio} setting (optical.splitter.${sp.ratio}, ${loss} dB) is used.`);
     appendHop({
       id: sp.id,
       name: `${sp.name}`,
@@ -271,6 +275,7 @@ export function traceOpticalPath(
       const ratio = eq.splitterConfig?.ratio;
       if (ratio) {
         splitterLosses.push({ ratio });
+        notes.push(`${eqLabel(eq)}: no splitter record, so the ${ratio} setting (optical.splitter.${ratio}, ${settings.splitterDb[ratio]} dB) is used.`);
         appendHop({
           id: eq.id,
           name: eq.name,
@@ -308,8 +313,9 @@ export function traceOpticalPath(
   /** Recorded splices joining two consecutive cables of this path. */
   const addRecordedSplices = (a: Cable, b: Cable) => {
     for (const closure of data.closures || []) {
+      // Splices out of service or entered by mistake (Phase 8) no longer join anything.
       const joined = closure.splices.filter(
-        (s) => (s.inputCableId === a.id && s.outputCableId === b.id) || (s.inputCableId === b.id && s.outputCableId === a.id),
+        (s) => !s.retiredAt && s.status !== 'Unused' && ((s.inputCableId === a.id && s.outputCableId === b.id) || (s.inputCableId === b.id && s.outputCableId === a.id)),
       );
       const linksBoth =
         (closure.cableAId === a.id && closure.cableBId === b.id) || (closure.cableAId === b.id && closure.cableBId === a.id);
@@ -511,8 +517,10 @@ export function traceOpticalPath(
   // --- Estimated budget --------------------------------------------------------------------------
 
   const technology = pon?.technology ?? olt?.technology;
-  const opticsClass = options.opticsClass ?? opticsClassForTechnology(technology);
-  if (!options.opticsClass) {
+  // Network mapping Phase 17: the class recorded on the port first; an assumed one gives no pass or fail.
+  const opticsClassRecorded = !!(options.opticsClass ?? pon?.opticsClass);
+  const opticsClass = options.opticsClass ?? pon?.opticsClass ?? opticsClassForTechnology(technology);
+  if (!opticsClassRecorded) {
     notes.push(
       technology
         ? `The optics class is not recorded per port, so ${technology} was checked against ${opticsClass}.`
@@ -529,6 +537,7 @@ export function traceOpticalPath(
     connectorsCount: connectorPairs,
     recordedSpliceLossDb: recordedSpliceLoss,
     opticsClass,
+    opticsClassRecorded,
   };
   const budget = calculateOpticalLossBudget(
     {

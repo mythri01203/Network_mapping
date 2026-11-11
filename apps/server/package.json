@@ -10,7 +10,9 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "user": "tsx src/cli.ts",
-    "test": "vitest run"
+    "benchmark": "tsx scripts/benchmark.ts",
+    "test": "vitest run",
+    "poll:dasan": "tsx src/monitoring/dasan/poller.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",
@@ -21,6 +23,7 @@
     "@fibergis/shared": "*",
     "fastify": "^5.12.7",
     "fflate": "0.8.3",
+    "net-snmp": "3.29.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {

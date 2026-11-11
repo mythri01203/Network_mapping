@@ -3,17 +3,39 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
   type Account,
   ACCOUNT_ROLE_LABELS,
+  type AuditActor,
   AUDIT_ROLE_FOR,
   type AuthMode,
+  type Cable,
   type ChangeSet,
   checkChangeAccess,
   type CollectionName,
   type Customer,
   describeAccessProblems,
+  hiddenDiffFields,
+  hiddenPersonalFields,
+  holdsHiddenText,
+  ownJobCustomerIds,
+  type PermissionAction,
+  PERMISSION_WORDS,
+  type PrivacyViewer,
+  redactNetworkForRole,
+  redactRecordForRole,
+  restoreHiddenCable,
+  restoreHiddenCustomer,
+  restoreHiddenSplitter,
+  roleHasAction,
+  roleHidesPersonalData,
   roleMay,
+  roleNeedsOwnJobs,
+  type Splitter,
+  type SyncConflict,
   type SystemAction,
+  type WorkOrder,
+  type WriteSource,
 } from '@fibergis/shared';
 
+import { SETUP_ACTOR } from '../db/historyStore';
 import type { NetworkRepository, WriteOptions } from '../db/repository';
 import { HttpError } from '../lib/errors';
 import type { SessionInfo } from './authStore';
@@ -68,6 +90,7 @@ const SYSTEM_WORDS: Record<SystemAction, string> = {
   upload_photo: 'send photos',
   manage_monitoring: 'manage monitoring sources and tokens',
   import_monitoring: 'import monitoring files',
+  manage_voice: 'make or approve voice lessons',
 };
 
 /** The account, or a 401 when login is on and nobody is logged in. In setup mode: null. */
@@ -118,42 +141,153 @@ export async function prepareAuditEntries(request: FastifyRequest, changes: Chan
   return next;
 }
 
-/** Write options for a change set: the access check (login on) and who made it. */
-export function writeOptionsFor(request: FastifyRequest, changes: ChangeSet): WriteOptions {
+/** Phase 23: who the server's audit events name for this request. */
+export function auditActorOf(request: FastifyRequest): AuditActor {
+  const account = request.auth.account;
+  if (!account) return SETUP_ACTOR;
+  return { id: account.id, name: account.displayName, role: account.role };
+}
+
+/**
+ * Phase 23: refuses an action this role does not have (approve, export, configure...). Setup mode
+ * allows it (login is off), as every other rule does.
+ */
+export function requireAction(request: FastifyRequest, action: PermissionAction): Account | null {
+  const account = accountOf(request);
+  if (!account || request.auth.mode === 'setup') return account;
+  if (!roleHasAction(account.role, action)) {
+    throw forbidden(`${ACCOUNT_ROLE_LABELS[account.role]} accounts cannot ${PERMISSION_WORDS[action]}. Ask a supervisor or the administrator.`);
+  }
+  return account;
+}
+
+/**
+ * Write options for a change set: the access check (login on), who made it and how it came in.
+ * The server's audit events and revisions are written for every write, login on or off.
+ */
+export function writeOptionsFor(request: FastifyRequest, changes: ChangeSet, source: WriteSource = 'changes'): WriteOptions {
   const account = request.auth.mode === 'enforced' ? accountOf(request) : null;
-  if (!account) return {};
+  const trace = { actor: auditActorOf(request), source };
+  if (!account) return trace;
   return {
+    ...trace,
     actorId: account.id,
     access: (lookup) => {
       const problems = checkChangeAccess(account, changes, lookup);
       if (problems.length > 0) {
-        throw forbidden(describeAccessProblems(problems), { problems: problems.slice(0, 20).map(({ collection, id, action }) => ({ collection, id, action })) });
+        throw forbidden(describeAccessProblems(problems), {
+          problems: problems.slice(0, 20).map(({ collection, id, action, permission }) => ({ collection, id, action, ...(permission ? { permission } : {}) })),
+        });
       }
     },
   };
 }
 
-const HIDDEN = 'Hidden for look-only accounts';
+/**
+ * Phase 12: who is reading, for the personal-data rules (`CUSTOMER_PRIVACY` in the shared code).
+ * Setup mode (login off, the server computer only) sees everything, as every other rule.
+ */
+export const privacyViewerOf = (request: FastifyRequest): PrivacyViewer | null => {
+  const account = request.auth.account;
+  return account ? { role: account.role, displayName: account.displayName } : null;
+};
 
 /**
- * Personal data a viewer does not need: phone numbers, and the sync conflict records (they hold
- * whole copies of other records, phone numbers included). Viewers never write, so nothing hidden is
- * ever saved back.
+ * The customers on this person's own open jobs (a Field Technician sees those in full). Read from
+ * the jobs given, or the stored ones. Empty for every other role.
  */
-export function redactForViewer<T extends { customers?: Customer[]; syncConflicts?: unknown[] }>(request: FastifyRequest, data: T): T {
-  if (request.auth.account?.role !== 'viewer') return data;
-  return {
-    ...data,
-    customers: data.customers?.map((c) => ({ ...c, mobile: c.mobile ? HIDDEN : c.mobile })),
-    ...(data.syncConflicts ? { syncConflicts: [] } : {}),
-  };
+export async function ownJobsOf(request: FastifyRequest, repository: Pick<NetworkRepository, 'list'>, workOrders?: readonly WorkOrder[]): Promise<Set<string>> {
+  const viewer = privacyViewerOf(request);
+  if (!viewer || !roleNeedsOwnJobs(viewer)) return new Set();
+  return ownJobCustomerIds(workOrders ?? (await repository.list('workOrders')), viewer.displayName);
 }
 
-export const redactRecordForViewer = (request: FastifyRequest, collection: CollectionName, record: unknown): unknown => {
-  if (request.auth.account?.role !== 'viewer' || !record || typeof record !== 'object') return record;
-  if (collection === 'syncConflicts') return null;
-  return collection === 'customers' && (record as Customer).mobile ? { ...(record as Customer), mobile: HIDDEN } : record;
-};
+type Redactable = { customers?: Customer[]; splitters?: Splitter[]; cables?: Cable[]; syncConflicts?: SyncConflict[]; workOrders?: WorkOrder[] };
+
+/**
+ * Phase 12: personal data this role does not need, taken out of a snapshot, area answer or changes
+ * feed: customers' name, address, house position and mobile (see `CUSTOMER_PRIVACY`), the customer
+ * names copied onto splitter outputs and fibers, and the sync conflict copies. Without `ownJobs`, the
+ * jobs in `data` decide a technician's own customers. Nothing hidden is ever saved back
+ * (`restoreHiddenPersonalData`).
+ */
+export function redactForViewer<T extends Redactable>(request: FastifyRequest, data: T, ownJobs?: ReadonlySet<string>): T {
+  const viewer = privacyViewerOf(request);
+  if (!roleHidesPersonalData(viewer)) return data;
+  const own = ownJobs ?? (roleNeedsOwnJobs(viewer) && data.workOrders ? ownJobCustomerIds(data.workOrders, viewer!.displayName) : new Set<string>());
+  return redactNetworkForRole(data, viewer, own);
+}
+
+/** The same for one record. `null` means leave it out (a sync conflict, for a look-only account). */
+export const redactRecordForViewer = (request: FastifyRequest, collection: CollectionName, record: unknown, ownJobs: ReadonlySet<string> = new Set()): unknown =>
+  redactRecordForRole(collection, record, privacyViewerOf(request), ownJobs);
+
+/** Phase 12: an audit event's values this role may not see. The field names stay. */
+export function redactAuditDiff<E extends { collection: string; recordId: string; diff: { field: string }[] }>(request: FastifyRequest, event: E, ownJobs: ReadonlySet<string> = new Set()): E {
+  const hidden = hiddenDiffFields(event.collection, event.recordId, privacyViewerOf(request), ownJobs);
+  if (hidden.size === 0) return event;
+  return { ...event, diff: event.diff.map((d) => (hidden.has(d.field) ? { field: d.field } : d)) };
+}
+
+/**
+ * Phase 12: a write never stores a value its writer could not see. A customer, splitter output,
+ * fiber or sync conflict that comes back with "Hidden for your role" (or a hidden house position)
+ * keeps the stored value; the `hiddenFields` mark is never stored. A value the writer changed is
+ * kept, so the permission check still judges it.
+ */
+export async function restoreHiddenPersonalData(request: FastifyRequest, changes: ChangeSet, repository: Pick<NetworkRepository, 'get' | 'list'>): Promise<ChangeSet> {
+  const up = changes.upserts;
+  if (!up) return changes;
+  const viewer = privacyViewerOf(request);
+  const hidesGps = !!viewer && hiddenPersonalFields(viewer, '').includes('gps');
+  const touchedCustomers = (up.customers ?? []).some((c) => c.hiddenFields || holdsHiddenText(c) || (hidesGps && c.lat === 0 && c.lng === 0));
+  const touchedSplitters = (up.splitters ?? []).some(holdsHiddenText);
+  const touchedCables = (up.cables ?? []).some(holdsHiddenText);
+  const touchedConflicts = (up.syncConflicts ?? []).some(holdsHiddenText);
+  if (!touchedCustomers && !touchedSplitters && !touchedCables && !touchedConflicts) return changes;
+  const own = await ownJobsOf(request, repository);
+  const next = { ...up };
+  if (touchedCustomers) {
+    next.customers = await Promise.all(
+      (up.customers ?? []).map(async (c) => restoreHiddenCustomer(c, await repository.get('customers', c.id), hiddenPersonalFields(viewer, c.id, own))),
+    );
+  }
+  const names = new Map((next.customers ?? []).map((c) => [c.id, c.name]));
+  const nameOf = async (id: string) => names.get(id) ?? (await repository.get('customers', id))?.name;
+  const resolveNames = async (ids: Iterable<string>) => {
+    const out = new Map<string, string | undefined>();
+    for (const id of ids) out.set(id, await nameOf(id));
+    return (id: string) => out.get(id);
+  };
+  if (touchedSplitters) {
+    next.splitters = await Promise.all(
+      (up.splitters ?? []).map(async (s) => {
+        if (!holdsHiddenText(s)) return s;
+        const lookup = await resolveNames(s.outputPorts.flatMap((p) => (p.connectedCustomerId ? [p.connectedCustomerId] : [])));
+        return restoreHiddenSplitter(s, await repository.get('splitters', s.id), lookup);
+      }),
+    );
+  }
+  if (touchedCables) {
+    next.cables = await Promise.all(
+      (up.cables ?? []).map(async (c) => {
+        if (!holdsHiddenText(c)) return c;
+        const ids = c.cores.flatMap((k) => [k.customerId, ...(k.assignments ?? []).map((a) => a.customerId)]).filter((id): id is string => !!id);
+        return restoreHiddenCable(c, await repository.get('cables', c.id), await resolveNames(ids));
+      }),
+    );
+  }
+  if (touchedConflicts) {
+    next.syncConflicts = await Promise.all(
+      (up.syncConflicts ?? []).map(async (conflict) => {
+        if (!holdsHiddenText(conflict)) return conflict;
+        const stored = await repository.get('syncConflicts', conflict.id);
+        return stored ? { ...conflict, mine: stored.mine, theirs: stored.theirs } : conflict;
+      }),
+    );
+  }
+  return { ...changes, upserts: next };
+}
 
 /** Writes the headers that keep personal answers out of shared caches. */
 export const noStore = (reply: FastifyReply) => reply.header('cache-control', 'no-store');

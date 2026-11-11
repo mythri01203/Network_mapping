@@ -1,23 +1,44 @@
 import {
+  type AreaResponse,
   type ChangeResult,
+  type ChangeSet,
+  type ChangesResponse,
   type CollectionName,
   isCollectionName,
   type NetworkSnapshot,
   type ParsedBackup,
   randomCode,
+  type RecordsResponse,
   type RecordVersions,
   type SyncConflict,
   type VersionConflict,
 } from '@fibergis/shared';
 import { createSampleNetwork } from '@fibergis/shared/sample';
 
-import { readJson, writeJson } from '../lib/storage';
+import { cacheRead, cacheWrite } from '../lib/officeCache';
+import { initialAreaLoadState, useAreaLoadStore } from '../stores/areaLoadStore';
 import { currentAccount, useAuthStore } from '../stores/authStore';
+import { useMapStore } from '../stores/mapStore';
 import { forgetCachedNetwork, getNetworkSnapshot, MAX_AUDIT_LOGS, SYNC_META_STORAGE_KEY, useNetworkStore, wasLoadedFromCache } from '../stores/networkStore';
 import { useRestoreStore } from '../stores/restoreStore';
+import { recordSyncHistory } from '../stores/syncHistoryStore';
 import { initialSyncState, type RefusedRecord, type SyncPhase, useSyncStore } from '../stores/syncStore';
 import { showToast } from '../stores/toastStore';
 import { useUiStore } from '../stores/uiStore';
+import {
+  AREA_COLLECTIONS,
+  AREA_MODE_MIN_RECORDS,
+  AREA_WIDEST_ZOOM,
+  type AreaBox,
+  areaRecordCount,
+  isCovered,
+  type LoadPreference,
+  mergeLoaded,
+  missingReferences,
+  readLoadPreference,
+  viewBox,
+  writeLoadPreference,
+} from './areaLoading';
 import {
   buildChangeSet,
   changedFields,
@@ -32,7 +53,7 @@ import {
   recordKey,
   sameValue,
 } from './changeTracking';
-import { type ApiClient, apiClient, ApiError, describeApiError, isTransientError, type RestoreResult } from './client';
+import { type ApiClient, apiClient, ApiError, ApiUnavailableError, describeApiError, isTransientError, type RestoreResult } from './client';
 
 type RecordKey = { collection: CollectionName; id: string };
 
@@ -74,6 +95,8 @@ interface SyncMeta {
    * someone else logs in on this device, the changes wait for the person who made them.
    */
   owner?: { id: string; name: string };
+  /** Phase 24b: the cached copy holds part of the network, loaded by map area. Absent: the whole network. */
+  mode?: 'area';
 }
 
 const isPendingIds = (value: unknown): boolean =>
@@ -83,8 +106,9 @@ const isPendingIds = (value: unknown): boolean =>
 
 const isSyncMeta = (value: unknown): boolean => {
   if (typeof value !== 'object' || value === null) return false;
-  const { revision, pending, bases, held, owner } = value as Partial<SyncMeta>;
+  const { revision, pending, bases, held, owner, mode } = value as Partial<SyncMeta>;
   return (
+    (mode === undefined || mode === 'area') &&
     (owner === undefined || (typeof owner === 'object' && owner !== null && typeof owner.id === 'string' && typeof owner.name === 'string')) &&
     (revision === null || typeof revision === 'number') &&
     isPendingIds(pending) &&
@@ -97,6 +121,30 @@ const withoutKeys = (set: PendingIds, keys: readonly RecordKey[]): PendingIds =>
   const drop = new Set(keys.map((k) => recordKey(k.collection, k.id)));
   return toPending(flatten(set).filter((k) => !drop.has(recordKey(k.collection, k.id))));
 };
+
+/**
+ * Phase 24: the server's state, as far as this device can tell, after a change list: the local copy
+ * with the server's stored records put in place (new ones at the end, as the server orders them)
+ * and its deleted ones taken out. Collections the list does not name stay the same arrays.
+ */
+export function applyServerChanges(local: NetworkSnapshot, changes: Pick<Extract<ChangesResponse, { reload?: false }>, 'upserts' | 'deletes'>): NetworkSnapshot {
+  const result = { ...local } as Record<CollectionName, { id: string }[]>;
+  const names = new Set([...Object.keys(changes.upserts ?? {}), ...Object.keys(changes.deletes ?? {})].filter(isCollectionName));
+  for (const name of names) {
+    const gone = new Set(changes.deletes?.[name] ?? []);
+    const list = (local[name] as { id: string }[]).filter((r) => !gone.has(r.id));
+    const at = new Map(list.map((r, i) => [r.id, i]));
+    for (const record of (changes.upserts?.[name] ?? []) as { id: string }[]) {
+      const i = at.get(record.id);
+      if (i === undefined) {
+        at.set(record.id, list.length);
+        list.push(record);
+      } else list[i] = record;
+    }
+    result[name] = list;
+  }
+  return result as unknown as NetworkSnapshot;
+}
 
 const findRecord = (snapshot: NetworkSnapshot, { collection, id }: RecordKey) =>
   (snapshot[collection] as readonly { id: string }[]).find((r) => r.id === id) as Record<string, unknown> | undefined;
@@ -112,6 +160,24 @@ const describeRefusal = (records: readonly RefusedRecord[]): string => {
   const more = records.length > 1 ? ` and ${records.length - 1} more` : '';
   return `${first.label}${more} was not sent. ${first.reason} Correct it, then tap Retry now.`;
 };
+
+/**
+ * Phase 19: one line in this device's sync history (`syncHistoryStore`). Audit notes travel with
+ * the records and are counted apart; a batch of audit notes alone is not listed.
+ */
+function logHistory(result: 'sent' | 'refused' | 'conflict', keys: readonly RecordKey[], reason?: string): void {
+  const records = keys.filter((k) => k.collection !== 'auditLogs');
+  if (records.length === 0) return;
+  const snapshot = getNetworkSnapshot();
+  recordSyncHistory({
+    result,
+    kind: 'changes',
+    count: records.length,
+    labels: records.slice(0, 5).map((k) => recordLabel(k, snapshot)),
+    notes: keys.length - records.length,
+    ...(reason ? { reason } : {}),
+  });
+}
 
 /** Browsers cap `keepalive` request bodies at 64 KiB. */
 const KEEPALIVE_BODY_LIMIT = 60_000;
@@ -149,6 +215,26 @@ export interface SyncEngine {
    * stay in the conflict record either way.
    */
   resolveConflict(conflictId: string, choice: ConflictChoice): Promise<boolean>;
+  /**
+   * Phase 16 (bulk edit): sends one change set to the server as it is, all or nothing, with the
+   * version each record was loaded at. Only after the server stored it is it put on this device, so
+   * a refused set changes nothing here either. Rejects with the server's `ApiError` (or
+   * `ApiUnavailableError` when there is no connection); nothing is queued for later.
+   */
+  sendAtomic(changes: ChangeSet): Promise<ChangeResult>;
+  /**
+   * Phase 24b: `whole` always loads the whole network on this device; `auto` loads a big network by
+   * map area. Reloads from the server (unsent changes are kept and sent).
+   */
+  setLoadPreference(preference: LoadPreference): Promise<void>;
+  /**
+   * Phase 24b: while loaded by map area, asks the server's search (`GET /search`) for what this device
+   * does not hold and loads those records, so the search box finds them. `null` when the whole network
+   * is here, there is no connection, or the server cannot search.
+   */
+  searchServer(query: string): Promise<{ total: number; loaded: number } | null>;
+  /** Phase 24b: while loaded by map area, loads the place around a point (where a field worker stands). */
+  loadPlace(lat: number, lng: number): Promise<void>;
 }
 
 export interface SyncEngineOptions {
@@ -161,7 +247,15 @@ export interface SyncEngineOptions {
   pollIntervalMs?: number;
   retryBaseMs?: number;
   retryMaxMs?: number;
+  /** Phase 24b: from this many records (equipment, cables, customers, spans, ...) the network is loaded by map area. */
+  areaModeMinRecords?: number;
+  /** Quiet period after the map stops moving before a new area is loaded. */
+  areaDebounceMs?: number;
+  /** The screen size the map fits in (the map is never larger). */
+  viewSize?: () => { width: number; height: number };
 }
+
+const screenSize = () => (typeof window === 'undefined' ? { width: 1280, height: 800 } : { width: window.innerWidth || 1280, height: window.innerHeight || 800 });
 
 /**
  * Keeps the network store and the API server in step. Local edits are tracked per record, persisted
@@ -175,6 +269,9 @@ export function createSyncEngine({
   pollIntervalMs = 30_000,
   retryBaseMs = 2_000,
   retryMaxMs = 30_000,
+  areaModeMinRecords = AREA_MODE_MIN_RECORDS,
+  areaDebounceMs = 400,
+  viewSize = screenSize,
 }: SyncEngineOptions = {}): SyncEngine {
   let started = false;
   let meta: SyncMeta = { revision: null, pending: {} };
@@ -221,12 +318,14 @@ export function createSyncEngine({
   // are saved apart, so a reload never sends them before a person chooses.
   const persistMeta = () => {
     const bases = meta.bases ?? {};
-    writeJson(SYNC_META_STORAGE_KEY, {
+    // Phase 19: stored with the offline copy (IndexedDB), in the same transaction as the records it lists.
+    cacheWrite(SYNC_META_STORAGE_KEY, {
       revision: meta.revision,
       pending: mergePending(meta.pending, refusedIds(), sending ?? {}),
       ...(Object.keys(bases).length > 0 ? { bases } : {}),
       ...(!isEmptyPending(held()) ? { held: held() } : {}),
       ...(meta.owner && !isEmptyPending(unsent()) ? { owner: meta.owner } : {}),
+      ...(meta.mode === 'area' ? { mode: 'area' } : {}),
     });
   };
 
@@ -297,6 +396,7 @@ export function createSyncEngine({
     const resend: RecordKey[] = [];
     const bases = { ...(meta.bases ?? {}) };
     let found = 0;
+    const heldNow: RecordKey[] = [];
     for (const key of keys) {
       const k = recordKey(key.collection, key.id);
       const conflict = byKey.get(k);
@@ -312,6 +412,7 @@ export function createSyncEngine({
         continue;
       }
       found += 1;
+      heldNow.push(key);
       meta.held = mergePending(held(), toPending([key]));
       const record: SyncConflict = {
         id: `CNF-${randomCode(10)}`,
@@ -331,6 +432,7 @@ export function createSyncEngine({
     }
     meta.bases = bases;
     if (found > 0) {
+      logHistory('conflict', heldNow, 'Someone else changed it at the same time. Both versions are kept until a person chooses.');
       showToast('warning', 'Someone else changed this', `${found} item(s) were changed by someone else while you worked. Both versions are kept. Choose which one to keep.`);
     }
     return resend;
@@ -433,6 +535,7 @@ export function createSyncEngine({
       const result = await client.applyChanges(buildChangeSet(toPending(keys), getNetworkSnapshot(), meta.bases));
       meta.revision = result.revision;
       recordWritten(keys, result);
+      logHistory('sent', keys);
       return result.upserted + result.deleted;
     } catch (error) {
       if (isLoginError(error)) {
@@ -456,6 +559,7 @@ export function createSyncEngine({
   async function refuseOrSplit(keys: RecordKey[], error: unknown, notSent: RecordKey[]): Promise<number> {
     if (keys.length === 1) {
       const [key] = keys;
+      logHistory('refused', keys, describeApiError(error));
       refused = [
         ...refused.filter((item) => !(item.collection === key.collection && item.id === key.id)),
         {
@@ -474,6 +578,8 @@ export function createSyncEngine({
 
   async function connect(): Promise<void> {
     clearTimeout(reconnectTimer);
+    // Phase 24b: a big network is loaded by map area (the whole load stays for small ones and as the fallback).
+    if (await chooseAreaMode()) return connectByArea();
     let response;
     try {
       response = await client.getNetwork();
@@ -500,6 +606,10 @@ export function createSyncEngine({
     const waiting = new Set(flatten(unsent()).map((k) => recordKey(k.collection, k.id)));
     meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => waiting.has(k)));
     meta.revision = response.revision;
+    delete meta.mode;
+    areaBoxes = [];
+    areaTruncated = false;
+    updateAreaStatus();
     link = 'online';
     linkError = null;
     retryAttempt = 0;
@@ -507,6 +617,244 @@ export function createSyncEngine({
     persistMeta();
     updateStatus();
     startPolling();
+    if (!isEmptyPending(meta.pending)) await send();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Phase 24b: loading a big network by map area (see areaLoading.ts).
+
+  /** The server cannot answer map-area or by-id reads (an older server): the whole load is used. */
+  let areaUnsupported = false;
+  /** Boxes loaded since the last full reload; a view inside one needs no new load. */
+  let areaBoxes: AreaBox[] = [];
+  let areaTruncated = false;
+  let areaLoading = false;
+  let serverAreaRecords: number | null = null;
+  let areaTimer: ReturnType<typeof setTimeout> | undefined;
+  let unsubscribeView: (() => void) | null = null;
+
+  const viewport = () => useMapStore.getState().viewport;
+  /** The view, or its middle when it is wider than what is loaded at once. */
+  const currentBox = (): AreaBox => viewBox({ ...viewport(), zoom: Math.max(viewport().zoom, AREA_WIDEST_ZOOM) }, viewSize());
+
+  function updateAreaStatus() {
+    if (meta.mode !== 'area') {
+      useAreaLoadStore.setState({ ...initialAreaLoadState, serverRecords: serverAreaRecords });
+      return;
+    }
+    const snapshot = getNetworkSnapshot();
+    const loadedRecords = AREA_COLLECTIONS.reduce((total, name) => total + (snapshot[name] as unknown[]).length, 0);
+    useAreaLoadStore.setState({ mode: 'area', areas: areaBoxes.length, truncated: areaTruncated, wide: viewport().zoom < AREA_WIDEST_ZOOM, loading: areaLoading, serverRecords: serverAreaRecords, loadedRecords });
+  }
+
+  /** Whether to load by map area: a big network, a server that can, and this device not set to "whole". */
+  async function chooseAreaMode(): Promise<boolean> {
+    if (areaUnsupported || changesUnsupported || !client.getArea || !client.getNetworkExcept || !client.getRecords || !client.getChanges) return false;
+    if (readLoadPreference() === 'whole') {
+      serverAreaRecords = null;
+      return false;
+    }
+    try {
+      const health = await client.health();
+      serverAreaRecords = health.counts ? areaRecordCount(health.counts) : null;
+    } catch {
+      // The whole load below reports the problem (offline, login) exactly as before.
+      return false;
+    }
+    return serverAreaRecords !== null && serverAreaRecords >= areaModeMinRecords;
+  }
+
+  /** Puts loaded records on this device (never takes any away) and notes their server versions. */
+  const applyLoaded = (data: Partial<NetworkSnapshot>, versions: RecordVersions | undefined) => {
+    const changed = mergeLoaded(getNetworkSnapshot(), data, unsent());
+    if (Object.keys(changed).length > 0) applyRemote(changed);
+    for (const [collection, byId] of Object.entries(versions ?? {})) {
+      for (const [id, version] of Object.entries(byId ?? {})) serverVersions.set(`${collection}/${id}`, version);
+    }
+  };
+
+  /** Loads the records the loaded ones point to and this device does not hold (one step). Returns the oldest revision read. */
+  async function loadReferences(loaded: Partial<NetworkSnapshot>): Promise<number | null> {
+    const ids = missingReferences(loaded, getNetworkSnapshot()).slice(0, 3_000);
+    let oldest: number | null = null;
+    for (let i = 0; i < ids.length; i += 1_000) {
+      const found = await client.getRecords!(ids.slice(i, i + 1_000), AREA_COLLECTIONS);
+      if (!started) return oldest;
+      applyLoaded(found.data, found.versions);
+      oldest = oldest === null ? found.revision : Math.min(oldest, found.revision);
+    }
+    return oldest;
+  }
+
+  /**
+   * A full load by map area: every collection not loaded by area, in full, and the area in view.
+   * What this device held of the area collections is replaced by that, except records with unsent
+   * edits (they stay as they are here). Then every record is brought to one revision with the
+   * changes since the oldest read.
+   */
+  async function connectByArea(): Promise<void> {
+    const box = currentBox();
+    let rest: RecordsResponse;
+    let area: AreaResponse;
+    try {
+      [rest, area] = await Promise.all([client.getNetworkExcept!(AREA_COLLECTIONS), client.getArea!(box, AREA_COLLECTIONS)]);
+    } catch (error) {
+      if (isLoginError(error)) needLogin();
+      else if (error instanceof ApiError && error.status === 404) {
+        // An older server: load the whole network, as before.
+        areaUnsupported = true;
+        return connect();
+      } else goOffline(error);
+      return;
+    }
+    if (!started) return;
+
+    if (meta.revision === null && wasLoadedFromCache()) {
+      // As in the whole load: edits of the demo network made before this browser had a server.
+      const legacyEdits = changedIds(createSampleNetwork(), getNetworkSnapshot(), sameValue);
+      meta.pending = mergePending(meta.pending, legacyEdits);
+    }
+    const local = getNetworkSnapshot();
+    const byArea = new Set<string>(AREA_COLLECTIONS);
+    const server = Object.fromEntries(
+      Object.keys(local)
+        .filter(isCollectionName)
+        .map((name) => [name, byArea.has(name) ? (area.data[name] ?? []) : (rest.data[name] ?? [])]),
+    ) as unknown as NetworkSnapshot;
+    const merged = reconcile(server, local, unsent());
+    const changed = differingCollections(local, merged);
+    if (Object.keys(changed).length > 0) applyRemote(changed);
+
+    loadVersions({ ...rest.versions, ...area.versions });
+    const waiting = new Set(flatten(unsent()).map((k) => recordKey(k.collection, k.id)));
+    meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => waiting.has(k)));
+    meta.revision = Math.min(rest.revision, area.revision);
+    meta.mode = 'area';
+    // A cut-short answer is not counted as loaded, so zooming in loads that place again.
+    areaBoxes = area.truncated ? [] : [box];
+    areaTruncated = area.truncated;
+    link = 'online';
+    linkError = null;
+    retryAttempt = 0;
+    lastSyncedAt = Date.now();
+    persistMeta();
+    updateStatus();
+    updateAreaStatus();
+    startPolling();
+    let behind = Math.max(rest.revision, area.revision) !== meta.revision;
+    try {
+      const refs = await loadReferences(area.data);
+      if (refs !== null && refs !== meta.revision) behind = true;
+    } catch (error) {
+      if (isLoginError(error)) return needLogin();
+      if (isTransientError(error)) return goOffline(error);
+    }
+    if (!started) return;
+    updateAreaStatus();
+    if (behind) await catchUp(meta.revision);
+    else if (!isEmptyPending(meta.pending)) await send();
+  }
+
+  /** Loads the area in view when it is not loaded yet. Adds records only; then catches up to one revision. */
+  async function loadArea(box: AreaBox = currentBox()): Promise<void> {
+    if (!started || link !== 'online' || meta.mode !== 'area' || !client.getArea) return;
+    if (isCovered(areaBoxes, box)) {
+      updateAreaStatus();
+      return;
+    }
+    const before = meta.revision;
+    areaLoading = true;
+    updateAreaStatus();
+    try {
+      const area = await client.getArea(box, AREA_COLLECTIONS);
+      if (!started || meta.mode !== 'area') return;
+      applyLoaded(area.data, area.versions);
+      areaTruncated = area.truncated;
+      if (!area.truncated) areaBoxes = [...areaBoxes.slice(-49), box];
+      const refs = await loadReferences(area.data);
+      if (before !== null && (area.revision !== before || (refs !== null && refs !== before))) await catchUp(before);
+    } catch (error) {
+      if (isLoginError(error)) needLogin();
+      else if (isTransientError(error)) goOffline(error);
+    } finally {
+      areaLoading = false;
+      updateAreaStatus();
+    }
+  }
+
+  const scheduleAreaLoad = () => {
+    if (meta.mode !== 'area') return;
+    clearTimeout(areaTimer);
+    areaTimer = setTimeout(() => void exclusive(() => loadArea()), areaDebounceMs);
+  };
+
+  function searchServer(query: string): Promise<{ total: number; loaded: number } | null> {
+    if (!started || link !== 'online' || meta.mode !== 'area' || !client.search || !client.getRecords || !query.trim()) return Promise.resolve(null);
+    return exclusive(async () => {
+      try {
+        const result = await client.search!(query);
+        const held = getNetworkSnapshot();
+        const here = new Set<string>();
+        for (const name of AREA_COLLECTIONS) for (const r of held[name] as unknown as { id: string }[]) here.add(r.id);
+        const byArea = new Set<string>(AREA_COLLECTIONS);
+        const missing = [...new Set(result.hits.filter((hit) => byArea.has(hit.collection) && !here.has(hit.id)).map((hit) => hit.id))];
+        if (missing.length === 0) return { total: result.total, loaded: 0 };
+        const before = meta.revision;
+        const found = await client.getRecords!(missing.slice(0, 1_000), AREA_COLLECTIONS);
+        if (!started) return null;
+        applyLoaded(found.data, found.versions);
+        const loaded = Object.values(found.data).reduce((n, list) => n + (list?.length ?? 0), 0);
+        updateAreaStatus();
+        if (before !== null && found.revision !== before) await catchUp(before);
+        return { total: result.total, loaded };
+      } catch (error) {
+        if (isLoginError(error)) needLogin();
+        else if (isTransientError(error)) goOffline(error);
+        return null;
+      }
+    });
+  }
+
+  /** The server has no `GET /changes` (an older server): every check loads the whole network, as before. */
+  let changesUnsupported = false;
+
+  /**
+   * Phase 24: brings this device up to date from `since` with only what changed on the server,
+   * merged exactly as a full load is (unsent records keep their local version). Anything unusual
+   * (no history that far back, an older server, an unreadable answer) loads the whole network.
+   */
+  async function catchUp(since: number | null): Promise<void> {
+    if (since === null || !client.getChanges || changesUnsupported) return connect();
+    let changes: ChangesResponse;
+    try {
+      changes = await client.getChanges(since);
+    } catch (error) {
+      if (isLoginError(error)) {
+        needLogin();
+        return;
+      }
+      if (error instanceof ApiError && error.status === 404) changesUnsupported = true;
+      return connect();
+    }
+    if (!started) return;
+    if (changes.reload) return connect();
+
+    const local = getNetworkSnapshot();
+    const merged = reconcile(applyServerChanges(local, changes), local, unsent());
+    const changed = differingCollections(local, merged);
+    if (Object.keys(changed).length > 0) applyRemote(changed);
+
+    for (const [collection, ids] of Object.entries(changes.deletes)) for (const id of ids ?? []) serverVersions.delete(`${collection}/${id}`);
+    for (const [collection, byId] of Object.entries(changes.versions)) {
+      for (const [id, version] of Object.entries(byId ?? {})) serverVersions.set(`${collection}/${id}`, version);
+    }
+    const waiting = new Set(flatten(unsent()).map((k) => recordKey(k.collection, k.id)));
+    meta.bases = Object.fromEntries(Object.entries(meta.bases ?? {}).filter(([k]) => waiting.has(k)));
+    meta.revision = changes.revision;
+    lastSyncedAt = Date.now();
+    persistMeta();
+    updateStatus();
+    if (meta.mode === 'area') updateAreaStatus();
     if (!isEmptyPending(meta.pending)) await send();
   }
 
@@ -573,13 +921,15 @@ export function createSyncEngine({
 
     sending = null;
     recordWritten(flatten(batch), result);
+    logHistory('sent', flatten(batch));
     const wrote = result.upserted + result.deleted > 0;
     const someoneElseWrote = expected !== null && result.revision !== (wrote ? expected + 1 : expected);
     meta.revision = result.revision;
     lastSyncedAt = Date.now();
     persistMeta();
     updateStatus();
-    if (someoneElseWrote) await connect();
+    // Phase 24: only what changed since this device's last known revision (its own write included).
+    if (someoneElseWrote) await catchUp(expected);
     else scheduleFlush();
   }
 
@@ -589,7 +939,8 @@ export function createSyncEngine({
       try {
         const health = await client.health();
         // No revision: the server no longer sees a login here, and loading will ask for one.
-        if (health.revision === undefined || health.revision !== meta.revision) await connect();
+        if (health.revision === undefined) await connect();
+        else if (health.revision !== meta.revision) await catchUp(meta.revision);
       } catch (error) {
         if (isLoginError(error)) needLogin();
         if (isTransientError(error)) goOffline(error);
@@ -710,14 +1061,31 @@ export function createSyncEngine({
   });
 
   return {
+    setLoadPreference: (preference) =>
+      exclusive(async () => {
+        writeLoadPreference(preference);
+        if (!started) return;
+        if (link === 'online' && !isEmptyPending(meta.pending)) await send();
+        await connect();
+      }),
+
+    searchServer,
+
+    loadPlace: (lat, lng) => (meta.mode === 'area' ? exclusive(() => loadArea(viewBox({ lat, lng, zoom: 18 }, { width: 800, height: 800 }))) : Promise.resolve()),
+
     start() {
       if (started) return;
       started = true;
-      meta = readJson<SyncMeta>(SYNC_META_STORAGE_KEY, { revision: null, pending: {} }, isSyncMeta);
+      meta = cacheRead<SyncMeta>(SYNC_META_STORAGE_KEY, { revision: null, pending: {} }, isSyncMeta);
       meta.pending = withoutKeys(meta.pending, flatten(held()));
       link = 'connecting';
       updateStatus();
+      // Phase 24b: a copy loaded by map area says so at once, also while offline.
+      updateAreaStatus();
       unsubscribe = useNetworkStore.subscribe(onLocalChange);
+      unsubscribeView = useMapStore.subscribe((state, prev) => {
+        if (state.viewport !== prev.viewport) scheduleAreaLoad();
+      });
       if (typeof window !== 'undefined') {
         window.addEventListener('online', onOnline);
         window.addEventListener('pagehide', onPageHide);
@@ -731,6 +1099,9 @@ export function createSyncEngine({
       started = false;
       unsubscribe?.();
       unsubscribe = null;
+      unsubscribeView?.();
+      unsubscribeView = null;
+      clearTimeout(areaTimer);
       clearFlushTimers();
       clearTimeout(reconnectTimer);
       stopPolling();
@@ -740,6 +1111,7 @@ export function createSyncEngine({
         document.removeEventListener('visibilitychange', onVisibilityChange);
       }
       useSyncStore.setState(initialSyncState);
+      useAreaLoadStore.setState(initialAreaLoadState);
     },
 
     flush,
@@ -840,6 +1212,45 @@ export function createSyncEngine({
         updateStatus();
         if (link === 'online') await send();
         return true;
+      }),
+
+    // Phase 16: one checked write, all or nothing, put on this device only once the server stored it.
+    sendAtomic: (changes) =>
+      exclusive(async () => {
+        if (!started || link !== 'online') {
+          throw new ApiUnavailableError('Changing many items at once needs the connection to the office server, so every rule is checked at once. Nothing was changed.');
+        }
+        const keys: RecordKey[] = [];
+        for (const [collection, list] of Object.entries(changes.upserts ?? {})) for (const r of (list ?? []) as { id: string }[]) keys.push({ collection: collection as CollectionName, id: r.id });
+        for (const [collection, ids] of Object.entries(changes.deletes ?? {})) for (const id of (ids ?? []) as string[]) keys.push({ collection: collection as CollectionName, id });
+        const expect: Partial<Record<CollectionName, Record<string, number>>> = {};
+        for (const key of keys) {
+          const version = serverVersions.get(recordKey(key.collection, key.id));
+          if (version !== undefined) (expect[key.collection] ??= {})[key.id] = version;
+        }
+        const before = meta.revision;
+        let result: ChangeResult;
+        try {
+          result = await client.applyChanges({ ...changes, ...(Object.keys(expect).length > 0 ? { expect } : {}) });
+        } catch (error) {
+          if (isLoginError(error)) needLogin();
+          else if (isTransientError(error)) goOffline(error);
+          throw error;
+        }
+        const local = getNetworkSnapshot();
+        const merged = applyServerChanges(local, { upserts: (changes.upserts ?? {}) as never, deletes: (changes.deletes ?? {}) as never });
+        const changed = differingCollections(local, merged);
+        if (Object.keys(changed).length > 0) applyRemote(changed);
+        recordWritten(keys, result);
+        logHistory('sent', keys);
+        const wrote = result.upserted + result.deleted > 0;
+        const someoneElseWrote = before !== null && result.revision !== (wrote ? before + 1 : before);
+        meta.revision = result.revision;
+        lastSyncedAt = Date.now();
+        persistMeta();
+        updateStatus();
+        if (someoneElseWrote) await catchUp(before);
+        return result;
       }),
   };
 }

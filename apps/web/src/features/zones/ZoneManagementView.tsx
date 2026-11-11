@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { MapPin, PlusCircle, Trash2 } from 'lucide-react';
+import { MapPin, PenLine, PlusCircle, Trash2 } from 'lucide-react';
 
-import type { NetworkZone } from '@fibergis/shared';
+import { boundsOf, type NetworkZone, polygonAreaSqMeters } from '@fibergis/shared';
 
 import { useOpenView } from '../../app/views';
 import { useMapStore } from '../../stores/mapStore';
 import { addZone, deleteZone } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useToastStore } from '../../stores/toastStore';
+import { formatArea } from '../map/markerIcons';
 
 export const ZoneManagementView: React.FC = () => {
   const zones = useNetworkStore((s) => s.zones);
-  const flyToLocation = useMapStore((s) => s.flyTo);
+  const fitBounds = useMapStore((s) => s.fitBounds);
+  const startZoneBoundary = useMapStore((s) => s.startZoneBoundary);
   const showToast = useToastStore((s) => s.show);
   const openView = useOpenView();
 
@@ -40,9 +42,8 @@ export const ZoneManagementView: React.FC = () => {
       areaCode: newAreaCode,
       homePassed: Number(newHomesPassed),
       coverageSqKm: Number(newCoverageSqKm),
+      // Counts are not made up; they stay 0 until they come from records.
       connectedCustomers: 0,
-      feederCableCount: 1,
-      fatCount: 4,
       penetrationRatePct: 0,
       status: newStatus,
     });
@@ -54,14 +55,24 @@ export const ZoneManagementView: React.FC = () => {
   };
 
   const handleLocateZone = (zone: NetworkZone) => {
-    if (zone.boundaryCoords && zone.boundaryCoords.length > 0) {
-      const midLat = zone.boundaryCoords.reduce((acc, c) => acc + c[0], 0) / zone.boundaryCoords.length;
-      const midLng = zone.boundaryCoords.reduce((acc, c) => acc + c[1], 0) / zone.boundaryCoords.length;
-      openView('map');
-      setTimeout(() => {
-        flyToLocation(midLat, midLng, 16);
-      }, 100);
+    if (!zone.boundaryCoords || zone.boundaryCoords.length === 0) {
+      showToast('info', 'No boundary yet', `${zone.name} has no boundary drawn, so it has no place on the map yet.`);
+      return;
     }
+    const bounds = boundsOf(zone.boundaryCoords);
+    openView('map');
+    setTimeout(() => {
+      if (bounds) fitBounds(bounds);
+    }, 100);
+  };
+
+  // Draw (or redraw) the boundary on the map: the same tap-by-tap tool as a cable.
+  const handleDrawBoundary = (zone: NetworkZone) => {
+    openView('map');
+    setTimeout(() => {
+      startZoneBoundary(zone.id);
+      showToast('info', `Boundary for ${zone.name}`, 'Tap the map around the zone, then tap Finish.');
+    }, 100);
   };
 
   return (
@@ -135,7 +146,12 @@ export const ZoneManagementView: React.FC = () => {
                   </div>
 
                   <h3 className="text-sm font-bold text-slate-800">{zone.name}</h3>
-                  <div className="text-[11px] text-slate-400 mt-0.5">Coverage: {zone.coverageSqKm} sq km</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">Coverage (typed in): {zone.coverageSqKm} sq km</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5" data-testid="zone-boundary-area">
+                    {zone.boundaryCoords.length >= 3
+                      ? `Drawn boundary: ${formatArea(polygonAreaSqMeters(zone.boundaryCoords))} (worked out from the drawing)`
+                      : 'No boundary drawn yet'}
+                  </div>
 
                   {/* Penetration Gauge */}
                   <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -169,13 +185,21 @@ export const ZoneManagementView: React.FC = () => {
                 </div>
 
                 {/* Card Actions */}
-                <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div className="mt-5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                   <button
                     onClick={() => handleLocateZone(zone)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors"
                   >
                     <MapPin className="w-3.5 h-3.5" />
                     <span>Locate Zone on GIS Map</span>
+                  </button>
+                  <button
+                    onClick={() => handleDrawBoundary(zone)}
+                    data-testid="zone-draw-boundary"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <PenLine className="w-3.5 h-3.5" />
+                    <span>{zone.boundaryCoords.length >= 3 ? 'Redraw boundary' : 'Draw boundary on map'}</span>
                   </button>
 
                   <button

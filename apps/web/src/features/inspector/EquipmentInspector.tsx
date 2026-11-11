@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   BookOpen,
   Cable as CableGlyph,
@@ -5,7 +6,6 @@ import {
   FileText,
   Gauge,
   GitMerge,
-  Info,
   Move,
   Navigation,
   PlugZap,
@@ -19,6 +19,8 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import {
+  type EffectiveSpec,
+  effectiveSpecs,
   type Equipment,
   isOdfType,
   isPoleType,
@@ -34,11 +36,19 @@ import { useMapStore } from '../../stores/mapStore';
 import { deleteEquipment } from '../../stores/networkActions';
 import { selectOpticalSettings, useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { hostsClosure, hostsSplitters } from '../fiber/fiberUi';
 import { ClosureLinkSection, OdfSection, PonPortSection, SplitterSection } from '../fiber/PlantSections';
+import { BoxInspections, FieldReviewBanner } from '../field-review/ReviewOnItem';
+import { SplitterDesignSection } from '../map/pon/SplitterDesignSection';
+import { OltChassisSection } from '../olt-rack/OltChassisSection';
+import { SiteRackSection } from '../olt-rack/SiteRackSection';
 import { BuildingSection } from '../premises/BuildingSection';
 import { navigateToSite, startCableFrom } from './actions';
-import { formatDate, formatUptime, joinPresent, orNotRecorded, presentItems } from './format';
+import { AssetDetailsSection, AssetSpecsSection } from './AssetSections';
+import { SLACK_LOOP_SPEC_ROWS, type SpecRowDef, SPLICE_JOINT_SPEC_ROWS, useItemTabCounts } from './assetTabData';
+import { CustomersOnItemSection, DocumentsOnItemSection, HistorySection, MaintenanceSection, PlacementToolRows } from './AssetTabs';
+import { formatDate, formatUptime, joinPresent, NOT_RECORDED, orNotRecorded, presentItems } from './format';
 import { OltSections } from './OltSection';
 import {
   CablesOnPoleSection,
@@ -74,15 +84,6 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 
 /** Chambers and entries where ducts start and end. */
 const DUCT_ENDS = new Set(['Manhole', 'Handhole', 'Underground Chamber', 'Building Entry Point', 'Junction Point']);
-
-/** Visible on every panel whose numbers describe a type of equipment rather than this one. */
-function ExampleValuesLabel() {
-  return (
-    <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900">
-      Example values, not your network
-    </p>
-  );
-}
 
 function RatioCouplerLossSection() {
   const optical = useNetworkStore(selectOpticalSettings);
@@ -263,48 +264,118 @@ function NodeOpticalPowerSection({ equipment }: { equipment: Equipment }) {
   );
 }
 
-function SpliceJointSection() {
-  const optical = useNetworkStore(selectOpticalSettings);
+/**
+ * Spec rows read from the item's catalogue model and its own changes (Phase 3), each matched by any
+ * of the usual names for it. Absent: "Not recorded". Never a typical or example value.
+ */
+export function RecordedSpecRows({ specs, rows }: { specs: readonly EffectiveSpec[]; rows: readonly SpecRowDef[] }) {
+  const find = (keys: string[]) => specs.find((s) => keys.includes(s.key.trim().toLowerCase()));
   return (
-    <InspectorSection title="Fusion Splice Loss Specs" icon={GitMerge} defaultOpen>
-      <ExampleValuesLabel />
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-          <div className="text-[10px] uppercase text-slate-400">Planned Loss</div>
-          <div className="font-semibold text-slate-800">{optical.fusionSpliceDb} dB</div>
-        </div>
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-          <div className="text-[10px] uppercase text-slate-400">Return Loss</div>
-          <div className="font-semibold text-slate-800">&gt; 60 dB</div>
-        </div>
-        <div className="col-span-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
-          <div className="text-[10px] uppercase text-slate-400">Protection Sleeve</div>
-          <div className="font-medium text-slate-700">60mm heat-shrink with stainless strength member</div>
-        </div>
+    <div className="space-y-1.5 text-xs" data-testid="recorded-spec-rows">
+      {rows.map(({ label, keys }) => {
+        const spec = find(keys);
+        return (
+          <div key={label} className="flex items-start justify-between gap-3 border-b border-slate-100 py-1 last:border-b-0">
+            <span className="text-slate-500">{label}</span>
+            <span className="text-right">
+              <span className="block font-semibold text-slate-800">{spec?.value ? `${spec.value}${spec.unit ? ` ${spec.unit}` : ''}` : NOT_RECORDED}</span>
+              {spec && (
+                <span className="block text-[10px] text-slate-400">
+                  {spec.origin === 'model' ? 'From the catalogue model' : spec.origin === 'changed' ? 'Changed for this item' : 'Recorded for this item'}
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+      <p className="pt-1 text-[11px] text-slate-500">From the item's catalogue model and its own specs. Add or change them on the Specs tab.</p>
+    </div>
+  );
+}
+
+/** The item's specs: its catalogue model's lines with its own changes. */
+function useItemSpecs(equipment: Equipment): EffectiveSpec[] {
+  const model = useNetworkStore((s) => (equipment.catalogModelId ? s.catalog.find((c) => c.id === equipment.catalogModelId) : undefined));
+  return effectiveSpecs(model, equipment);
+}
+
+function SpliceJointSection({ equipment }: { equipment: Equipment }) {
+  const optical = useNetworkStore(selectOpticalSettings);
+  const specs = useItemSpecs(equipment);
+  return (
+    <InspectorSection title="Splice specs" icon={GitMerge} defaultOpen>
+      <div className="mb-2 flex items-start justify-between gap-3 border-b border-slate-100 pb-1.5 text-xs">
+        <span className="text-slate-500">Planning loss per fusion splice</span>
+        <span className="text-right">
+          <span className="block font-semibold text-slate-800">{optical.fusionSpliceDb} dB</span>
+          <span className="block text-[10px] text-slate-400">Planning value from Optical settings, not a reading</span>
+        </span>
       </div>
+      <RecordedSpecRows specs={specs} rows={SPLICE_JOINT_SPEC_ROWS} />
     </InspectorSection>
   );
 }
 
-function SlackLoopSection() {
+function SlackLoopSection({ equipment }: { equipment: Equipment }) {
+  const specs = useItemSpecs(equipment);
   return (
-    <InspectorSection title="Fiber Slack Storage (Snowshoe)" icon={Repeat} defaultOpen>
-      <ExampleValuesLabel />
-      <div className="space-y-1.5 text-xs">
-        <div className="flex justify-between border-b border-slate-100 py-1">
-          <span className="text-slate-500">Reserve Loop Length</span>
-          <span className="font-semibold text-slate-800">20 meters (15m–30m)</span>
-        </div>
-        <div className="flex justify-between border-b border-slate-100 py-1">
-          <span className="text-slate-500">Minimum Bend Radius</span>
-          <span className="font-semibold text-slate-800">30 mm (G.652D)</span>
-        </div>
-        <div className="flex justify-between py-1">
-          <span className="text-slate-500">Mounting Bracket</span>
-          <span className="font-medium text-slate-700">Snowshoe aerial / chamber coil</span>
-        </div>
-      </div>
+    <InspectorSection title="Slack storage" icon={Repeat} defaultOpen>
+      <RecordedSpecRows specs={specs} rows={SLACK_LOOP_SPEC_ROWS} />
     </InspectorSection>
+  );
+}
+
+/** Phase 3: the inspector's tabs. Every section that existed before sits on one of them. */
+const INSPECTOR_TABS = [
+  { id: 'details', label: 'Details' },
+  { id: 'specs', label: 'Specs' },
+  { id: 'connectivity', label: 'Connectivity' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'maintenance', label: 'Maintenance' },
+  { id: 'history', label: 'History' },
+] as const;
+type InspectorTab = (typeof INSPECTOR_TABS)[number]['id'];
+
+/** The tab last chosen, so looking at pole after pole stays on the same tab. */
+let lastTab: InspectorTab = 'details';
+
+function InspectorTabBar({
+  value,
+  onChange,
+  counts,
+}: {
+  value: InspectorTab;
+  onChange: (tab: InspectorTab) => void;
+  counts: Partial<Record<InspectorTab, number>>;
+}) {
+  return (
+    <div role="tablist" aria-label="Item details" className="no-scrollbar sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2" data-testid="inspector-tabs">
+      {INSPECTOR_TABS.map((t) => {
+        const active = t.id === value;
+        const count = counts[t.id];
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            data-testid={`inspector-tab-${t.id}`}
+            onClick={() => onChange(t.id)}
+            className={`-mb-px flex h-12 shrink-0 items-center gap-1 border-b-2 px-2.5 text-[13px] font-medium md:h-10 md:text-[12px] ${
+              active ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {t.label}
+            {count !== undefined && count > 0 && (
+              <span className={`rounded px-1.5 text-[10px] font-semibold leading-4 tabular-nums ${active ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -320,17 +391,27 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
     equipment.totalPorts || equipment.ponPorts?.length || PORT_MANAGED_TYPES.has(equipment.type),
   );
 
+  const [tab, setTab] = useState<InspectorTab>(lastTab);
+  const chooseTab = (next: InspectorTab) => {
+    lastTab = next;
+    setTab(next);
+  };
+  const counts = useItemTabCounts(equipment);
+
   const isMoving = useMapStore((s) => s.movingEquipmentId === equipment.id);
+  const catalogModel = useNetworkStore((s) => (equipment.catalogModelId ? s.catalog.find((c) => c.id === equipment.catalogModelId) : undefined));
   const setMovingEquipmentId = useMapStore((s) => s.setMovingEquipmentId);
 
   const details = presentItems([
     { label: 'Category', value: equipment.category },
     { label: 'Area', value: orNotRecorded(joinPresent([equipment.street, equipment.area], ', ')) },
     { label: 'Make / model', value: orNotRecorded(joinPresent([equipment.manufacturer, equipment.model])) },
+    { label: 'Catalogue model', value: catalogModel ? catalogModel.name : equipment.catalogModelId ? `${equipment.catalogModelId} (not on this device)` : 'Not linked' },
     { label: 'Serial number', value: orNotRecorded(equipment.serialNumber), mono: true },
+    { label: 'Tag', value: orNotRecorded(equipment.tagCode), mono: true },
     { label: 'Management IP', value: equipment.ipAddress, mono: true },
     {
-      label: 'Rack position',
+      label: 'Rack position (as written)',
       value: joinPresent(
         [
           withPrefix('Rack', equipment.rackNumber),
@@ -349,7 +430,7 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
         : undefined,
     },
     { label: 'Uptime', value: equipment.uptimeHours !== undefined ? formatUptime(equipment.uptimeHours) : undefined },
-    { label: 'Installed', value: formatDate(equipment.installedDate) },
+    { label: 'Installed', value: orNotRecorded(equipment.installedDate ? formatDate(equipment.installedDate) : undefined) },
     { label: 'Coordinates', value: `${equipment.lat.toFixed(5)}, ${equipment.lng.toFixed(5)}`, mono: true },
     {
       label: 'Location from',
@@ -411,122 +492,174 @@ export function EquipmentInspector({ equipment, detailed }: { equipment: Equipme
         </>
       }
     >
-      {isOlt && <OltSections olt={equipment} detailed={detailed} />}
-      {isOlt && <PonPortSection olt={equipment} />}
-      {isOdfType(equipment.type) && <OdfSection odf={equipment} />}
-      {hostsClosure(equipment.type) && <ClosureLinkSection equipment={equipment} />}
-      {hostsSplitters(equipment.type) && <SplitterSection host={equipment} />}
-      {equipment.type === 'Building Entry Point' && <BuildingSection equipment={equipment} />}
+      <InspectorTabBar value={tab} onChange={chooseTab} counts={counts} />
 
-      {capacity && (
-        <InspectorSection title="Capacity" icon={Gauge}>
-          <PortUsage used={capacity.used} total={capacity.total} />
-        </InspectorSection>
-      )}
-
-      {equipment.type === 'Ratio Coupler' && <RatioCouplerLossSection />}
-      {(equipment.type === 'ONT' || equipment.type === 'ONU' || equipment.type === 'Optical Instrument') && (
-        <OntPowerLevelSection equipment={equipment} />
-      )}
-      {equipment.type === 'CATV Optical Node' && <NodeOpticalPowerSection equipment={equipment} />}
-      {equipment.type === 'Fiber Splice Joint' && <SpliceJointSection />}
-      {equipment.type === 'Fiber Slack Loop' && <SlackLoopSection />}
-
-      {isPoleType(equipment.type) && (
+      {/* Phase 3: every earlier section is kept; each now sits on one tab. */}
+      {tab === 'connectivity' && (
         <>
-          <CablesOnPoleSection equipment={equipment} />
-          <PoleDetailsSection equipment={equipment} />
-          <SpansSection equipment={equipment} />
-          <PermissionsSection equipment={equipment} />
+          {isOlt && <PonPortSection olt={equipment} />}
+          {/* Phase 10: shelves, slots and cards. */}
+          {isOlt && <OltChassisSection key={equipment.id} olt={equipment} />}
+          {isOdfType(equipment.type) && <OdfSection odf={equipment} />}
+          {/* Phase 9: site, rack and units, with the rack drawing. */}
+          {(isOlt || isOdfType(equipment.type) || equipment.type === 'FDMS' || equipment.siteId || equipment.rackId || equipment.site || equipment.rackNumber) && (
+            <SiteRackSection key={equipment.id} equipment={equipment} />
+          )}
+          {hostsClosure(equipment.type) && <ClosureLinkSection equipment={equipment} />}
+          {hostsSplitters(equipment.type) && <SplitterDesignSection host={equipment} />}
+          {hostsSplitters(equipment.type) && <SplitterSection host={equipment} />}
+          {capacity && (
+            <InspectorSection title="Capacity" icon={Gauge}>
+              <PortUsage used={capacity.used} total={capacity.total} />
+            </InspectorSection>
+          )}
+          {(equipment.type === 'ONT' || equipment.type === 'ONU' || equipment.type === 'Optical Instrument') && (
+            <OntPowerLevelSection equipment={equipment} />
+          )}
+          {equipment.type === 'CATV Optical Node' && <NodeOpticalPowerSection equipment={equipment} />}
+          {isPoleType(equipment.type) && (
+            <>
+              <CablesOnPoleSection equipment={equipment} />
+              <SpansSection equipment={equipment} />
+            </>
+          )}
+          {DUCT_ENDS.has(equipment.type) && <DuctsAtSection equipment={equipment} />}
+          {/* Network mapping Phase 13: every recorded link of this item, with its check state. */}
+          <ConnectionsPanel key={equipment.id} target={{ elementId: equipment.id }} />
+          <p className="px-4 py-3 text-[12px] text-slate-500">
+            Only links that are recorded are shown. Use Trace path to follow this item through the network.
+          </p>
         </>
       )}
-      {DUCT_ENDS.has(equipment.type) && <DuctsAtSection equipment={equipment} />}
-      {equipment.importInfo && <ImportInfoSection info={equipment.importInfo} />}
 
-      <InspectorSection title="Details" icon={Info}>
-        <KeyValueList items={details} />
-      </InspectorSection>
+      {tab === 'customers' && (
+        <>
+          {equipment.type === 'Building Entry Point' && <BuildingSection equipment={equipment} />}
+          <CustomersOnItemSection equipment={equipment} />
+        </>
+      )}
 
-      <InspectorSection title="Tools" icon={Wrench} defaultOpen={detailed || !isOlt}>
-        <ActionList>
-          {hasPorts && (
-            <ActionRow
-              icon={PlugZap}
-              label="Port manager"
-              hint="Assign, reserve and audit ports"
-              onClick={() => setModalOpen('portManager', true)}
-            />
-          )}
-          {isTerminalBox(equipment.type) && (
-            <ActionRow
-              icon={Camera}
-              label="Photos and annotations"
-              hint={equipment.images.length > 0 ? plural(equipment.images.length, 'photo') : 'No photos yet'}
-              onClick={() => setModalOpen('terminalBox', true)}
-            />
-          )}
-          {isSpliceClosure(equipment.type) && (
-            <ActionRow
-              icon={GitMerge}
-              label="Splice records"
-              hint="Fusion splices inside this closure"
-              onClick={() =>
-                useUiStore.getState().openSplicing(useNetworkStore.getState().closures.find((c) => c.equipmentId === equipment.id)?.id ?? null)
-              }
-            />
-          )}
-          {(equipment.type.includes('Splitter') ||
-            equipment.type.includes('Coupler') ||
-            isTerminalBox(equipment.type) ||
-            isSpliceClosure(equipment.type) ||
-            equipment.type === 'FDMS' ||
-            equipment.type === 'FDT' ||
-            equipment.type === 'FAT' ||
-            equipment.type === 'Fiber Joint Closure') && (
-            <ActionRow
-              icon={GitMerge}
-              label="Connect what feeds this"
-              hint="Draws a straight cable from what you choose"
-              onClick={() => openSpliceModal(equipment)}
-            />
-          )}
-          {equipment.type.includes('Splitter') && (
-            <ActionRow
-              icon={Split}
-              label="Splitter ports"
-              hint="Output port assignments"
-              onClick={() => setModalOpen('splitter', true)}
-            />
-          )}
-          <ActionRow
-            icon={Move}
-            label="Move this item"
-            hint={isMoving ? 'Drag the pin, or cancel in the bar on the map' : 'Its connected cable ends move with it'}
-            onClick={() => {
-              setMovingEquipmentId(equipment.id);
-              // On a phone the inspector covers the map, so get it out of the way.
-              if (window.innerWidth < 768) useUiStore.getState().setPanelOpen('right', false);
-            }}
-          />
-          <ActionRow
-            icon={CableGlyph}
-            label="Start cable here"
-            hint="Draw a new route from this location"
-            onClick={() => startCableFrom(equipment)}
-          />
-          <ActionRow
-            icon={BookOpen}
-            label="Equipment guide"
-            hint={`How a ${equipment.type} is used in the network`}
-            onClick={() => openKnowledge(equipment.type)}
-          />
-        </ActionList>
-      </InspectorSection>
+      {tab === 'documents' && (
+        <>
+          <DocumentsOnItemSection equipment={equipment} />
+          {isPoleType(equipment.type) && <PermissionsSection equipment={equipment} />}
+        </>
+      )}
 
-      {equipment.notes && (
-        <InspectorSection title="Notes" icon={FileText}>
-          <p className="whitespace-pre-line text-[13px] leading-relaxed text-slate-700">{equipment.notes}</p>
-        </InspectorSection>
+      {tab === 'maintenance' && (
+        <>
+          <MaintenanceSection equipment={equipment} />
+          {/* Phase 19: boxes and closures are inspected too, with their own checklist. */}
+          <BoxInspections equipment={equipment} />
+        </>
+      )}
+
+      {tab === 'history' && <HistorySection equipment={equipment} />}
+
+      {tab === 'specs' && (
+        <>
+          <AssetSpecsSection equipment={equipment} />
+          {equipment.type === 'Ratio Coupler' && <RatioCouplerLossSection />}
+          {equipment.type === 'Fiber Splice Joint' && <SpliceJointSection equipment={equipment} />}
+          {equipment.type === 'Fiber Slack Loop' && <SlackLoopSection equipment={equipment} />}
+        </>
+      )}
+
+      {tab === 'details' && (
+        <>
+          {/* Phase 19: a phone capture waiting for, or refused by, the office review. */}
+          <FieldReviewBanner equipment={equipment} />
+          {isOlt && <OltSections olt={equipment} detailed={detailed} />}
+          {isPoleType(equipment.type) && <PoleDetailsSection equipment={equipment} />}
+          {equipment.importInfo && <ImportInfoSection info={equipment.importInfo} />}
+
+          <AssetDetailsSection equipment={equipment}>
+            <KeyValueList items={details} />
+          </AssetDetailsSection>
+
+          <InspectorSection title="Tools" icon={Wrench} defaultOpen={detailed || !isOlt}>
+            <ActionList>
+              {hasPorts && (
+                <ActionRow
+                  icon={PlugZap}
+                  label="Port manager"
+                  hint="Assign, reserve and audit ports"
+                  onClick={() => setModalOpen('portManager', true)}
+                />
+              )}
+              {isTerminalBox(equipment.type) && (
+                <ActionRow
+                  icon={Camera}
+                  label="Photos and annotations"
+                  hint={equipment.images.length > 0 ? plural(equipment.images.length, 'photo') : 'No photos yet'}
+                  onClick={() => setModalOpen('terminalBox', true)}
+                />
+              )}
+              {isSpliceClosure(equipment.type) && (
+                <ActionRow
+                  icon={GitMerge}
+                  label="Splice records"
+                  hint="Fusion splices inside this closure"
+                  onClick={() =>
+                    useUiStore.getState().openSplicing(useNetworkStore.getState().closures.find((c) => c.equipmentId === equipment.id)?.id ?? null)
+                  }
+                />
+              )}
+              {(equipment.type.includes('Splitter') ||
+                equipment.type.includes('Coupler') ||
+                isTerminalBox(equipment.type) ||
+                isSpliceClosure(equipment.type) ||
+                equipment.type === 'FDMS' ||
+                equipment.type === 'FDT' ||
+                equipment.type === 'FAT' ||
+                equipment.type === 'Fiber Joint Closure') && (
+                <ActionRow
+                  icon={GitMerge}
+                  label="Connect what feeds this"
+                  hint="Draws a straight cable from what you choose"
+                  onClick={() => openSpliceModal(equipment)}
+                />
+              )}
+              {equipment.type.includes('Splitter') && (
+                <ActionRow
+                  icon={Split}
+                  label="Splitter ports"
+                  hint="Output port assignments"
+                  onClick={() => setModalOpen('splitter', true)}
+                />
+              )}
+              <ActionRow
+                icon={Move}
+                label="Move this item"
+                hint={isMoving ? 'Drag the pin, or cancel in the bar on the map' : 'Its connected cable ends move with it'}
+                onClick={() => {
+                  setMovingEquipmentId(equipment.id);
+                  // On a phone the inspector covers the map, so get it out of the way.
+                  if (window.innerWidth < 768) useUiStore.getState().setPanelOpen('right', false);
+                }}
+              />
+              <ActionRow
+                icon={CableGlyph}
+                label="Start cable here"
+                hint="Draw a new route from this location"
+                onClick={() => startCableFrom(equipment)}
+              />
+              <PlacementToolRows equipment={equipment} />
+              <ActionRow
+                icon={BookOpen}
+                label="Equipment guide"
+                hint={`How a ${equipment.type} is used in the network`}
+                onClick={() => openKnowledge(equipment.type)}
+              />
+            </ActionList>
+          </InspectorSection>
+
+          {equipment.notes && (
+            <InspectorSection title="Notes" icon={FileText}>
+              <p className="whitespace-pre-line text-[13px] leading-relaxed text-slate-700">{equipment.notes}</p>
+            </InspectorSection>
+          )}
+        </>
       )}
     </InspectorLayout>
   );

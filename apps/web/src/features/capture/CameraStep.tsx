@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle2, RotateCcw, Tag } from 'lucide-react';
 
+import { normalizeTag } from '@fibergis/shared';
+
 import type { MessageKey } from '../../i18n/messages';
 import { useT } from '../../i18n/useT';
 import { cx } from './feedback';
@@ -188,6 +190,10 @@ export function TagStep({ onTag, onNoTag }: { onTag: (code: string) => void; onN
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <Instruction k="tag.title" />
+      {/* Phase 19: printed barcodes on asset labels are read as well as QR codes. */}
+      <p className="shrink-0 bg-slate-800 px-4 pb-2 text-[1.0625rem] font-semibold text-white" data-testid="tag-barcode-hint">
+        <Say k="tag.barcodeHint" />
+      </p>
       <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <video ref={videoRef} className={cx('h-full w-full object-cover', state !== 'live' && 'hidden')} playsInline muted />
         {state === 'live' && <FramingGuide shape="square" />}
@@ -205,6 +211,9 @@ export function TagStep({ onTag, onNoTag }: { onTag: (code: string) => void; onN
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-emerald-50 text-[1.5rem] font-bold text-emerald-950">
             <CheckCircle2 className="h-20 w-20 text-emerald-800" aria-hidden />
             {t('tag.read')}
+            <span className="max-w-full break-all px-4 font-mono text-[1.25rem]" data-testid="tag-read-code">
+              {normalizeTag(read)}
+            </span>
           </div>
         )}
       </div>

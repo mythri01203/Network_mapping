@@ -5,8 +5,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { type Customer, defaultFiberCount, type Equipment, polylineLengthMeters } from '@fibergis/shared';
 
 import { Button, Field, Modal, Select } from '../../components/ui';
+import { linkDropToCustomer } from '../../stores/connectionActions';
 import { setSplitterOutput } from '../../stores/fiberActions';
-import { addCable, updateCustomer } from '../../stores/networkActions';
+import { addCable } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
 
@@ -109,13 +110,8 @@ export const SpliceModal: React.FC = () => {
     if (isCustomer && chosen.splitterId && portId && core >= 1) {
       const linked = await setSplitterOutput(chosen.splitterId, Number(portId), { cableId: created.id, core });
       if (linked) {
-        updateCustomer(target.id, {
-          terminalBoxId: chosen.hostId,
-          splitterId: chosen.splitterId,
-          splitterOutputPort: Number(portId),
-          dropCableId: created.id,
-          fiberCore: core,
-        });
+        // Phase 12: the OLT side is then taken from the fibre links, never left from an older connection.
+        await linkDropToCustomer(target.id, { splitterId: chosen.splitterId, port: Number(portId), cableId: created.id, core });
       }
     }
     close();

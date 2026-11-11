@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
-import { monitoringSourceSchema, onuReadingSchema, onuStatusSchema } from './monitoringSchemas';
+import { importRecordSchema } from './importSchemas';
+import { linkVerificationSchema } from './linkVerificationSchemas';
+import { deviceStatusSchema, monitoringSourceSchema, onuReadingSchema, onuStatusSchema } from './monitoringSchemas';
+import { opticalBudgetRunSchema } from './opticalBudgetSchemas';
+import { planningScenarioSchema } from './planningSchemas';
 import { rfElementSchema, rfLevelSchema, rfLinkSchema } from './rfSchemas';
+import { validationFindingSchema } from './validationFindingSchemas';
 import {
   agentTripSchema,
   alarmSchema,
@@ -9,19 +14,23 @@ import {
   auditLogSchema,
   buildingSchema,
   cableSchema,
+  cableSegmentSchema,
   catalogComponentSchema,
   customerSchema,
   ductSchema,
   equipmentSchema,
   faultSchema,
   gpsRouteSchema,
+  inspectionSchema,
   jointClosureSchema,
   networkDocumentSchema,
   networkZoneSchema,
   ontSchema,
   permissionSchema,
+  rackSchema,
   serviceSchema,
   settingSchema,
+  siteSchema,
   slackLoopSchema,
   spanSchema,
   splitterSchema,
@@ -64,6 +73,24 @@ export const COLLECTION_SCHEMAS = {
   monitoringSources: monitoringSourceSchema,
   onuReadings: onuReadingSchema,
   onuStatuses: onuStatusSchema,
+  // Network mapping Phase 20: OLT, card, PON port and uplink status from a push source.
+  deviceStatuses: deviceStatusSchema,
+  inspections: inspectionSchema,
+  // Phase 9: sites and racks.
+  sites: siteSchema,
+  racks: rackSchema,
+  // Phase 6: stretches of one cable (install method, duct or spans, measured length).
+  cableSegments: cableSegmentSchema,
+  // Network mapping Phase 13: checks of physical links (OTDR, red light, meter, looked at it).
+  linkVerifications: linkVerificationSchema,
+  // Network mapping Phase 15: stored map-check findings (open, fine as it is, fixed; never deleted).
+  validationFindings: validationFindingSchema,
+  // Network mapping Phase 18: expansion scenarios. Plans only, never counted as the built network.
+  planningScenarios: planningScenarioSchema,
+  // Network mapping Phase 17: stored optical budget runs. History only; never changed, never a network record.
+  opticalBudgetRuns: opticalBudgetRunSchema,
+  // Network mapping Phase 21: import history (who, when, which file, what was made), for undo by import.
+  imports: importRecordSchema,
 } as const;
 
 export type CollectionName = keyof typeof COLLECTION_SCHEMAS;

@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "check:3d": "node scripts/view3d-check.mjs"
   },
   "dependencies": {
     "@fibergis/shared": "*",
@@ -17,13 +18,17 @@
     "@fontsource/noto-sans-telugu": "5.3.0",
     "@tmcw/togeojson": "7.1.3",
     "fflate": "0.8.3",
+    "html-to-image": "1.11.13",
     "jspdf": "4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router": "^7.18.5",
+    "shpjs": "6.2.0",
     "supercluster": "9.1.0",
+    "three": "0.186.1",
+    "write-excel-file": "4.1.1",
     "zustand": "^5.0.16",
     "zxing-wasm": "3.1.6"
   },
@@ -32,7 +37,9 @@
     "@types/leaflet": "^1.9.16",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "1.64.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
     "vite": "^6.1.0"

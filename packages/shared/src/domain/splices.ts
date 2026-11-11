@@ -1,5 +1,7 @@
 import type { JointClosure, SpliceRecord } from '../model/types';
-import { type CommandResult, fail, type NetworkData, notice, succeed } from './command';
+import { markSpliceEnteredByMistake } from './closureSplicing';
+import { type CommandContext, type CommandResult, fail, type NetworkData, notice, succeed } from './command';
+import { isSpliceActive } from './fiberIndex';
 
 const usesEndpoint = (s: SpliceRecord, cableId: string, core: number) =>
   (s.inputCableId === cableId && s.inputCore === core) || (s.outputCableId === cableId && s.outputCore === core);
@@ -7,7 +9,10 @@ const usesEndpoint = (s: SpliceRecord, cableId: string, core: number) =>
 const withSplices = (data: NetworkData, closureId: string, edit: (splices: SpliceRecord[]) => SpliceRecord[]) =>
   data.closures.map((c): JointClosure => (c.id === closureId ? { ...c, splices: edit(c.splices) } : c));
 
-/** Records a splice. A core can only be terminated once per closure (it may be spliced again further along). */
+/**
+ * Records a splice. A core can only be terminated once per closure (it may be spliced again further
+ * along). Splices out of service or entered by mistake are history and do not count.
+ */
 export function addSplice(data: NetworkData, closureId: string, splice: SpliceRecord): CommandResult<SpliceRecord> {
   const closure = data.closures.find((c) => c.id === closureId);
   if (!closure) return fail('Closure Missing', `Joint closure ${closureId} was not found.`);
@@ -16,8 +21,8 @@ export function addSplice(data: NetworkData, closureId: string, splice: SpliceRe
   }
   const duplicate = closure.splices.some(
     (s) =>
-      usesEndpoint(s, splice.inputCableId, splice.inputCore) ||
-      usesEndpoint(s, splice.outputCableId, splice.outputCore),
+      isSpliceActive(s) &&
+      (usesEndpoint(s, splice.inputCableId, splice.inputCore) || usesEndpoint(s, splice.outputCableId, splice.outputCore)),
   );
   if (duplicate) {
     return fail(
@@ -39,25 +44,16 @@ export function addSplice(data: NetworkData, closureId: string, splice: SpliceRe
   );
 }
 
-export function removeSplice(data: NetworkData, closureId: string, spliceId: string): CommandResult<SpliceRecord> {
-  const closure = data.closures.find((c) => c.id === closureId);
-  if (!closure) return fail('Closure Missing', `Joint closure ${closureId} was not found.`);
-  const splice = closure.splices.find((s) => s.id === spliceId);
-  if (!splice) return fail('Splice Missing', `Splice ${spliceId} was not found in ${closureId}.`);
-
-  return succeed(
-    splice,
-    { closures: withSplices(data, closureId, (splices) => splices.filter((s) => s.id !== spliceId)) },
-    {
-      notice: notice('info', 'Splice Removed', `Deleted splice from closure ${closureId}`),
-      audit: [
-        {
-          action: 'SPLICE_REMOVED',
-          details: `${closureId}: removed ${splice.inputCableId} core ${splice.inputCore} → ${splice.outputCableId} core ${splice.outputCore}`,
-          assetId: closureId,
-          assetType: 'Closure',
-        },
-      ],
-    },
-  );
+/**
+ * "Entered by mistake". Phase 8: never a hard delete any more. The splice stays in the closure's
+ * history with when, who and why (see `markSpliceEnteredByMistake`).
+ */
+export function removeSplice(
+  data: NetworkData,
+  closureId: string,
+  spliceId: string,
+  reason = 'Entered by mistake',
+  ctx: CommandContext = {},
+): CommandResult<SpliceRecord> {
+  return markSpliceEnteredByMistake(data, closureId, spliceId, reason, ctx);
 }

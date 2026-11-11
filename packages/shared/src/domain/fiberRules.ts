@@ -1,7 +1,8 @@
-import { type ColorScheme, coreIdentity, DEFAULT_COLOR_SCHEMES } from '../fiber/colors';
+import { type ColorScheme, coreIdentity, DEFAULT_COLOR_SCHEMES, tubeRecordsProblem } from '../fiber/colors';
 import type { ChangeSet } from '../model/api';
 import type { SplitterRatio } from '../model/enums';
 import type { Splitter } from '../model/types';
+import { spliceDirectionMismatch, trayUsage } from './closureTrays';
 import {
   buildFiberIndex,
   coreKey,
@@ -14,6 +15,7 @@ import {
   splitterCapacity,
 } from './fiberIndex';
 import { opticsClassMismatch, tracePonTree } from './fiberPath';
+import { oltChassisProblems } from './oltConfig';
 import { DEFAULT_OPTICAL_SETTINGS, idealSplitterLossDb, type OpticalSettings } from './opticalSettings';
 
 /**
@@ -58,6 +60,11 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
 
   // --- Cables: layout and assignments ---------------------------------------------------------
   for (const cable of data.cables) {
+    // Phase 7: tube records (tubes of different sizes) must add up to the cable's fiber count.
+    const tubeProblem = cable.tubes?.length ? tubeRecordsProblem(cable) : undefined;
+    if (tubeProblem) {
+      error('tube_sizes', cable.id, `${cable.name}: ${tubeProblem}. Fix the tube sizes from the drum sheet.`, [cable.id]);
+    }
     if (cable.fibersPerTube !== undefined && cable.fiberCount > 0) {
       const tubes = cable.tubeCount ?? cable.fiberCount / cable.fibersPerTube;
       if (!Number.isInteger(tubes) || tubes * cable.fibersPerTube !== cable.fiberCount) {
@@ -90,6 +97,64 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
           `${cap(describeCore(index, cable.id, core.coreNumber))} has ${active.length} active assignments (${active.map((a) => a.use).join('; ')}). One core carries one service.`,
           [cable.id],
         );
+      }
+      // Phase 7: a damaged or faulty core given a service needs a recorded override reason. A core
+      // that went faulty while already in service is not blamed: its fault came after the assignment.
+      // Warnings only, never blocking: the mark may be out of date.
+      if ((core.status === 'Damaged' || core.status === 'Faulty') && active.length > 0) {
+        const lastFault = [...(core.history ?? [])].reverse().find((e) => e.toStatus === core.status);
+        const givenWhileBad = active.filter((a) => !a.override?.reason?.trim() && (!lastFault || lastFault.at < a.createdAt));
+        if (givenWhileBad.length > 0) {
+          warning(
+            'core_faulty_assigned',
+            coreKey(cable.id, core.coreNumber),
+            `${cap(describeCore(index, cable.id, core.coreNumber))} is marked ${core.status.toLowerCase()} but is given to ${givenWhileBad.map((a) => a.use).join('; ')} with no reason recorded for using it anyway.`,
+            [cable.id],
+          );
+        }
+      }
+      if (core.status === 'Retired' && active.length > 0) {
+        warning(
+          'core_retired_assigned',
+          coreKey(cable.id, core.coreNumber),
+          `${cap(describeCore(index, cable.id, core.coreNumber))} is retired (out of use) but is still recorded for ${active.map((a) => a.use).join('; ')}. Release it, or bring it back into use.`,
+          [cable.id],
+        );
+      }
+    }
+  }
+
+  // --- What cables and customers point to ----------------------------------------------------
+  // The browser will not delete equipment or a cable that something still uses. The server must
+  // refuse the same, or a write straight to the API leaves a cable end or a customer pointing at
+  // nothing. A cable may end at equipment or, as older drops do, at the customer itself (the map
+  // check accepts both). An empty route is allowed (not drawn yet); a route of one point is broken.
+  const customerIds = new Set(data.customers.map((c) => c.id));
+  for (const cable of data.cables) {
+    for (const [end, id] of [
+      ['start', cable.startEquipmentId],
+      ['end', cable.endEquipmentId],
+    ] as const) {
+      if (id && !index.equipment.has(id) && !customerIds.has(id)) {
+        error('cable_end_missing', `${cable.id}/${end}`, `${cable.name}: its ${end} is at ${id}, which is not on record. Connect that end to existing equipment, or leave it empty.`, [cable.id]);
+      }
+    }
+    if (cable.coordinates.length === 1) {
+      error('cable_one_point', cable.id, `${cable.name} has a route of one point. Draw at least two points, or leave the route empty until it is known.`, [cable.id]);
+    }
+  }
+  for (const customer of data.customers) {
+    const refs: [string, string | undefined, ReadonlyMap<string, unknown>][] = [
+      ['OLT', customer.oltId, index.equipment],
+      ['box', customer.terminalBoxId, index.equipment],
+      ['splitter', customer.splitterId, index.splitters],
+      ['feeder cable', customer.feederCableId, index.cables],
+      ['distribution cable', customer.distributionCableId, index.cables],
+      ['drop cable', customer.dropCableId, index.cables],
+    ];
+    for (const [what, id, records] of refs) {
+      if (id && !records.has(id)) {
+        error('customer_missing_ref', `${customer.id}/${what}`, `${customer.name} names ${what} ${id}, which is not on record. Choose an existing one, or clear it.`, [customer.id]);
       }
     }
   }
@@ -159,8 +224,14 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
           [a, splice.inputCore],
           [b, splice.outputCore],
         ] as const) {
-          if (cable.cores.find((k) => k.coreNumber === core)?.status === 'Damaged') {
-            warning('splice_damaged_core', `${closure.id}/${splice.id}/${cable.id}`, `Splice in ${closure.name} uses ${describeCore(index, cable.id, core)}, which is marked damaged.`, [closure.id, cable.id]);
+          const coreStatus = cable.cores.find((k) => k.coreNumber === core)?.status;
+          if (coreStatus === 'Damaged' || coreStatus === 'Faulty' || coreStatus === 'Retired') {
+            warning(
+              'splice_damaged_core',
+              `${closure.id}/${splice.id}/${cable.id}`,
+              `Splice in ${closure.name} uses ${describeCore(index, cable.id, core)}, which is marked ${coreStatus === 'Retired' ? 'retired (out of use)' : coreStatus.toLowerCase()}.`,
+              [closure.id, cable.id],
+            );
           }
         }
         const atClosure = (cableId: string, c: typeof a) =>
@@ -176,9 +247,82 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
             warning('splice_cable_not_at_closure', `${closure.id}/${splice.id}/${cableId}`, `Splice in ${closure.name} uses ${c.name}, which is not recorded at this closure.`, [closure.id, cableId]);
           }
         }
+        // Phase 8: direction, only where the closure records which side each cable is on.
+        const mismatch = a.id !== b.id ? spliceDirectionMismatch(closure, a.id, b.id) : undefined;
+        if (mismatch) {
+          warning(
+            'splice_direction',
+            `${closure.id}/${splice.id}`,
+            `Splice in ${closure.name} goes from ${a.name} to ${b.name}, but ${mismatch === 'input' ? `${a.name} is recorded here as going out towards customers` : `${b.name} is recorded here as coming in from the OLT side`}. Check which side is towards the OLT, or fix the cables recorded at the closure.`,
+            [closure.id],
+          );
+        }
       }
       if (splice.spliceLossDb !== undefined && (splice.spliceType ?? 'fusion') === 'fusion' && splice.spliceLossDb > settings.limits.spliceRejectDb) {
         warning('splice_high_loss', `${closure.id}/${splice.id}`, `Splice in ${closure.name} records ${splice.spliceLossDb} dB, above the ${settings.limits.spliceRejectDb} dB redo level.`, [closure.id]);
+      }
+    }
+
+    // --- Phase 8: fibers ending on a pigtail in this closure --------------------------------------
+    const activeTerminations = (closure.terminations ?? []).filter((t) => !t.retiredAt);
+    for (const t of activeTerminations) {
+      const where = `Pigtail in ${closure.name}`;
+      const tCable = index.cables.get(t.cableId);
+      if (!tCable) {
+        error('termination_missing_cable', `${closure.id}/${t.id}`, `${where}: cable ${t.cableId} is not on record.`, [closure.id]);
+        continue;
+      }
+      if (!coreExists(t.cableId, t.core)) {
+        error('termination_missing_core', `${closure.id}/${t.id}`, `${where}: ${tCable.name} has no fiber ${t.core}.`, [closure.id, t.cableId]);
+        continue;
+      }
+      const fiberName = describeCore(index, t.cableId, t.core);
+      if (activeTerminations.some((o) => o.id !== t.id && o.cableId === t.cableId && o.core === t.core)) {
+        warning('termination_twice', `${closure.id}/${t.cableId}#${t.core}`, `${cap(fiberName)} is recorded on two pigtails in ${closure.name}. A fiber end takes one connector; check that the fiber is cut here and both ends are used.`, [closure.id, t.cableId]);
+      }
+      const spliced = closure.splices.some(
+        (s) => isSpliceActive(s) && ((s.inputCableId === t.cableId && s.inputCore === t.core) || (s.outputCableId === t.cableId && s.outputCore === t.core)),
+      );
+      if (spliced) {
+        warning('termination_and_splice', `${closure.id}/${t.id}`, `${cap(fiberName)} is both spliced and ended on a pigtail in ${closure.name}. That is only right if the fiber is cut here and each end is used once.`, [closure.id, t.cableId]);
+      }
+      if (t.trayId && !(closure.trays ?? []).some((tr) => tr.id === t.trayId)) {
+        warning('termination_missing_tray', `${closure.id}/${t.id}`, `${where} names a tray that is not recorded on the closure.`, [closure.id]);
+      }
+      const coreStatus = tCable.cores.find((k) => k.coreNumber === t.core)?.status;
+      if (coreStatus === 'Damaged' || coreStatus === 'Faulty' || coreStatus === 'Retired') {
+        warning('termination_damaged_core', `${closure.id}/${t.id}`, `${where} uses ${fiberName}, which is marked ${coreStatus === 'Retired' ? 'retired (out of use)' : coreStatus.toLowerCase()}.`, [closure.id, t.cableId]);
+      }
+      const atHere =
+        (closure.cableEntries ?? []).some((e) => e.cableId === t.cableId) ||
+        closure.cableAId === t.cableId ||
+        closure.cableBId === t.cableId ||
+        (!!closure.equipmentId && (tCable.startEquipmentId === closure.equipmentId || tCable.endEquipmentId === closure.equipmentId));
+      if (!atHere) {
+        warning('termination_cable_not_at_closure', `${closure.id}/${t.id}`, `${where} uses ${tCable.name}, which is not recorded at this closure.`, [closure.id, t.cableId]);
+      }
+    }
+
+    // --- Phase 8: trays, cassettes and positions --------------------------------------------------
+    for (const usage of trayUsage(closure)) {
+      const label = `${closure.name} ${usage.tray.label}`;
+      for (const taken of usage.positionsTaken) {
+        error(
+          'tray_position_taken',
+          `${closure.id}/${usage.tray.id}/${taken.cassette ?? ''}/${taken.position}`,
+          `${label}${taken.cassette ? ` cassette ${taken.cassette}` : ''} position ${taken.position} holds ${taken.items.length} splices or pigtails (${taken.items.map((i) => i.label).join('; ')}). One position holds one. Change the position of one of them.`,
+          [closure.id],
+        );
+      }
+      const capacity = usage.tray.capacity;
+      if (capacity !== undefined && usage.used > capacity) {
+        // The count is in the key, so every splice added beyond the capacity is warned about again.
+        warning('tray_over_capacity', `${closure.id}/${usage.tray.id}/${usage.used}`, `${label} holds ${usage.used} splices and pigtails, but is recorded with ${capacity} positions. Check the tray capacity, or use another tray.`, [closure.id]);
+      }
+      for (const item of usage.items) {
+        if (capacity !== undefined && item.position !== undefined && item.position > capacity) {
+          warning('tray_position_beyond_capacity', `${closure.id}/${item.id}`, `${label}: ${item.label} is at position ${item.position}, but the tray is recorded with ${capacity} positions.`, [closure.id]);
+        }
       }
     }
   }
@@ -226,6 +370,20 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
       if (children.length + (fiberToo ? 1 : 0) > 1) {
         error('splitter_output_two', `${sp.id}#${port.portNumber}`, `Output ${port.portNumber} of splitter ${sp.name} is connected to more than one thing.`, [sp.id]);
       }
+      // Phase 11: an output marked faulty takes a new fiber or cascade splitter only with a reason.
+      // A connection made before the output was marked faulty is not blamed: the fault came after it.
+      if (port.status === 'Faulty' && !port.override?.reason?.trim()) {
+        const lastFault = [...(port.history ?? [])].reverse().find((h) => h.action === 'MARKED_FAULTY');
+        const times = [...(port.connectedDropCableId && port.connectedAt ? [port.connectedAt] : []), ...children.map((c) => c.inputPort.linkedAt).filter((t): t is string => !!t)];
+        if (lastFault && times.some((t) => lastFault.at < t)) {
+          error(
+            'splitter_output_faulty_connected',
+            `${sp.id}#${port.portNumber}`,
+            `Output ${port.portNumber} of splitter ${sp.name} is marked faulty and was connected with no reason recorded. Use another output, mark it repaired, or say why it is used anyway.`,
+            [sp.id],
+          );
+        }
+      }
     }
   }
   // Loops through cascades.
@@ -258,6 +416,43 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
           if (!olt || !pon) {
             error('odf_patch_missing_pon', `${eq.id}/${port.id}`, `${eq.name} ${panel.label} port ${port.number} is patched to ${port.patch.oltId} ${port.patch.ponPortId}, which is not on record.`, [eq.id]);
           }
+          // Phase 9: an adapter marked faulty takes a new patch only with a reason. A patch made
+          // before the port was marked faulty is not blamed: the fault came after it.
+          if (port.status === 'damaged' && !port.patch.override?.reason?.trim()) {
+            const lastFault = [...(port.history ?? [])].reverse().find((h) => h.action === 'MARKED_FAULTY');
+            if (!lastFault || lastFault.at < port.patch.patchedAt) {
+              error(
+                'odf_patch_faulty_port',
+                `${eq.id}/${port.id}`,
+                `${eq.name} ${panel.label} port ${port.number} is marked faulty and was patched with no reason recorded. Use another port, mark it repaired, or say why it is patched anyway.`,
+                [eq.id],
+              );
+            }
+          }
+        }
+        // Phase 9: the fiber behind an adapter is in use. Older records (before Phase 9) never marked it.
+        if (port.feederCableId && coreExists(port.feederCableId, port.feederCore)) {
+          const core = index.cables.get(port.feederCableId)!.cores.find((k) => k.coreNumber === port.feederCore);
+          const held = (core?.assignments ?? []).some((a) => !a.releasedAt) || core?.status === 'In Use' || core?.status === 'Reserved' || core?.status === 'Retired';
+          if (!held) {
+            warning(
+              'odf_feeder_not_marked',
+              `${eq.id}/${port.id}`,
+              `${cap(describeCore(index, port.feederCableId, port.feederCore!))} is behind ${eq.name} ${panel.label} port ${port.number}, but is not marked in use. Save the port's feeder fiber again to mark it.`,
+              [eq.id, port.feederCableId],
+            );
+          }
+        }
+        // Phase 9: a connector into an adapter of another kind or polish (APC and UPC do not mate).
+        const adapter = port.connectorType ?? panel.connectorType;
+        for (const [what, plug] of [
+          ['patch cord', port.patch?.cordConnectorOdf],
+          ['pigtail', port.pigtail?.connectorType],
+        ] as const) {
+          const clash = connectorClash(adapter, plug);
+          if (clash) {
+            warning('odf_connector_mismatch', `${eq.id}/${port.id}/${what}`, `${eq.name} ${panel.label} port ${port.number}: the ${what} is ${plug} but the adapter is ${adapter}. ${clash}`, [eq.id]);
+          }
         }
       }
     }
@@ -275,6 +470,8 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
       const mismatch = opticsClassMismatch(pon, eq);
       if (mismatch) error('pon_class_technology', `${eq.id}/${pon.id}`, `${eq.name} ${pon.id}: ${mismatch}`, [eq.id]);
     }
+    // Phase 10: the OLT's recorded shelves, slots and cards.
+    for (const p of oltChassisProblems(eq)) (p.severity === 'error' ? error : warning)(p.code, `${eq.id}/${p.key}`, p.message, [eq.id]);
   }
 
   // --- Customers ------------------------------------------------------------------------------
@@ -340,6 +537,26 @@ export function findFiberProblems(data: FiberData, options: FiberCheckOptions = 
     }
   }
   return problems;
+}
+
+/**
+ * Phase 9: why a connector does not fit an adapter, or undefined when it fits or either is not
+ * known well enough to say. Reads the kind (SC, LC, FC, ST, MPO, E2000) and polish (APC, UPC, PC)
+ * from the text as written, such as "SC/APC". A hybrid adapter written as "SC-LC" is not judged.
+ */
+export function connectorClash(adapter: string | undefined, plug: string | undefined): string | undefined {
+  const read = (text: string | undefined) => {
+    const t = (text ?? '').toUpperCase();
+    const kinds = ['SC', 'LC', 'FC', 'ST', 'MPO', 'E2000'].filter((k) => new RegExp(`(^|[^A-Z])${k}([^A-Z]|$)`).test(t));
+    const polish = /APC/.test(t) ? 'APC' : /UPC/.test(t) ? 'UPC' : /(^|[^A-Z])PC([^A-Z]|$)/.test(t) ? 'PC' : undefined;
+    return { kind: kinds.length === 1 ? kinds[0] : undefined, polish };
+  };
+  if (!adapter?.trim() || !plug?.trim()) return undefined;
+  const a = read(adapter);
+  const p = read(plug);
+  if (a.kind && p.kind && a.kind !== p.kind) return `A ${p.kind} plug does not fit a ${a.kind} adapter. Check what was recorded.`;
+  if (a.polish && p.polish && (a.polish === 'APC') !== (p.polish === 'APC')) return 'APC (angled, green) and UPC (flat, blue) ends do not mate: the loss is high and the faces can be damaged. Check the cord.';
+  return undefined;
 }
 
 const splitKey = (key: string): [string, number] => {

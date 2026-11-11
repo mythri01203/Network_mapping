@@ -15,6 +15,7 @@ import { defaultPortCount, isValidCoordinate } from './defaults';
 import { fiberCascadeForEquipment } from './fiberCommands';
 import { polylineLengthMeters } from './geo';
 import { equipmentIdPrefix, newRecordId, uniqueId } from './ids';
+import { applyMoveChoices, type MoveChoices } from './ospGeometry';
 import { cascadeAudit, ospCascadeForEquipment } from './outsidePlant';
 import { generateLogicalPorts, summarizePorts } from './ports';
 import { createSplitter } from './provisioning';
@@ -54,8 +55,9 @@ export function createEquipment(
     usedPorts,
     availablePorts: draft.availablePorts ?? totalPorts - usedPorts,
     images: draft.images || [],
-    notes: draft.notes || 'Created via GIS visual mapping toolbar',
-    installedDate: draft.installedDate || isoDate(ctx.now),
+    // Phase 2: placing a pin is not installing it. No install date or notes are made up.
+    ...(draft.notes ? { notes: draft.notes } : {}),
+    installedDate: draft.installedDate || '',
     logicalPorts: draft.logicalPorts || [],
   };
   const created: Equipment = { ...base, logicalPorts: generateLogicalPorts(base) };
@@ -109,12 +111,17 @@ export function updateEquipment(data: NetworkData, item: Equipment): CommandResu
 /**
  * Moves equipment and the matching end of every cable connected to it, recalculating each cable's
  * length, as one undoable step. Customers' houses stay where they are.
+ *
+ * Phase 4: `choices` are the other things at the old position a person ticked after seeing them
+ * (`structureMovePreview`): cable points, slack loops, duct ends. Only those move too; a choice
+ * that no longer matches the records refuses the whole move.
  */
 export function moveEquipment(
   data: NetworkData,
   equipmentId: string,
   lat: number,
   lng: number,
+  choices: MoveChoices = {},
 ): CommandResult<{ equipment: Equipment; movedCableIds: string[] }> {
   const eq = data.equipment.find((e) => e.id === equipmentId);
   if (!eq) return fail('Equipment Missing', `Equipment ${equipmentId} was not found.`);
@@ -144,16 +151,25 @@ export function moveEquipment(
     return { ...cable, coordinates, lengthMeters: Math.round(polylineLengthMeters(coordinates)) };
   });
 
+  const chosen = applyMoveChoices(data, cables, equipmentId, [lat, lng], choices);
+  if (typeof chosen === 'string') return fail('Not moved', chosen);
+  const cablesChanged = movedCableIds.length > 0 || chosen.patch.cables !== undefined;
   const cableNote = movedCableIds.length > 0 ? ` ${movedCableIds.length} connected cable(s) moved with it.` : '';
+  const chosenNote = chosen.moved.length > 0 ? ` Also moved, as ticked: ${chosen.moved.join(', ')}.` : '';
   return succeed(
-    { equipment: moved, movedCableIds },
-    { equipment: replaceEquipment(data, moved), ...(movedCableIds.length > 0 ? { cables } : {}) },
+    { equipment: moved, movedCableIds: [...new Set([...movedCableIds, ...chosen.movedCableIds])] },
     {
-      notice: notice('info', 'Equipment Moved', `Moved ${eq.name}.${cableNote} Press Undo to put it back.`),
+      equipment: replaceEquipment(data, moved),
+      ...(cablesChanged ? { cables: chosen.patch.cables ?? cables } : {}),
+      ...(chosen.patch.slackLoops ? { slackLoops: chosen.patch.slackLoops } : {}),
+      ...(chosen.patch.ducts ? { ducts: chosen.patch.ducts } : {}),
+    },
+    {
+      notice: notice('info', 'Equipment Moved', `Moved ${eq.name}.${cableNote}${chosenNote} Press Undo to put it back.`),
       audit: [
         {
           action: 'EQUIPMENT_MOVED',
-          details: `Moved ${eq.type} ${eq.id} to [${lat.toFixed(5)}, ${lng.toFixed(5)}]${movedCableIds.length ? `; updated cables ${movedCableIds.join(', ')}` : ''}`,
+          details: `Moved ${eq.type} ${eq.id} to [${lat.toFixed(5)}, ${lng.toFixed(5)}]${movedCableIds.length ? `; updated cables ${movedCableIds.join(', ')}` : ''}${chosen.moved.length ? `; also moved as ticked: ${chosen.moved.join(', ')}` : ''}`,
           assetId: eq.id,
           assetType: 'Equipment',
         },
@@ -235,6 +251,8 @@ export function deleteEquipment(data: NetworkData, id: string): CommandResult<Eq
     {
       ...osp.patch,
       ...(fiber.closures ? { closures: fiber.closures } : {}),
+      // Phase 9: fibers held by ODF ports that lose their patch or their ODF are released.
+      ...(fiber.cables ? { cables: fiber.cables } : {}),
       equipment: (fiber.equipment ?? data.equipment).filter((e) => e.id !== id),
       ...(ownedSplitters.length > 0 ? { splitters: data.splitters.filter((s) => s.terminalBoxId !== id) } : {}),
     },

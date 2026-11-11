@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 
-import type { Equipment, LatLng } from '@fibergis/shared';
+import { type Equipment, type LatLng, polygonAreaSqMeters } from '@fibergis/shared';
 
 import { isTypingTarget } from '../../../lib/browser';
 import { useMapStore } from '../../../stores/mapStore';
-import { setCustomerLocation } from '../../../stores/networkActions';
+import { setCustomerLocation, updateZone } from '../../../stores/networkActions';
 import { useNetworkStore } from '../../../stores/networkStore';
 import { placeEquipmentChecked } from '../../../stores/ospActions';
 import { showToast } from '../../../stores/toastStore';
 import { useUiStore } from '../../../stores/uiStore';
-import { findSnapTarget, type SnapTarget } from '../layerFilters';
+import { findSnapTarget, snapRadiusMeters, type SnapTarget } from '../layerFilters';
 import { PANES } from '../leaflet/panes';
 import { useLayerGroup } from '../leaflet/useLayerGroup';
 import { MapModeBar } from '../MapToolbar';
 import { categoryForType, pathLengthMeters } from '../markerIcons';
+import { PlacementDialogs } from '../PlacementDialogs';
+import { usePlacementDialog } from '../placementDialogStore';
 import { newEquipmentName, nextPoleName } from './poleNaming';
+import { RouteEditor } from './RouteEditor';
 
 const DRAW = { line: '#0284c7', vertex: '#2563eb', endpoint: '#3b82f6' };
 const MEASURE = { line: '#f59e0b', vertex: '#d97706' };
@@ -33,7 +36,7 @@ function placePole(lat: number, lng: number): Promise<Equipment | null> {
 }
 
 /** Draws the in-progress sketch (vertices, committed path and the rubber-band segment to the pointer). */
-function useSketchPreview(map: L.Map, points: LatLng[], pointer: LatLng | null, mode: 'draw' | 'measure' | null) {
+function useSketchPreview(map: L.Map, points: LatLng[], pointer: LatLng | null, mode: 'draw' | 'measure' | null, closed: boolean) {
   const group = useLayerGroup(map);
   const rubberBand = useRef<L.Polyline | null>(null);
 
@@ -45,9 +48,12 @@ function useSketchPreview(map: L.Map, points: LatLng[], pointer: LatLng | null, 
     const dash = mode === 'draw' ? '6, 6' : '4, 4';
     const options = { pane: PANES.sketch, interactive: false };
 
-    L.polyline(points, { ...options, color: colors.line, weight: mode === 'draw' ? 4 : 3, dashArray: dash }).addTo(
-      group,
-    );
+    // A zone boundary closes itself, so it is shown as a shape.
+    if (closed && points.length >= 3) {
+      L.polygon(points, { ...options, color: colors.line, weight: 3, dashArray: dash, fillOpacity: 0.12 }).addTo(group);
+    } else {
+      L.polyline(points, { ...options, color: colors.line, weight: mode === 'draw' ? 4 : 3, dashArray: dash }).addTo(group);
+    }
     rubberBand.current = L.polyline([], {
       ...options,
       color: colors.line,
@@ -66,7 +72,7 @@ function useSketchPreview(map: L.Map, points: LatLng[], pointer: LatLng | null, 
         weight: 2,
       }).addTo(group);
     });
-  }, [group, points, mode]);
+  }, [group, points, mode, closed]);
 
   useEffect(() => {
     const last = points[points.length - 1];
@@ -109,6 +115,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   const setPickingOnuCustomer = useUiStore((s) => s.setPickingOnuCustomer);
   const wizardPicking = useUiStore((s) => s.customerWizardPicking);
   const movingId = useMapStore((s) => s.movingEquipmentId);
+  const drawTarget = useMapStore((s) => s.drawTarget);
   const movingName = useNetworkStore((s) => (movingId ? s.equipment.find((e) => e.id === movingId)?.name : undefined));
   const [trackedPointer, setPointer] = useState<LatLng | null>(null);
   const [trackedSnap, setSnapTarget] = useState<SnapTarget | null>(null);
@@ -130,8 +137,13 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
   });
 
   useEffect(() => {
+    // Snapping only places a point; it never connects anything (the cable form proposes, a person confirms).
     const snap = (latlng: L.LatLng) => {
-      const target = findSnapTarget(latest.current.snapCandidates, latlng.lat, latlng.lng);
+      const store = useMapStore.getState();
+      // A zone boundary follows the ground, not the pins.
+      if (store.activeTool === 'draw_cable' && store.drawTarget === 'zone') return { target: null, point: [latlng.lat, latlng.lng] as LatLng };
+      const radius = snapRadiusMeters(latlng.lat, map.getZoom());
+      const target = findSnapTarget(latest.current.snapCandidates, latlng.lat, latlng.lng, radius);
       return { target, point: (target ? [target.lat, target.lng] : [latlng.lat, latlng.lng]) as LatLng };
     };
 
@@ -173,7 +185,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
 
       if (store.activeTool === 'draw_cable') {
         store.setDrawingPoints((prev) => [...prev, point]);
-        if (latest.current.autoPole && !target) void placePole(point[0], point[1]);
+        if (latest.current.autoPole && !target && store.drawTarget === 'cable') void placePole(point[0], point[1]);
       } else if (store.activeTool === 'measure') {
         store.setMeasuringPoints((prev) => [...prev, point]);
       } else if (store.activeTool === 'add_equipment' && store.equipmentTypeToAdd) {
@@ -240,12 +252,19 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
     };
   }, [map]);
 
-  useSketchPreview(map, points, pointer, mode);
+  const zoneBoundary = mode === 'draw' && drawTarget === 'zone';
+  useSketchPreview(map, points, pointer, mode, zoneBoundary);
   useSnapRing(map, snapTarget);
 
   const distanceMeters = useMemo(
     () => (mode ? pathLengthMeters(pointer && points.length > 0 ? [...points, pointer] : points) : 0),
     [mode, points, pointer],
+  );
+
+  // The closed shape: a zone boundary, or 3 or more measuring points.
+  const areaSqMeters = useMemo(
+    () => (zoneBoundary || mode === 'measure' ? polygonAreaSqMeters(pointer && points.length > 0 ? [...points, pointer] : points) : 0),
+    [zoneBoundary, mode, points, pointer],
   );
 
   const addPole = useCallback(() => {
@@ -281,8 +300,30 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
 
   const finish = useCallback(() => {
     const map = useMapStore.getState();
+    if (map.drawTarget === 'zone') {
+      const zone = useNetworkStore.getState().zones.find((z) => z.id === map.zoneDrawId);
+      if (map.drawingPoints.length < 3) {
+        showToast('warning', 'Boundary incomplete', 'Tap at least three points around the zone.');
+        return;
+      }
+      if (!zone) {
+        showToast('error', 'Zone missing', 'The zone this boundary is for is no longer on record.');
+        return;
+      }
+      // Only the boundary changes. The coverage typed for the zone is kept; the drawn area is shown beside it.
+      if (updateZone({ ...zone, boundaryCoords: map.drawingPoints })) {
+        map.resetSketches();
+        map.setActiveTool('select');
+      }
+      return;
+    }
     if (map.drawingPoints.length < 2) {
       showToast('warning', 'Route incomplete', 'Click at least two points on the map to define the route.');
+      return;
+    }
+    // Phase 3: a placement line only guides where a row of new items goes; the spacing is asked next.
+    if (map.drawTarget === 'placement_line') {
+      usePlacementDialog.getState().open({ kind: 'line', points: map.drawingPoints });
       return;
     }
     // A duct is a structure with its own form; it never becomes a cable.
@@ -353,6 +394,7 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
       )}
       <MapModeBar
         distanceMeters={distanceMeters}
+        areaSqMeters={areaSqMeters}
         snapTargetName={snapTarget?.name ?? null}
         autoPole={autoPole}
         onAutoPoleChange={setAutoPole}
@@ -360,6 +402,9 @@ export function SketchTools({ map, snapCandidates }: SketchToolsProps) {
         onFinish={finish}
         onCancel={cancel}
       />
+      <PlacementDialogs />
+      {/* Phase 5: changing a selected cable's or duct's line by taps. */}
+      <RouteEditor map={map} snapCandidates={snapCandidates} />
     </>
   );
 }

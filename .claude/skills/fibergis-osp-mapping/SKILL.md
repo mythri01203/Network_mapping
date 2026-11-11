@@ -93,6 +93,8 @@ Keep the required field record short, because over-collection costs time and cau
 
 KML and KMZ import exists since Phase 3 (below). It has only been tried with sample files made for the test; try a real operator's file before relying on it.
 
+Since network mapping Phase 21 the same preview also takes GeoJSON, CSV and zipped Shapefiles (`packages/shared/src/domain/dataImport.ts`, `apps/web/src/lib/fileImport.ts`): the person maps the columns first; numbers outside the latitude and longitude range are flagged and not imported; a Shapefile's `.prj` is read, a known other system is converted with proj4 (through shpjs), an unknown one is refused, and no `.prj` needs the person to say it is WGS 84. Lines along an existing cable or duct are held back like points. Every import is an `imports` record that can be undone as a whole, and is refused when its items were changed or are used since. Exports: KML (with ducts, spans and buildings), KMZ and Excel. See `docs/IMPORT_EXPORT_GUIDE.md`.
+
 ## Where the codebase stands
 
 Phase 3 (November 2026) built these on branch `feature/easy-mapping`, checked by unit tests and by browser scripts at 1500 and 360 px. No engineer has used them yet and no real KML has been imported, so treat them as built, not accepted.
@@ -112,4 +114,4 @@ Phase 3 (November 2026) built these on branch `feature/easy-mapping`, checked by
 
 - **Faults on poles and spans (Phase 8):** "Who is affected?" for a pole or span uses only attachment records: a pole with no attachment lists nobody and says why; a cable drawn past it never counts. Damage reported on a pole, span or duct is an alarm on that record
 
-**Known gaps:** KML export leaves out spans, ducts, slack loops and buildings. A duct has no "who is affected" of its own yet (choose its cables). No road-crossing clearances or sag; a riser is only a cable on the building record, with no vertical length or route. Manhole cover and inside details are not recorded. Equipment and cables made on the engineer screens still get sequential IDs. Permissions have no expiry reminder in the app (the map check flags a past end date). The old "Duct" and "Fiber Slack Loop" point types still exist beside the new records.
+**Known gaps:** KML export leaves out slack loops (spans, ducts and buildings are in since Phase 21). A duct has no "who is affected" of its own yet (choose its cables). No road-crossing clearances or sag; a riser is only a cable on the building record, with no vertical length or route. Manhole cover and inside details are not recorded. Equipment and cables made on the engineer screens still get sequential IDs. Permissions have no expiry reminder in the app (the map check flags a past end date). The old "Duct" and "Fiber Slack Loop" point types still exist beside the new records.
