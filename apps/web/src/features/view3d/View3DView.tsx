@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CircleHelp, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleHelp, Home, Layers, Minus, Plus, RotateCcw, RotateCw } from 'lucide-react';
 import { useLocation } from 'react-router';
 
 import { useOpenView, useShowOnMap } from '../../app/views';
@@ -15,6 +15,7 @@ import type { GroundState, TileSource } from './engine/mapGround';
 import type { LabelText } from './engine/world';
 import { LANG_NAMES_3D, type Lang3D, LANGS_3D, type Msg3DKey, t3d } from './i18n';
 import { createBenchNetwork, createDemoNetwork, DEMO_ORIGIN } from './scene/demoNetwork';
+import { portColorCode } from './scene/models';
 import { presetAvailable, type PresetKey } from './scene/presets';
 import { findCustomer, itemId, type Scene3DInput, toScene3D } from './scene/toScene3D';
 import type { Scene3D } from './scene/types';
@@ -23,11 +24,15 @@ import {
   Btn,
   CustomerCard,
   EquipmentCard,
+  type Fact,
   FindHouse,
+  FreePlaces,
   HelpBubble,
   Legend,
   MappingPanel,
+  NetworkSummary,
   Notes,
+  type PortRow,
   PresetPanel,
 } from './ui/Panels';
 import { panelClass, type Tone } from './ui/style';
@@ -177,6 +182,7 @@ export function View3DView() {
   const [customerId, setCustomerId] = useState<string | null>(
     initialSel?.type === 'customer' ? initialSel.data.id : null,
   );
+  const [cableId, setCableId] = useState<string | null>(null);
   const [equipmentId, setEquipmentId] = useState<string | null>(
     initialSel?.type === 'equipment' ? initialSel.data.id : null,
   );
@@ -184,8 +190,14 @@ export function View3DView() {
   const [isPhone] = useState(
     () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 767px)').matches,
   );
-  const [panelOpen, setPanelOpen] = useState(!isPhone);
-  const [optionsOpen, setOptionsOpen] = useState(!isPhone);
+  // On a laptop screen the panels would cover the picture, so they start folded: the fiber panel
+  // opens by itself when something is picked, and the extra options are behind "More options".
+  const [isWide] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1600px)').matches,
+  );
+  const [panelOpen, setPanelOpen] = useState(isWide);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [viewsOpen, setViewsOpen] = useState(!isPhone);
   const [ready, setReady] = useState(false);
 
   const pon =
@@ -253,6 +265,7 @@ export function View3DView() {
 
   const pickCustomer = useCallback(
     (id: string | null) => {
+      if (id) setPanelOpen(true);
       setCustomerId(id);
       setEquipmentId(null);
       setFilter({ kind: 'all' });
@@ -279,7 +292,14 @@ export function View3DView() {
         if (first) pickCustomer(first.customerId);
         return;
       }
+      if (pick.kind === 'cable') {
+        setPanelOpen(true);
+        setCableId(pick.id);
+        return;
+      }
       if (pick.kind === 'equipment') {
+        setPanelOpen(true);
+        setCableId(null);
         setEquipmentId(pick.id);
         setCustomerId(null);
         engine.current?.selectCustomer(null);
@@ -327,6 +347,190 @@ export function View3DView() {
     return { rec, box, extra };
   }, [equipmentId, demoInput, real, scene]);
 
+  // Numbers for the summary and the cards, all counted from the records.
+  const source = demoInput ?? real;
+  const summaryFacts = useMemo<Fact[]>(() => {
+    const total = source.customers.length;
+    const active = source.customers.filter((c) => c.status === 'Active').length;
+    const ports = scene.racks.flatMap((r) => r.items).flatMap((i) => (i.kind === 'olt' ? i.olt.ports : []));
+    const ponUsed = ports.filter((p) => p.state === 'in_use' || p.state === 'fault').length;
+    const fat = scene.boxes.filter((b) => b.model === 'fat').flatMap((b) => b.ports);
+    const fatUsed = fat.filter((p) => p.state === 'used').length;
+    const outs = source.splitters.flatMap((s) => s.outputPorts ?? []);
+    const outsUsed = outs.filter((o) => o.status === 'Occupied').length;
+    const sizes = new Map<number, number>();
+    for (const c of scene.cables) if (c.fiberCount) sizes.set(c.fiberCount, (sizes.get(c.fiberCount) ?? 0) + 1);
+    const facts: Fact[] = [
+      [
+        t3d(lang, 'info.customers'),
+        `${total} · ${t3d(lang, 'info.active')} ${active} · ${t3d(lang, 'info.inactive')} ${total - active}`,
+        total - active > 0 ? undefined : 'good',
+      ],
+    ];
+    if (ports.length)
+      facts.push([
+        t3d(lang, 'info.ponPorts'),
+        `${ponUsed} ${t3d(lang, 'info.inUse')} · ${ports.length - ponUsed} ${t3d(lang, 'info.free')}`,
+      ]);
+    if (outs.length)
+      facts.push([
+        t3d(lang, 'info.outputs'),
+        `${outsUsed} ${t3d(lang, 'info.inUse')} · ${outs.length - outsUsed} ${t3d(lang, 'info.free')}`,
+      ]);
+    if (fat.length)
+      facts.push([
+        t3d(lang, 'info.fatPorts'),
+        `${fatUsed} ${t3d(lang, 'info.inUse')} · ${fat.length - fatUsed} ${t3d(lang, 'info.free')}`,
+      ]);
+    if (sizes.size)
+      facts.push([
+        t3d(lang, 'info.cables'),
+        [...sizes.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([f, n]) => `${f}F ×${n}`)
+          .join(' · '),
+      ]);
+    return facts;
+  }, [source, scene, lang]);
+
+  // The selected customer's recorded status, plan and light level.
+  const customerFacts = useMemo<Fact[] | undefined>(() => {
+    const rec = customerId ? source.customers.find((c) => c.id === customerId) : undefined;
+    if (!rec) return undefined;
+    const facts: Fact[] = [[t3d(lang, 'status'), rec.status ?? '—', rec.status === 'Active' ? 'good' : 'bad']];
+    if (rec.plan) facts.push([t3d(lang, 'info.plan'), rec.plan]);
+    facts.push([
+      t3d(lang, 'info.rx'),
+      typeof rec.rxOpticalPowerDbm === 'number'
+        ? `${rec.rxOpticalPowerDbm} dBm${rec.rxSource ? ` (${rec.rxSource})` : ''}`
+        : t3d(lang, 'info.rxNone'),
+    ]);
+    return facts;
+  }, [customerId, source, lang]);
+
+  // The selected box or OLT: outputs used and free, and the customers whose recorded path goes
+  // through it (the people who lose service if it fails).
+  const equipmentFacts = useMemo<{ facts: Fact[]; warning?: string } | null>(() => {
+    if (!equipmentId) return null;
+    const facts: Fact[] = [];
+    const statusOf = new Map(source.customers.map((c) => [c.id, c.status]));
+    const through = scene.customers.filter((c) =>
+      c.hops.some((h) =>
+        h.kind === 'splitter' ? h.boxId === equipmentId : h.kind === 'pon' && h.oltId === equipmentId,
+      ),
+    );
+    const outs = source.splitters.filter((s) => s.terminalBoxId === equipmentId).flatMap((s) => s.outputPorts ?? []);
+    if (outs.length) {
+      const used = outs.filter((o) => o.status === 'Occupied').length;
+      facts.push([
+        t3d(lang, 'info.outputs'),
+        `${used} ${t3d(lang, 'info.inUse')} · ${outs.length - used} ${t3d(lang, 'info.free')}`,
+      ]);
+    }
+    const olt = scene.racks.flatMap((r) => r.items).find((i) => i.kind === 'olt' && i.olt.equipmentId === equipmentId);
+    if (olt?.kind === 'olt') {
+      const used = olt.olt.ports.filter((p) => p.state === 'in_use' || p.state === 'fault').length;
+      facts.push([
+        t3d(lang, 'info.ponPorts'),
+        `${used} ${t3d(lang, 'info.inUse')} · ${olt.olt.ports.length - used} ${t3d(lang, 'info.free')}`,
+      ]);
+    }
+    if (through.length) {
+      const active = through.filter((c) => statusOf.get(c.customerId) === 'Active').length;
+      facts.push([
+        t3d(lang, 'info.served'),
+        `${through.length} · ${t3d(lang, 'info.active')} ${active} · ${t3d(lang, 'info.inactive')} ${through.length - active}`,
+      ]);
+    }
+    return { facts, warning: through.length ? t3d(lang, 'info.affected', { n: through.length }) : undefined };
+  }, [equipmentId, source, scene, lang]);
+
+  // Every output of the splitters in the selected box: colour code of its number, used or free,
+  // and who or what is on it.
+  const outputRows = useMemo<PortRow[]>(() => {
+    if (!equipmentId) return [];
+    const nameOf = new Map(source.customers.map((c) => [c.id, `${c.name} (${c.status ?? '?'})`]));
+    const byDrop = new Map(source.customers.filter((c) => c.dropCableId).map((c) => [c.dropCableId, c.id]));
+    return source.splitters
+      .filter((s) => s.terminalBoxId === equipmentId)
+      .flatMap((s) =>
+        (s.outputPorts ?? []).map((o) => {
+          const free = o.status !== 'Occupied';
+          const cable = o.connectedDropCableId;
+          const who = cable ? byDrop.get(cable) : undefined;
+          return {
+            key: `${s.id}#${o.portNumber}`,
+            n: o.portNumber,
+            chip: portColorCode(o.portNumber),
+            state: free ? t3d(lang, 'info.freeOne') : t3d(lang, 'info.used'),
+            free,
+            text: free ? s.ratio : ((who && nameOf.get(who)) ?? cable ?? ''),
+          };
+        }),
+      );
+  }, [equipmentId, source, lang]);
+
+  // The selected cable: size, length, and every fiber with its recorded colour and use.
+  const cableInfo = useMemo(() => {
+    const rec = cableId ? source.cables.find((c) => c.id === cableId) : undefined;
+    if (!rec) return null;
+    const facts: Fact[] = [];
+    if (rec.fiberCount)
+      facts.push([t3d(lang, 'info.size'), `${rec.fiberCount}F${rec.fiberStandard ? ` · ${rec.fiberStandard}` : ''}`]);
+    if (rec.lengthMeters) facts.push([t3d(lang, 'info.length'), `${Math.round(rec.lengthMeters)} m`]);
+    const cores = rec.cores ?? [];
+    const used = cores.filter((k) => k.status === 'In Use').length;
+    if (cores.length)
+      facts.push([
+        t3d(lang, 'info.cores'),
+        `${used} ${t3d(lang, 'info.inUse')} · ${cores.length - used} ${t3d(lang, 'info.free')}`,
+      ]);
+    const rows: PortRow[] = cores.map((k) => {
+      const free = k.status !== 'In Use';
+      const a = k.assignments?.[k.assignments.length - 1];
+      return {
+        key: String(k.coreNumber),
+        n: k.coreNumber,
+        chip: k.colorName && k.colorHex ? { name: k.colorName, hex: k.colorHex } : undefined,
+        state: free ? t3d(lang, 'info.freeOne') : t3d(lang, 'info.used'),
+        free,
+        text: free ? (k.status ?? '') : [a?.use, a?.destination].filter(Boolean).join(' → '),
+      };
+    });
+    return { rec, facts, rows };
+  }, [cableId, source, lang]);
+
+  // Where a new connection can go: boxes with a free splitter output, for the PON being shown
+  // (or all of them). A box belongs to a PON when a customer's recorded path through it does.
+  const freePlaces = useMemo(() => {
+    const ponKey = filter.kind === 'pon' ? filter.ponKey : null;
+    const onPon = ponKey
+      ? new Set(
+          scene.customers
+            .filter((c) => c.ponKey === ponKey)
+            .flatMap((c) => c.hops.flatMap((h) => (h.kind === 'splitter' && h.boxId ? [h.boxId] : []))),
+        )
+      : null;
+    return scene.boxes
+      .filter((b) => (b.freeOutputs ?? 0) > 0 && (!onPon || onPon.has(b.id)))
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        free: b.freeOutputs ?? 0,
+        total: b.totalOutputs ?? 0,
+        ratio: b.splitters.map((s) => s.ratio).join(', '),
+      }))
+      .sort((a, b) => b.free - a.free || a.name.localeCompare(b.name));
+  }, [scene, filter]);
+  const goToBox = (id: string) => {
+    setCableId(null);
+    setCustomerId(null);
+    setEquipmentId(id);
+    engine.current?.selectCustomer(null);
+    engine.current?.focusEquipment(id);
+    setPreset(null);
+  };
+
   const back2d = () => {
     const ui = useUiStore.getState();
     const sel = ui.selectedObject;
@@ -354,35 +558,48 @@ export function View3DView() {
 
       {/* Left: views and toggles */}
       <div
-        className={`absolute left-2 right-2 top-2 z-10 max-w-[560px] p-2.5 md:right-auto md:w-[460px] ${panelClass(tone)}`}
+        className={`absolute left-2 right-2 top-2 z-10 max-w-[560px] p-2.5 md:right-auto ${viewsOpen ? 'md:w-[460px]' : 'md:w-auto'} ${panelClass(tone)}`}
       >
         {scene.isDemo && (
           <div className="mb-1.5 rounded-md bg-amber-400 px-2 py-1 text-[12px] font-semibold text-amber-950 md:hidden">
             {t3d(lang, 'demoBanner')}
           </div>
         )}
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <h1 className="text-[14px] font-semibold">{t3d(lang, 'title')}</h1>
-          <div className="flex items-center">
-            <button
-              type="button"
-              aria-expanded={optionsOpen}
-              onClick={() => setOptionsOpen((o) => !o)}
-              className="min-h-[44px] rounded-lg px-2 text-[12.5px] font-medium underline-offset-2 hover:underline md:hidden"
-            >
-              {t3d(lang, 'options')}
-            </button>
-            <HelpBubble tone={tone} text={t3d(lang, 'help.views')} label={t3d(lang, 'help')} />
-          </div>
+        <div className={`flex items-center justify-between gap-2 ${viewsOpen ? 'mb-1.5' : ''}`}>
+          <button
+            type="button"
+            aria-expanded={viewsOpen}
+            aria-label={t3d(lang, viewsOpen ? 'panel.hide' : 'panel.show')}
+            onClick={() => setViewsOpen((o) => !o)}
+            className="flex min-h-[44px] items-center gap-1.5 text-[14px] font-semibold"
+          >
+            {viewsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <h1>{t3d(lang, 'title')}</h1>
+          </button>
+          {viewsOpen && (
+            <div className="flex items-center">
+              <button
+                type="button"
+                aria-expanded={optionsOpen}
+                onClick={() => setOptionsOpen((o) => !o)}
+                className="min-h-[44px] rounded-lg px-2 text-[12.5px] font-medium underline-offset-2 hover:underline"
+              >
+                {t3d(lang, 'options')}
+              </button>
+              <HelpBubble tone={tone} text={t3d(lang, 'help.views')} label={t3d(lang, 'help')} />
+            </div>
+          )}
         </div>
-        <PresetPanel
-          tone={tone}
-          lang={lang}
-          active={preset}
-          available={(k) => presetAvailable(scene, k)}
-          onPreset={onPreset}
-        />
-        <div className={`mt-1.5 flex-wrap items-center gap-1.5 ${optionsOpen ? 'flex' : 'hidden md:flex'}`}>
+        {viewsOpen && (
+          <PresetPanel
+            tone={tone}
+            lang={lang}
+            active={preset}
+            available={(k) => presetAvailable(scene, k)}
+            onPreset={onPreset}
+          />
+        )}
+        <div className={`mt-1.5 flex-wrap items-center gap-1.5 ${viewsOpen && optionsOpen ? 'flex' : 'hidden'}`}>
           <Btn tone={tone} on={prefs.labels} onClick={() => prefs.set({ labels: !prefs.labels })}>
             {t3d(lang, 'labels')}
           </Btn>
@@ -471,7 +688,7 @@ export function View3DView() {
 
       {/* Right: fiber map, find a house, selection */}
       <div
-        className={`absolute bottom-2 left-2 right-2 z-10 max-h-[46vh] overflow-y-auto p-2.5 md:bottom-auto md:left-auto md:top-2 md:max-h-[calc(100%-1rem)] md:w-[340px] ${panelClass(tone)}`}
+        className={`absolute bottom-2 left-2 right-2 z-10 max-h-[46vh] overflow-y-auto p-2.5 md:bottom-auto md:left-auto md:top-2 md:max-h-[calc(100%-1rem)] ${panelOpen ? 'md:w-[340px]' : 'md:w-auto'} ${panelClass(tone)}`}
       >
         <div className="flex items-center justify-between">
           <button
@@ -481,8 +698,9 @@ export function View3DView() {
             className="flex min-h-[44px] items-center gap-1.5 text-[14px] font-semibold"
           >
             <Layers size={16} /> {t3d(lang, 'fiberMap')}
+            {panelOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
-          <HelpBubble tone={tone} text={t3d(lang, 'help.map')} label={t3d(lang, 'help')} />
+          {panelOpen && <HelpBubble tone={tone} text={t3d(lang, 'help.map')} label={t3d(lang, 'help')} />}
         </div>
         {panelOpen && (
           <div className="space-y-3">
@@ -495,6 +713,16 @@ export function View3DView() {
                 </Btn>
               </div>
             ) : (
+              <NetworkSummary
+                tone={tone}
+                lang={lang}
+                facts={summaryFacts}
+                pons={scene.pons}
+                activePon={filter.kind === 'pon' ? filter.ponKey : null}
+                onPon={onPon}
+              />
+            )}
+            {!isEmpty && (
               <MappingPanel
                 tone={tone}
                 lang={lang}
@@ -519,9 +747,31 @@ export function View3DView() {
                 lang={lang}
                 path={customer}
                 others={others}
+                facts={customerFacts}
                 onOther={pickCustomer}
                 onClose={() => pickCustomer(null)}
                 onShow2d={scene.isDemo ? undefined : back2d}
+              />
+            )}
+            {cableInfo && (
+              <EquipmentCard
+                tone={tone}
+                lang={lang}
+                name={cableInfo.rec.name}
+                type={cableInfo.rec.type}
+                status={cableInfo.rec.status}
+                facts={cableInfo.facts}
+                rows={{ title: t3d(lang, 'info.cores'), items: cableInfo.rows }}
+                onClose={() => setCableId(null)}
+              />
+            )}
+            {!isEmpty && (
+              <FreePlaces
+                tone={tone}
+                lang={lang}
+                title={filter.kind === 'pon' ? (pon?.label ?? '') : t3d(lang, 'info.allPons')}
+                places={freePlaces}
+                onGo={goToBox}
               />
             )}
             {equipmentInfo && (
@@ -533,6 +783,9 @@ export function View3DView() {
                 status={equipmentInfo.rec.status}
                 box={equipmentInfo.box}
                 extra={equipmentInfo.extra}
+                facts={equipmentFacts?.facts}
+                warning={equipmentFacts?.warning}
+                rows={{ title: t3d(lang, 'info.outs'), items: outputRows }}
                 onClose={() => setEquipmentId(null)}
                 onShow2d={scene.isDemo ? undefined : back2d}
               />
@@ -548,6 +801,40 @@ export function View3DView() {
         )}
       </div>
 
+      {/* Move-around buttons, for people who do not know the mouse or finger moves. */}
+      <div
+        className={`absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 p-1 md:bottom-8 md:top-auto md:translate-y-0 ${panelOpen ? 'md:right-[356px]' : ''} ${panelClass(tone)}`}
+      >
+        {(
+          [
+            ['in', 'nav.in', <Plus key="i" size={20} />],
+            ['out', 'nav.out', <Minus key="o" size={20} />],
+            ['left', 'nav.left', <RotateCcw key="l" size={18} />],
+            ['right', 'nav.right', <RotateCw key="r" size={18} />],
+          ] as const
+        ).map(([action, key, icon]) => (
+          <button
+            key={action}
+            type="button"
+            title={t3d(lang, key)}
+            aria-label={t3d(lang, key)}
+            onClick={() => engine.current?.nav(action)}
+            className={`grid h-11 w-11 place-items-center rounded-lg ${dark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+          >
+            {icon}
+          </button>
+        ))}
+        <button
+          type="button"
+          title={t3d(lang, 'nav.home')}
+          aria-label={t3d(lang, 'nav.home')}
+          onClick={() => onPreset('ov')}
+          className={`grid h-11 w-11 place-items-center rounded-lg ${dark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+        >
+          <Home size={18} />
+        </button>
+      </div>
+
       {/* Caption: what this view shows, in plain words. Hidden on phones to keep the scene visible. */}
       <div
         className={`absolute bottom-2 left-2 z-10 hidden max-w-[440px] p-2.5 text-[12.5px] leading-snug md:block ${panelClass(tone)} ${muted}`}
@@ -557,7 +844,7 @@ export function View3DView() {
       </div>
 
       {groundSource && (groundState === 'ready' || groundState === 'partial') && (
-        <div className="pointer-events-none absolute bottom-1 right-2 z-10 hidden rounded bg-white/70 px-1.5 text-[10.5px] text-slate-700 md:block">
+        <div className="pointer-events-none absolute bottom-1 right-16 z-10 hidden rounded bg-white/70 px-1.5 text-[10.5px] text-slate-700 md:block">
           {attribution}
         </div>
       )}

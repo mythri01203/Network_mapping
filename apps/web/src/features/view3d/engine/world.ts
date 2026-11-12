@@ -182,6 +182,7 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
       if (item.kind === 'olt') {
         kit.keepReadable(tag, 46);
         if (tag) tag.userData.priority = 3;
+        if (tag) tag.userData.pick = { kind: 'equipment', id };
       }
     }
     kit.tag(L('label.ups'), r.position.x + 1.0, 0.25, r.position.z + 0.4, 0.08);
@@ -197,7 +198,7 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
     for (const p of scene.poles) kit.tag(p.name, p.position.x, p.height + 0.7, p.position.z, 0.4);
   for (const p of scene.poles) focus.set(p.id, { at: v(p.position.x, p.height * 0.6, p.position.z), size: p.height });
   const plant: PlantAnchors = buildBoxes(kit, root, scene.boxes, scene.poles, aerialY, options.labels);
-  for (const [id, obj] of plant.objects) focus.set(id, { at: obj.position.clone(), size: 1.5 });
+  for (const [id, obj] of plant.objects) focus.set(id, { at: obj.position.clone(), size: 2.6 });
 
   // Houses
   const houses = scene.houses.length ? new HouseLayer(kit, scene.houses) : null;
@@ -207,10 +208,11 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
   }
 
   // Fibers
-  // Real thickness: a 24-fibre aerial cable is about 12 mm across, a drop about 5 mm (drawn a
-  // little thicker so it can be seen). From far away thin lines stand in for them (`far` below).
+  // Drawn a few times thicker than a real cable (12 mm trunk, 5 mm drop) so it can be followed
+  // from the street, but the same whatever the network's size. From far away thin lines stand in
+  // for them (`far` below).
   const k = 1;
-  const radius = { feeder: 0.02, branch: 0.015, drop: 0.009, uplink: 0.012, other: 0.015 } as const;
+  const radius = { feeder: 0.045, branch: 0.035, drop: 0.022, uplink: 0.012, other: 0.035 } as const;
   const ponAnchor = new Map<string, THREE.Vector3>();
   const rackTop = new Map<string, THREE.Vector3>();
   for (const a of rackAnchors) {
@@ -348,6 +350,35 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
   const fibers = new FiberLayer(kit, inputs);
   root.add(fibers.group);
 
+  // Cable size and PON printed on every trunk and distribution cable, at the middle of its route:
+  // "48F · PON-01, PON-02". Both come from the records (fiber count; PON from the fiber walk).
+  if (options.labels) {
+    const ponName = new Map(scene.pons.map((p) => [p.key, p.ponId]));
+    for (const c of scene.cables) {
+      if (c.role === 'drop' || c.role === 'uplink' || !c.fiberCount || c.points.length < 2) continue;
+      if (kit.labelCount > 700) break;
+      const mid = c.points[Math.floor((c.points.length - 1) / 2)];
+      const next = c.points[Math.floor((c.points.length - 1) / 2) + 1] ?? mid;
+      const names = c.ponKeys.map((k) => ponName.get(k)).filter(Boolean) as string[];
+      const pons = names.length
+        ? ` · ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`
+        : '';
+      const tag = kit.tag(
+        `${c.fiberCount}F${c.fiberStandard ? ` ${c.fiberStandard}` : ''}${c.coresListed ? ` · ${c.coresUsed ?? 0}/${c.coresListed} used` : ''}${pons}`,
+        (mid.x + next.x) / 2,
+        (c.aerial ? aerialY : 0.06) + 0.9,
+        (mid.z + next.z) / 2,
+        0.42,
+      );
+      // Trunk cables keep their size label readable from far; the engine hides overlaps.
+      if (tag) {
+        kit.keepReadable(tag, c.role === 'feeder' ? 22 : 18);
+        tag.userData.priority = c.role === 'feeder' ? 2 : 0;
+        tag.userData.pick = { kind: 'cable', id: c.id };
+      }
+    }
+  }
+
   // Far layer: from hundreds of metres up a cable or a house is thinner than a pixel, so every
   // cable is also a thin line and every house, box and office a dot of a fixed size on screen.
   // The engine shows it only when the camera is high. Same records, same places, same colours.
@@ -386,10 +417,16 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
       );
       far.add(new THREE.Points(g, kit.own(new THREE.PointsMaterial({ color, size, sizeAttenuation: false }))));
     };
+    // Houses by the customer's recorded status: green active, red not active.
     dots(
-      scene.houses.map((h) => ({ x: h.position.x, y: 3, z: h.position.z })),
-      0xfff2c9,
-      4,
+      scene.houses.filter((h) => !h.inactive).map((h) => ({ x: h.position.x, y: 3, z: h.position.z })),
+      0x34d399,
+      5,
+    );
+    dots(
+      scene.houses.filter((h) => h.inactive).map((h) => ({ x: h.position.x, y: 3.2, z: h.position.z })),
+      0xef4444,
+      7,
     );
     dots(
       scene.poles.map((p) => ({ x: p.position.x, y: p.height, z: p.position.z })),

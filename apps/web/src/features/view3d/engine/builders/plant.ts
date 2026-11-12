@@ -413,16 +413,36 @@ export function buildBoxes(
     anchors.boxes.set(box.id, attach);
     if (labels && kit.labelCount < labelBudget) {
       const ratio = box.splitters.length ? ` (${box.splitters.map((s) => s.ratio).join(', ')})` : '';
+      // Second line: ports used of total, customers served, and the light level recorded on
+      // those customers ("~" when it is calculated, not measured).
+      const facts: string[] = [];
+      if (box.totalOutputs) {
+        facts.push(`${box.totalOutputs - (box.freeOutputs ?? 0)}/${box.totalOutputs} used`);
+        if (box.freeOutputs) facts.push(`${box.freeOutputs} FREE`);
+      } else if (box.ports.length)
+        facts.push(`${box.ports.filter((p) => p.state === 'used').length}/${box.ports.length} ports`);
+      if (box.served && box.model !== 'fat') facts.push(`${box.served} customers`);
+      if (box.rx) {
+        const approx = box.rx.measured ? '' : '~';
+        facts.push(
+          box.rx.min === box.rx.max
+            ? `Rx ${approx}${box.rx.min.toFixed(1)} dBm`
+            : `Rx ${approx}${box.rx.min.toFixed(1)} to ${box.rx.max.toFixed(1)} dBm`,
+        );
+      }
       const tag = kit.tag(
         `${box.name}${ratio}`,
         box.position.x,
         g.position.y + (box.model === 'cabinet' ? 2.2 : 1.3),
         box.position.z,
         0.55,
+        facts.length ? facts.join(' · ') : undefined,
       );
       // Names stay readable from far away; the engine hides one that would cover another.
-      kit.keepReadable(tag, 26);
-      if (tag) tag.userData.priority = box.model === 'fat' ? 1 : 2;
+      // Two lines need more height to stay readable.
+      kit.keepReadable(tag, facts.length ? 46 : 26);
+      if (tag) tag.userData.priority = (box.model === 'fat' ? 1 : 2) + (box.freeOutputs ? 0.5 : 0);
+      if (tag) tag.userData.pick = { kind: 'equipment', id: box.id };
     }
   }
   return anchors;

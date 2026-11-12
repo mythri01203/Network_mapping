@@ -289,6 +289,46 @@ export class Kit {
     return t;
   }
 
+  /** A label with the name on top and facts (ports, light level) in yellow under it. */
+  private twoLineTexture(text: string, sub: string): THREE.Texture | null {
+    if (!canDrawText()) return null;
+    const w = 512;
+    const h = 180;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    g.fillStyle = 'rgba(10,16,22,.88)';
+    g.beginPath();
+    if (g.roundRect) g.roundRect(2, 2, w - 4, h - 4, 18);
+    else g.rect(2, 2, w - 4, h - 4);
+    g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.35)';
+    g.lineWidth = 3;
+    g.stroke();
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const line = (t: string, y: number, px: number, color: string) => {
+      let size = px;
+      const font = (s: number) => `600 ${s}px system-ui, "Noto Sans Kannada", "Noto Sans Telugu", sans-serif`;
+      g.font = font(size);
+      while (size > 12 && g.measureText(t).width > w - 20) {
+        size -= 2;
+        g.font = font(size);
+      }
+      g.fillStyle = color;
+      g.fillText(t, w / 2, y);
+    };
+    line(text, 58, 42, '#ffffff');
+    line(sub, 124, 36, '#ffe08a');
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    this.owned.add(t);
+    return t;
+  }
+
   private numberMats = new Map<number, THREE.MeshBasicMaterial | null>();
   private ledMats = new Map<string, THREE.MeshStandardMaterial>();
 
@@ -332,14 +372,15 @@ export class Kit {
 
   /** A floating label that always faces the camera, at a world position. */
   tag(text: string, x: number, y: number, z: number, scale = 0.8, sub?: string): THREE.Sprite | null {
-    const label = sub ? `${text} · ${sub}` : text;
-    const map = this.textTexture(label, 512, 112, 44, '#ffffff', 'rgba(10,16,22,.85)');
+    const map = sub
+      ? this.twoLineTexture(text, sub)
+      : this.textTexture(text, 512, 112, 44, '#ffffff', 'rgba(10,16,22,.85)');
     if (!map) return null;
     const mat = new THREE.SpriteMaterial({ map, depthTest: false, transparent: true });
     this.owned.add(mat);
     const sp = new THREE.Sprite(mat);
     sp.position.set(x, y, z);
-    sp.scale.set(4.6 * scale, scale, 1);
+    sp.scale.set(4.6 * scale, sub ? scale * 1.6 : scale, 1);
     sp.renderOrder = 9;
     sp.userData.baseScale = new THREE.Vector2(sp.scale.x, sp.scale.y);
     this.labels.add(sp);

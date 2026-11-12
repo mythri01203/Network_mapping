@@ -147,6 +147,16 @@ export interface SceneBox {
   splitters: { id: string; name: string; ratio: string; level?: number }[];
   ports: SceneBoxPort[];
   status: string;
+  /**
+   * Light levels recorded on the customers whose path goes through this box: lowest, highest,
+   * how many, and whether every one was measured (false: some are calculated).
+   */
+  rx?: { min: number; max: number; n: number; measured: boolean };
+  /** Customers whose recorded path goes through this box. */
+  served?: number;
+  /** Splitter outputs in this box recorded as not occupied: places for a new connection. */
+  freeOutputs?: number;
+  totalOutputs?: number;
 }
 
 export type CableRole = 'feeder' | 'branch' | 'drop' | 'uplink' | 'other';
@@ -168,6 +178,13 @@ export interface SceneCable {
   /** Map line colour or role colour; never a fiber colour claim. */
   colorHex: string;
   customerId?: string;
+  /** Number of fibers in the cable, as recorded (2, 6, 12, 48...). */
+  fiberCount?: number;
+  /** The fiber standard written on the cable record, such as G.652D or G.657A2. */
+  fiberStandard?: string;
+  /** Fibers (cores) recorded as in use, of those listed on the cable record. */
+  coresUsed?: number;
+  coresListed?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,6 +245,13 @@ export interface SceneHouse {
   /** Several customers at one point are drawn as a block of this many floors. */
   floors: number;
   fault: boolean;
+  /** A customer here has a recorded status other than Active (suspended, disconnected...). */
+  inactive: boolean;
+  /** The lowest light level recorded for a customer here (dBm), and whether it was measured. */
+  rxDbm?: number;
+  rxMeasured?: boolean;
+  /** Fibers in the drop cable to this house, as recorded. */
+  dropFibers?: number;
   /** Smallest house number of the customers inside. */
   number: number;
 }

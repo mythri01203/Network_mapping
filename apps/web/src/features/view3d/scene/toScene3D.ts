@@ -491,11 +491,18 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
         seed: seedOf(c.id),
         floors: 1,
         fault: false,
+        inactive: false,
         number: i + 1,
       };
       houseByCell.set(cellKey, house);
     }
     house.customerIds.push(c.id);
+    if (c.status && c.status !== 'Active') house.inactive = true;
+    if (typeof c.rxOpticalPowerDbm === 'number' && (house.rxDbm === undefined || c.rxOpticalPowerDbm < house.rxDbm)) {
+      house.rxDbm = c.rxOpticalPowerDbm;
+      // Only a reading taken by a meter or the device counts as measured.
+      house.rxMeasured = !!c.rxSource && c.rxSource !== 'calculated';
+    }
     const walked = cascade.paths.get(c.id);
     const dropCable = walked?.dropCableId ? cascade.index.cables.get(walked.dropCableId) : undefined;
     const fiber = dropFiberColor(cascade.index, dropCable, walked?.dropCore);
@@ -584,6 +591,10 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
       endId: c.endEquipmentId,
       colorHex,
       customerId: customer?.customerId,
+      fiberCount: typeof c.fiberCount === 'number' && c.fiberCount > 0 ? c.fiberCount : undefined,
+      fiberStandard: c.fiberStandard || undefined,
+      coresListed: c.cores?.length || undefined,
+      coresUsed: c.cores?.length ? c.cores.filter((k) => k.status === 'In Use').length : undefined,
     });
   }
   if (undrawn) notes.push({ key: 'note.undrawn', values: { n: undrawn } });
@@ -617,6 +628,48 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
     .filter((s) => s.used > 0 || s.levels.length > 0);
   const recordOnly = customers.filter((p) => p.source === 'record').length;
   if (recordOnly) notes.push({ key: 'note.record', values: { n: recordOnly } });
+
+  // Light levels and customer counts per box, from the customers whose path goes through it; and
+  // the size of each house's drop cable.
+  {
+    const record = new Map(input.customers.map((c) => [c.id, c]));
+    const boxById = new Map(boxes.map((b) => [b.id, b]));
+    const houseById = new Map(houses.map((h) => [h.id, h]));
+    for (const s of input.splitters) {
+      const box = s.terminalBoxId ? boxById.get(s.terminalBoxId) : undefined;
+      if (!box || !s.outputPorts?.length) continue;
+      box.totalOutputs = (box.totalOutputs ?? 0) + s.outputPorts.length;
+      box.freeOutputs = (box.freeOutputs ?? 0) + s.outputPorts.filter((o) => o.status !== 'Occupied').length;
+    }
+    const dropSize = new Map(
+      cables.filter((c) => c.customerId && c.fiberCount).map((c) => [c.customerId, c.fiberCount]),
+    );
+    for (const p of customers) {
+      const house = houseById.get(p.houseId);
+      const size = dropSize.get(p.customerId);
+      if (house && size && !house.dropFibers) house.dropFibers = size;
+      const rec = record.get(p.customerId);
+      const seen = new Set<string>();
+      for (const hop of p.hops) {
+        if (hop.kind !== 'splitter' || !hop.boxId || seen.has(hop.boxId)) continue;
+        seen.add(hop.boxId);
+        const box = boxById.get(hop.boxId);
+        if (!box) continue;
+        box.served = (box.served ?? 0) + 1;
+        const rx = rec?.rxOpticalPowerDbm;
+        if (typeof rx !== 'number') continue;
+        const measured = !!rec?.rxSource && rec.rxSource !== 'calculated';
+        box.rx = box.rx
+          ? {
+              min: Math.min(box.rx.min, rx),
+              max: Math.max(box.rx.max, rx),
+              n: box.rx.n + 1,
+              measured: box.rx.measured && measured,
+            }
+          : { min: rx, max: rx, n: 1, measured };
+      }
+    }
+  }
 
   // Bounds of the main network. A record far away from all the others (say a test cable left in
   // another city) would stretch the scene to hundreds of kilometres and crush the network into one
