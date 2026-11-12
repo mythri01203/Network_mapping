@@ -17,6 +17,11 @@ export interface EngineEvents {
   /** The person moved the camera, so no preset is active any more. */
   onUserMove?: () => void;
   onStats?: (s: { fps: number; pixelRatio: number }) => void;
+  /**
+   * A tap on the ground, in local metres. Return true to take it (the person is choosing a
+   * place, such as a new customer's house); nothing is then selected.
+   */
+  onGroundTap?: (point: { x: number; z: number }) => boolean;
   /** The street map under the scene: loading, shown, or could not load (offline). */
   onGround?: (state: GroundState) => void;
 }
@@ -432,6 +437,11 @@ export class View3DEngine {
     this.renderer.toneMappingExposure = this.opts.dark ? 1 : 1.05;
   }
 
+  /** The point on the ground the camera looks at, in local metres. */
+  lookingAt(): { x: number; z: number } {
+    return { x: this.rig.target.x, z: this.rig.target.z };
+  }
+
   /** On-screen buttons: zoom in or out a step, turn left or right. */
   nav(action: 'in' | 'out' | 'left' | 'right') {
     if (action === 'in') this.rig.zoom(0.6);
@@ -502,6 +512,10 @@ export class View3DEngine {
 
   private pickAt(clientX: number, clientY: number) {
     if (!this.world) return;
+    if (this.events.onGroundTap) {
+      const g = this.rig.groundAt(clientX, clientY);
+      if (g && this.events.onGroundTap({ x: g.x, z: g.z })) return;
+    }
     const onScreen = this.pickOnScreen(clientX, clientY);
     if (onScreen) {
       // Picked by its name or dot from far away: go to it so it can be seen.

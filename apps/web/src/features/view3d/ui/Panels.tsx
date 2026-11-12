@@ -5,7 +5,7 @@ import type { FiberFilter } from '../engine/fibers';
 import { type Lang3D, type Msg3DKey, t3d, tx } from '../i18n';
 import { TIA598 } from '../scene/models';
 import type { PresetKey } from '../scene/presets';
-import type { ColorChip, CustomerPath, PonSummary, Scene3D, SceneBox, SceneText } from '../scene/types';
+import type { ColorChip, CustomerPath, PonChip, PonSummary, Scene3D, SceneBox, SceneText } from '../scene/types';
 import { mutedClass, panelClass, PRESET_ORDER, type Tone } from './style';
 
 /** Panels of the 3D view. Every button has a visible label; colours always come with names. */
@@ -132,6 +132,13 @@ export function PresetPanel({
 const filterKey = (f: FiberFilter) =>
   f.kind === 'level' ? `level:${f.level}` : f.kind === 'pon' ? `pon:${f.ponKey}` : f.kind;
 
+/** A button on a card. `primary` draws it highlighted. */
+export interface CardAction {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
 /** One fiber of a cable or one output of a splitter. */
 export interface PortRow {
   key: string;
@@ -223,7 +230,7 @@ export function NetworkSummary({
   tone: Tone;
   lang: Lang3D;
   facts: Fact[];
-  pons: PonSummary[];
+  pons: PonChip[];
   activePon: string | null;
   onPon: (key: string) => void;
 }) {
@@ -235,28 +242,44 @@ export function NetworkSummary({
       {pons.length > 0 && (
         <div>
           <div className={`mb-1 text-[11px] uppercase tracking-wide ${muted}`}>{t3d(lang, 'info.ponList')}</div>
-          <div className="flex flex-wrap gap-1">
+          <ul className="space-y-1">
             {pons.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                aria-pressed={activePon === p.key}
-                onClick={() => onPon(p.key)}
-                className={`min-h-[44px] rounded-lg border px-2 text-left text-[12px] leading-tight ${
-                  activePon === p.key
-                    ? 'border-emerald-600 bg-emerald-500/10'
-                    : tone.dark
-                      ? 'border-white/15'
-                      : 'border-black/15'
-                }`}
-              >
-                <div className="font-semibold">{p.ponId}</div>
-                <div className={muted}>
-                  {p.used} / {p.spare}
-                </div>
-              </button>
+              <li key={p.key}>
+                <button
+                  type="button"
+                  aria-pressed={activePon === p.key}
+                  onClick={() => onPon(p.key)}
+                  className={`w-full rounded-lg border px-2 py-1.5 text-left text-[12px] leading-tight ${
+                    activePon === p.key
+                      ? 'border-emerald-600 bg-emerald-500/10'
+                      : tone.dark
+                        ? 'border-white/15 hover:bg-white/10'
+                        : 'border-black/15 hover:bg-black/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] font-bold"
+                        style={{ background: p.hex, color: p.ink }}
+                      >
+                        {p.id}
+                      </span>
+                      <span className="truncate font-semibold">{p.area}</span>
+                    </span>
+                    <span className={`shrink-0 font-semibold ${p.free > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {p.free} {t3d(lang, 'info.free')}
+                    </span>
+                  </div>
+                  {p.streets.length > 0 && <div className={`truncate ${muted}`}>{p.streets.join(', ')}</div>}
+                  <div className={muted}>
+                    {p.active} {t3d(lang, 'info.active')} · {p.inactive} {t3d(lang, 'info.inactive')}
+                    {p.rxRange && ` · Rx ~${p.rxRange.minDbm.toFixed(1)} … ${p.rxRange.maxDbm.toFixed(1)} dBm`}
+                  </div>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
       <p className={`text-[11px] ${muted}`}>{t3d(lang, 'info.dots')}</p>
@@ -450,6 +473,7 @@ export function CustomerCard({
   path,
   others,
   facts,
+  actions,
   onShow2d,
   onClose,
   onOther,
@@ -460,6 +484,8 @@ export function CustomerCard({
   others: CustomerPath[];
   /** More recorded facts about the customer: status, plan, light level. */
   facts?: Fact[];
+  /** Work that can be done on this record (edit, add a customer). */
+  actions?: CardAction[];
   onShow2d?: () => void;
   onClose: () => void;
   onOther: (id: string) => void;
@@ -522,11 +548,18 @@ export function CustomerCard({
           ))}
         </div>
       )}
-      {onShow2d && (
-        <Btn tone={tone} onClick={onShow2d}>
-          {t3d(lang, 'openIn2d')}
-        </Btn>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {actions?.map((a) => (
+          <Btn key={a.label} tone={tone} on={a.primary} onClick={a.onClick}>
+            {a.label}
+          </Btn>
+        ))}
+        {onShow2d && (
+          <Btn tone={tone} onClick={onShow2d}>
+            {t3d(lang, 'openIn2d')}
+          </Btn>
+        )}
+      </div>
     </section>
   );
 }
@@ -542,6 +575,7 @@ export function EquipmentCard({
   facts,
   warning,
   rows,
+  actions,
   onShow2d,
   onClose,
 }: {
@@ -558,6 +592,8 @@ export function EquipmentCard({
   warning?: string;
   /** One row per fiber or splitter output: number, colour, used or free, what it carries. */
   rows?: { title: string; items: PortRow[] };
+  /** Work that can be done on this record (edit, add a customer). */
+  actions?: CardAction[];
   onShow2d?: () => void;
   onClose: () => void;
 }) {
@@ -629,11 +665,18 @@ export function EquipmentCard({
         </div>
       )}
       {extra && <div className={`text-[11.5px] ${muted}`}>{extra}</div>}
-      {onShow2d && (
-        <Btn tone={tone} onClick={onShow2d}>
-          {t3d(lang, 'openIn2d')}
-        </Btn>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {actions?.map((a) => (
+          <Btn key={a.label} tone={tone} on={a.primary} onClick={a.onClick}>
+            {a.label}
+          </Btn>
+        ))}
+        {onShow2d && (
+          <Btn tone={tone} onClick={onShow2d}>
+            {t3d(lang, 'openIn2d')}
+          </Btn>
+        )}
+      </div>
     </section>
   );
 }

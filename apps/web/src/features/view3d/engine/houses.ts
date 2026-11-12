@@ -229,16 +229,18 @@ export class HouseLayer {
     for (let i = 0; i < count; i += 1) {
       const x = (i % cols) * cw;
       const y = Math.floor(i / cols) * ch;
-      g.fillStyle = this.houses[i].fault
-        ? 'rgba(160,20,20,.9)'
-        : this.houses[i].inactive
-          ? 'rgba(180,83,9,.95)'
-          : 'rgba(10,16,22,.82)';
+      // Active: the PON's map colour. Not active: grey with a red edge. Live fault: red.
+      const hh = this.houses[i];
+      g.fillStyle = hh.fault ? 'rgba(160,20,20,.95)' : hh.inactive ? '#475569' : (hh.ponHex ?? 'rgba(10,16,22,.82)');
       g.fillRect(x + 2, y + 2, cw - 4, ch - 4);
-      g.fillStyle = '#fff';
+      if (hh.inactive && !hh.fault) {
+        g.fillStyle = '#ef4444';
+        g.fillRect(x + 2, y + 2, 8, ch - 4);
+      }
+      g.fillStyle = hh.fault || hh.inactive ? '#fff' : (hh.ponInk ?? '#fff');
       const extra = this.houses[i].customerIds.length > 1 ? `+${this.houses[i].customerIds.length - 1}` : '';
       const hs = this.houses[i];
-      const parts = [`${hs.number}${extra}`];
+      const parts = [`${hs.inactive ? 'OFF ' : ''}${hs.number}${extra}`];
       if (hs.dropFibers) parts.push(`${hs.dropFibers}F`);
       if (hs.rxDbm !== undefined) parts.push(`${hs.rxMeasured ? '' : '~'}${hs.rxDbm.toFixed(1)} dBm`);
       g.fillText(parts.join(' · '), x + cw / 2, y + ch / 2 + 1);
@@ -266,7 +268,11 @@ export class HouseLayer {
           void main() {
             vUv = cell + uv * cellSize;
             vec4 mv = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-            mv.xy += position.xy * size;
+            // Readable from the street: the tag grows with distance up to 350 m away, then
+            // shrinks again so the overview is not covered in tags.
+            float grow = max(1.0, min(-mv.z, 350.0) * 0.022);
+            mv.y += (grow - 1.0) * size.y * 0.5;
+            mv.xy += position.xy * size * grow;
             gl_Position = projectionMatrix * mv;
           }`,
         fragmentShader: `

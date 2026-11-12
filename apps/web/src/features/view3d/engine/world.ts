@@ -355,7 +355,7 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
   if (options.labels) {
     const ponName = new Map(scene.pons.map((p) => [p.key, p.ponId]));
     for (const c of scene.cables) {
-      if (c.role === 'drop' || c.role === 'uplink' || !c.fiberCount || c.points.length < 2) continue;
+      if (c.role === 'drop' || c.role === 'uplink' || (!c.fiberCount && !c.pon) || c.points.length < 2) continue;
       if (kit.labelCount > 700) break;
       const mid = c.points[Math.floor((c.points.length - 1) / 2)];
       const next = c.points[Math.floor((c.points.length - 1) / 2) + 1] ?? mid;
@@ -363,12 +363,17 @@ export function buildWorld(scene: Scene3D, options: { labels: boolean; dark: boo
       const pons = names.length
         ? ` · ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`
         : '';
+      // On a PON: the 2D map's pill, in the PON's colour. Otherwise size and cores in plain black.
       const tag = kit.tag(
-        `${c.fiberCount}F${c.fiberStandard ? ` ${c.fiberStandard}` : ''}${c.coresListed ? ` · ${c.coresUsed ?? 0}/${c.coresListed} used` : ''}${pons}`,
+        c.pon
+          ? `${c.pon.text}${c.fiberStandard ? ` · ${c.fiberStandard}` : ''}`
+          : `${c.fiberCount}F${c.fiberStandard ? ` ${c.fiberStandard}` : ''}${c.coresListed ? ` · ${c.coresUsed ?? 0}/${c.coresListed} used` : ''}${pons}`,
         (mid.x + next.x) / 2,
         (c.aerial ? aerialY : 0.06) + 0.9,
         (mid.z + next.z) / 2,
         0.42,
+        undefined,
+        c.pon,
       );
       // Trunk cables keep their size label readable from far; the engine hides overlaps.
       if (tag) {

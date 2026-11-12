@@ -21,6 +21,8 @@ const lazyView = <K extends string>(load: () => Promise<Record<K, React.Componen
 const VIEW_COMPONENTS: Record<Exclude<MainView, 'map'>, React.ComponentType> = {
   // The 3D view carries three.js; it is its own chunk so the 2D map bundle does not grow.
   view3d: lazyView(() => import('../features/view3d/View3DView'), 'View3DView'),
+  // The digital twin shares three.js with the 3D view and is its own chunk too.
+  twin: lazyView(() => import('../features/twin/TwinView'), 'TwinView'),
   topology: lazyView(() => import('../features/topology/NetworkTopologyView'), 'NetworkTopologyView'),
   olt_rack: lazyView(() => import('../features/olt-rack/OLTRackView'), 'OLTRackView'),
   inventory: lazyView(() => import('../features/inventory/EquipmentInventoryView'), 'EquipmentInventoryView'),

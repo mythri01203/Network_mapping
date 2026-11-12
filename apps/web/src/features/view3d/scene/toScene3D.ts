@@ -1,5 +1,6 @@
 import {
   type Attachment,
+  buildPonOverview,
   type Cable,
   type ColorScheme,
   type Customer,
@@ -21,6 +22,7 @@ import {
   splitterCapacity,
 } from '@fibergis/shared';
 
+import { ponColor, TRUNK_COLOR } from '../../map/pon/ponColors';
 import { type CascadeResult, dropFiberColor, walkCascade } from './cascade';
 import { distance, makeProjection, pickOrigin, type Projection, seedOf } from './geoLocal';
 import { summarizePon } from './lossBudget';
@@ -671,6 +673,83 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
     }
   }
 
+  // The same PON picture as the 2D map ("Network by PON"): each PON port has a map colour, fibers
+  // and houses take the colour of the PON they carry, cables are named by PON and cores used, and
+  // each splitter gets a badge with its outputs and calculated levels.
+  const overview = buildPonOverview(
+    {
+      equipment: input.equipment,
+      cables: input.cables,
+      splitters: input.splitters,
+      closures: input.closures,
+      customers: input.customers,
+    },
+    optical,
+  );
+  const ponByKey = new Map(overview.pons.map((p) => [p.key, p]));
+  const shortPon = (id: string) => id.replace(/^PON-?/i, '');
+  for (const c of cables) {
+    const use = overview.cables.get(c.id);
+    const viaCustomer = c.customerId ? overview.customers.get(c.customerId)?.ponKey : undefined;
+    const keys = use?.ponKeys.length ? use.ponKeys : viaCustomer ? [viaCustomer] : [];
+    const on = keys.map((k) => ponByKey.get(k)).filter((p): p is NonNullable<typeof p> => !!p);
+    if (!on.length) continue;
+    const chip = on.length === 1 ? ponColor(on[0].portNumber) : { hex: TRUNK_COLOR, ink: '#ffffff' };
+    // Trunk and distribution fibers take the PON's colour. A drop keeps the colour code of its
+    // splitter output, so the leads leaving one box can be told apart.
+    if (c.role !== 'drop') c.colorHex = chip.hex;
+    const names = on.length === 1 ? on[0].ponPortId : `PON ${on.map((p) => shortPon(p.ponPortId)).join(', ')}`;
+    const size = c.fiberCount ? ` · ${c.fiberCount}F${use ? ` ${use.coresUsed}/${c.fiberCount} used` : ''}` : '';
+    c.pon = { text: `${names}${size}`, hex: chip.hex, ink: chip.ink };
+  }
+  const boxIndex = new Map(boxes.map((b) => [b.id, b]));
+  for (const s of overview.splitters.values()) {
+    const box = boxIndex.get(s.boxId);
+    if (!box) continue;
+    const pon = s.ponKey ? ponByKey.get(s.ponKey) : undefined;
+    const chip = pon ? ponColor(pon.portNumber) : { hex: '#94a3b8', ink: '#0f172a' };
+    (box.badges ??= []).push({
+      pon: pon?.ponPortId ?? 'No PON',
+      hex: chip.hex,
+      ink: chip.ink,
+      ratio: s.ratio,
+      stage: s.stage,
+      used: s.outputs.used,
+      faulty: s.outputs.faulty,
+      free: s.outputs.free,
+      total: s.outputs.total,
+      inDbm: s.inputDbm,
+      outDbm: s.outputDbm,
+    });
+  }
+  for (const b of boxes) b.badges?.sort((a, z) => (a.stage ?? 99) - (z.stage ?? 99));
+  {
+    const houseIndex = new Map(houses.map((h) => [h.id, h]));
+    for (const p of customers) {
+      const pon = ponByKey.get(overview.customers.get(p.customerId)?.ponKey ?? '');
+      const house = houseIndex.get(p.houseId);
+      if (!pon || !house || house.ponHex) continue;
+      const chip = ponColor(pon.portNumber);
+      house.ponHex = chip.hex;
+      house.ponInk = chip.ink;
+    }
+  }
+  const ponChips = overview.pons.map((p) => {
+    const chip = ponColor(p.portNumber);
+    return {
+      key: p.key,
+      id: p.ponPortId,
+      hex: chip.hex,
+      ink: chip.ink,
+      area: p.areas[0]?.name ?? '',
+      streets: p.streets,
+      active: p.customers.active,
+      inactive: p.customers.total - p.customers.active,
+      free: p.accessOutputs.free,
+      rxRange: p.rxRange,
+    };
+  });
+
   // Bounds of the main network. A record far away from all the others (say a test cable left in
   // another city) would stretch the scene to hundreds of kilometres and crush the network into one
   // spot. Such records are still drawn where they are, but left out of the bounds and named.
@@ -707,6 +786,7 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
     houses,
     customers,
     pons,
+    ponChips,
     notes,
     isDemo: !!options.isDemo,
   };

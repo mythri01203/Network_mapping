@@ -371,16 +371,144 @@ export class Kit {
   }
 
   /** A floating label that always faces the camera, at a world position. */
-  tag(text: string, x: number, y: number, z: number, scale = 0.8, sub?: string): THREE.Sprite | null {
+  tag(
+    text: string,
+    x: number,
+    y: number,
+    z: number,
+    scale = 0.8,
+    sub?: string,
+    chip?: { hex: string; ink: string },
+  ): THREE.Sprite | null {
     const map = sub
       ? this.twoLineTexture(text, sub)
-      : this.textTexture(text, 512, 112, 44, '#ffffff', 'rgba(10,16,22,.85)');
+      : this.textTexture(text, 512, 112, 44, chip?.ink ?? '#ffffff', chip?.hex ?? 'rgba(10,16,22,.85)');
     if (!map) return null;
     const mat = new THREE.SpriteMaterial({ map, depthTest: false, transparent: true });
     this.owned.add(mat);
     const sp = new THREE.Sprite(mat);
     sp.position.set(x, y, z);
     sp.scale.set(4.6 * scale, sub ? scale * 1.6 : scale, 1);
+    sp.renderOrder = 9;
+    sp.userData.baseScale = new THREE.Vector2(sp.scale.x, sp.scale.y);
+    this.labels.add(sp);
+    this.labelCount += 1;
+    return sp;
+  }
+
+  /**
+   * The badge over a splitter box, the same as on the 2D map: the box name, then for each splitter
+   * a chip in its PON's colour, the ratio and stage, how many outputs are free, the calculated
+   * level in and out, and one square per output (PON colour = used, red = faulty, pale = free).
+   */
+  badge(
+    name: string,
+    rows: readonly {
+      pon: string;
+      hex: string;
+      ink: string;
+      ratio: string;
+      stage?: number;
+      used: number;
+      faulty: number;
+      free: number;
+      total: number;
+      inDbm?: number;
+      outDbm?: number;
+    }[],
+    x: number,
+    y: number,
+    z: number,
+    scale: number,
+  ): THREE.Sprite | null {
+    if (!canDrawText()) return null;
+    const w = 640;
+    const rowH = 112;
+    const h = 76 + rows.length * rowH + 8;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    const font = (px: number, weight = 600) =>
+      `${weight} ${px}px system-ui, "Noto Sans Kannada", "Noto Sans Telugu", sans-serif`;
+    g.fillStyle = 'rgba(13,20,30,.93)';
+    g.beginPath();
+    if (g.roundRect) g.roundRect(2, 2, w - 4, h - 4, 20);
+    else g.rect(2, 2, w - 4, h - 4);
+    g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.3)';
+    g.lineWidth = 3;
+    g.stroke();
+    g.textBaseline = 'middle';
+    g.textAlign = 'center';
+    let size = 38;
+    g.font = font(size);
+    while (size > 16 && g.measureText(name).width > w - 28) {
+      size -= 2;
+      g.font = font(size);
+    }
+    g.fillStyle = '#ffffff';
+    g.fillText(name, w / 2, 42);
+    const fmt = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+    rows.forEach((r, i) => {
+      const top = 76 + i * rowH;
+      // PON chip
+      g.font = font(30, 700);
+      const chipW = Math.max(120, g.measureText(r.pon).width + 28);
+      g.fillStyle = r.hex;
+      g.beginPath();
+      if (g.roundRect) g.roundRect(16, top, chipW, 48, 10);
+      else g.rect(16, top, chipW, 48);
+      g.fill();
+      g.fillStyle = r.ink;
+      g.textAlign = 'center';
+      g.fillText(r.pon, 16 + chipW / 2, top + 25);
+      // ratio and stage
+      g.textAlign = 'left';
+      let cx = 16 + chipW + 14;
+      g.fillStyle = '#ffffff';
+      g.font = font(32, 700);
+      const ratio = `${r.ratio}${r.stage ? ` S${r.stage}` : ''}`;
+      g.fillText(ratio, cx, top + 25);
+      cx += g.measureText(ratio).width + 16;
+      // free outputs: red none, amber few, green plenty
+      g.fillStyle = r.free <= 0 ? '#f87171' : r.free / Math.max(1, r.total) < 0.2 ? '#fbbf24' : '#4ade80';
+      const free = `${r.free} free`;
+      g.fillText(free, cx, top + 25);
+      cx += g.measureText(free).width + 16;
+      if (r.inDbm !== undefined && r.outDbm !== undefined) {
+        g.fillStyle = '#7dd3fc';
+        g.font = font(26);
+        const room = w - cx - 14;
+        let level = `${fmt(r.inDbm)} → ${fmt(r.outDbm)} dBm`;
+        if (g.measureText(level).width > room) level = `→ ${fmt(r.outDbm)} dBm`;
+        if (g.measureText(level).width <= room) g.fillText(level, cx, top + 26);
+      }
+      // one square per output
+      const n = Math.min(32, r.total);
+      const gap = 6;
+      const sq = Math.min(30, (w - 32 - (n - 1) * gap) / Math.max(1, n));
+      for (let k = 0; k < n; k += 1) {
+        g.fillStyle = k < r.used ? r.hex : k < r.used + r.faulty ? '#dc2626' : '#e2e8f0';
+        g.fillRect(16 + k * (sq + gap), top + 62, sq, 26);
+        if (k < r.used && r.ink !== '#ffffff') {
+          g.strokeStyle = 'rgba(0,0,0,.35)';
+          g.lineWidth = 1;
+          g.strokeRect(16 + k * (sq + gap), top + 62, sq, 26);
+        }
+      }
+    });
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    this.owned.add(t);
+    const mat = new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true });
+    this.owned.add(mat);
+    const sp = new THREE.Sprite(mat);
+    const width = 5.2 * scale;
+    sp.scale.set(width, (width * h) / w, 1);
+    sp.position.set(x, y + (width * h) / w / 2, z);
     sp.renderOrder = 9;
     sp.userData.baseScale = new THREE.Vector2(sp.scale.x, sp.scale.y);
     this.labels.add(sp);

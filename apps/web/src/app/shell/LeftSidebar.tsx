@@ -139,6 +139,7 @@ export const LeftSidebar: React.FC = () => {
       items: [
         view('map', { simple: true }),
         view('view3d', { simple: true }),
+        view('twin', { simple: true }),
         view('topology'),
         view('olt_rack'),
         view('inventory', { count: equipments.length, simple: true }),
