@@ -55,12 +55,12 @@ describe('voice clips from Sarvam (faked)', () => {
     expect(made.statusCode).toBe(200);
     const { clip, reused } = made.json();
     expect(reused).toBe(false);
-    expect(clip).toMatchObject({ lessonKey: 'welcome.intro', language: 'te', status: 'draft', format: 'mp3', model: 'bulbul:v4-flash', voice: 'kavitha_te_conversation' });
+    expect(clip).toMatchObject({ lessonKey: 'welcome.intro', language: 'te', status: 'draft', format: 'mp3', model: 'bulbul:v3', voice: 'ritu pace 1.15 temperature 0.8' });
     const [url, init] = sarvam.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(SARVAM_TTS_URL);
     expect((init.headers as Record<string, string>)['api-subscription-key']).toBe(FAKE_KEY);
     const sent = JSON.parse(String(init.body));
-    expect(sent).toMatchObject({ language_code: 'te-IN', model: 'bulbul:v4-flash', text: LESSON_SCRIPTS[0].text.te.text });
+    expect(sent).toMatchObject({ language_code: 'te-IN', model: 'bulbul:v3', speaker: 'ritu', pace: 1.15, temperature: 0.8, text: LESSON_SCRIPTS[0].text.te.text });
     expect(readdirSync(voiceDir)).toEqual([`${clip.id}.mp3`]);
     // The key is in no answer.
     expect(made.body).not.toContain(FAKE_KEY);
@@ -129,6 +129,38 @@ describe('voice clips from Sarvam (faked)', () => {
     const heard = await send('GET', `/voice/audio/${clip.id}`, undefined, { cookie: ravi });
     expect(heard.statusCode).toBe(200);
     expect(heard.rawPayload.subarray(0, 3).toString()).toBe('ID3');
+  });
+
+  it('speaks any step automatically for a field user, making the voice once and reusing it', async () => {
+    await start();
+    const owner = cookieOf(await send('POST', '/auth/setup', { username: 'owner', displayName: 'Owner', password: 'owner-pass-1' }));
+    await send('POST', '/users', { username: 'ravi', displayName: 'Ravi', role: 'technician', password: 'ravi-pass-1' }, { cookie: owner });
+    const ravi = cookieOf(await send('POST', '/auth/login', { username: 'ravi', password: 'ravi-pass-1' }));
+    await send('POST', '/auth/password', { currentPassword: 'ravi-pass-1', newPassword: 'ravi-pass-2' }, { cookie: ravi });
+
+    const [a, b] = await Promise.all([
+      send('GET', '/voice/speak/welcome.intro/te', undefined, { cookie: ravi }),
+      send('GET', '/voice/speak/welcome.intro/te', undefined, { cookie: ravi }),
+    ]);
+    for (const heard of [a, b]) {
+      expect(heard.statusCode).toBe(200);
+      expect(heard.headers['content-type']).toBe('audio/mpeg');
+      expect(heard.rawPayload.subarray(0, 3).toString()).toBe('ID3');
+    }
+    expect((await send('GET', '/voice/speak/welcome.intro/te', undefined, { cookie: ravi })).statusCode).toBe(200);
+    expect(sarvam).toHaveBeenCalledTimes(1);
+    expect(readdirSync(voiceDir)).toHaveLength(1);
+
+    // Turned down by the administrator: not made again.
+    const { clips } = (await send('GET', '/voice/clips', undefined, { cookie: owner })).json();
+    await send('POST', `/voice/clips/${clips[0].id}/review`, { status: 'rejected', reviewer: 'Owner' }, { cookie: owner });
+    expect((await send('GET', '/voice/speak/welcome.intro/te', undefined, { cookie: ravi })).statusCode).toBe(404);
+    expect(sarvam).toHaveBeenCalledTimes(1);
+
+    // Only the server's own lessons and languages; logged out gets nothing.
+    expect((await send('GET', '/voice/speak/no.such.lesson/en', undefined, { cookie: ravi })).statusCode).toBe(404);
+    expect((await send('GET', '/voice/speak/welcome.intro/hi', undefined, { cookie: ravi })).statusCode).toBe(400);
+    expect((await send('GET', '/voice/speak/welcome.intro/en')).statusCode).toBe(401);
   });
 
   it('refuses a clip id that could point anywhere else', async () => {

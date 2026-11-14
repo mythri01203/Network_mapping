@@ -1,11 +1,13 @@
 import React from 'react';
-import { BookOpen, GraduationCap, Map, ShieldCheck, X } from 'lucide-react';
+import { BookOpen, GraduationCap, Map, ShieldCheck, Volume2, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { DEFAULT_OPTICAL_SETTINGS, STANDARD_12_COLORS } from '@fibergis/shared';
 
 import { useT } from '../../i18n/useT';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useUiStore } from '../../stores/uiStore';
+import { startCtx } from '../learn/guideTours';
 import { useLearnStore } from '../learn/learnStore';
 
 export const HelpModal: React.FC = () => {
@@ -55,9 +57,33 @@ export const HelpModal: React.FC = () => {
             <GraduationCap className="h-8 w-8 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">
               <span className="block text-base font-bold">{t('learn.open')}</span>
-              <span className="block text-xs text-blue-100">Pictures and voice, step by step · English, తెలుగు, ಕನ್ನಡ</span>
+              <span className="block text-xs text-blue-100">Pictures and voice, step by step</span>
             </span>
           </button>
+          {/* The on-screen guide: lights up the real buttons, with voice. */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                ['menu', t('learn.guideMenu')],
+                ['demo', t('learn.guideMap')],
+                ['map', t('learn.guideTry')],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                data-testid={`help-guide-${id}`}
+                onClick={() => {
+                  setModalOpen('help', false);
+                  useLearnStore.getState().openTour(id, id === 'menu' ? null : startCtx(useNetworkStore.getState()));
+                }}
+                className="flex min-h-14 items-center gap-3 rounded-2xl border-2 border-blue-200 bg-white px-4 text-left text-blue-900 hover:bg-blue-50"
+              >
+                <Volume2 className="h-6 w-6 shrink-0" aria-hidden />
+                <span className="text-sm font-bold">{label}</span>
+              </button>
+            ))}
+          </div>
           {/* Section 1: 5-Minute Quick Start */}
           <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200 space-y-2">
             <div className="font-bold text-xs text-blue-950 flex items-center gap-1.5">

@@ -45,7 +45,7 @@ const BASEMAPS: { id: Basemap; label: string; icon: LucideIcon; preview: string 
 ];
 
 const panel =
-  'rounded-lg border border-slate-200/90 bg-white/95 shadow-[0_1px_2px_rgb(15_23_42/0.06),0_6px_18px_-6px_rgb(15_23_42/0.2)] backdrop-blur';
+  'rounded-xl border border-slate-200/90 bg-white/95 shadow-[0_0_0_1px_rgb(15_23_42/0.03),0_1px_2px_rgb(15_23_42/0.08),0_8px_20px_-6px_rgb(15_23_42/0.28)] backdrop-blur';
 
 function ControlButton({
   icon: Icon,
@@ -67,7 +67,7 @@ function ControlButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className="flex h-[48px] w-[48px] items-center justify-center text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 md:h-9 md:w-9"
+      className="flex h-[48px] w-[48px] items-center justify-center text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 active:bg-blue-100 disabled:opacity-50 md:h-9 md:w-9"
     >
       {spinning ? (
         <Loader2 className="h-[18px] w-[18px] animate-spin" />
@@ -198,7 +198,7 @@ export function MapControls({ onZoomIn, onZoomOut, onLocate, isLocating, onFitNe
   const setIsLayersDrawerOpen = useMapStore((s) => s.setLayersDrawerOpen);
   const fullscreen = useFullscreen();
   return (
-    <div className="gis-no-print absolute bottom-[72px] right-2 z-[400] flex flex-col items-end gap-2 md:bottom-5 md:right-4">
+    <div data-guide="map-controls" className="gis-no-print absolute bottom-[72px] right-2 z-[400] flex flex-col items-end gap-2 md:bottom-5 md:right-4">
       <div className={cn(panel, 'flex flex-col overflow-hidden')}>
         <ControlButton icon={Layers} label="Map layers" onClick={() => setIsLayersDrawerOpen(true)} />
       </div>

@@ -135,7 +135,7 @@ const PonPortsPanel: React.FC = () => {
 
       <div className="flex-1 flex flex-col overflow-hidden md:flex-row">
         <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-start bg-slate-900/90">
-          <div className="w-full max-w-4xl bg-slate-950 border-4 border-slate-700 rounded-2xl p-6 shadow-2xl">
+          <div className="olt-chassis w-full max-w-4xl bg-slate-950 border-4 border-slate-700 rounded-2xl p-6 shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-800">
               <span className="font-mono text-xs font-bold text-slate-300 tracking-wider">
                 {currentOlt.name} · {technology ?? 'Technology not recorded'}
@@ -172,7 +172,7 @@ const PonPortsPanel: React.FC = () => {
                           }`}
                         />
                       </div>
-                      <div className="w-7 h-4 bg-slate-800 border border-slate-600 rounded-xs flex items-center justify-center my-1">
+                      <div className="olt-cage w-7 h-4 bg-slate-800 border border-slate-600 rounded-xs flex items-center justify-center my-1" data-status={pon.status}>
                         <div className="w-4 h-2 bg-slate-950 rounded-xs border border-slate-700" />
                       </div>
                       <span className="text-[9px] font-mono text-slate-400 mt-1">{pon.status}</span>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { CircleAlert, CircleCheck, CircleDashed, CircleDot, CircleMinus, CircleX, type LucideIcon } from 'lucide-react';
 
 import { cn } from './cn';
 
@@ -25,8 +26,8 @@ export function Badge({ tone = 'neutral', dot = false, size = 'sm', className, c
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-medium ring-1 ring-inset',
-        size === 'sm' ? 'h-5 px-1.5 text-[11px]' : 'h-6 px-2 text-xs',
+        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full font-medium ring-1 ring-inset',
+        size === 'sm' ? 'h-5 px-2 text-[11px]' : 'h-6 px-2.5 text-xs',
         t.badge,
         className,
       )}
@@ -92,6 +93,17 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   inactive: 'neutral',
 };
 
+/** The icon that goes with each tone, so a status is not told by colour alone. */
+const STATUS_ICONS: Record<BadgeTone, LucideIcon> = {
+  green: CircleCheck,
+  blue: CircleDot,
+  cyan: CircleDot,
+  amber: CircleAlert,
+  red: CircleX,
+  violet: CircleDashed,
+  neutral: CircleMinus,
+};
+
 export function statusTone(status: string | undefined | null): BadgeTone {
   if (!status) return 'neutral';
   return STATUS_TONES[status.toLowerCase()] ?? 'neutral';
@@ -104,8 +116,11 @@ export interface StatusBadgeProps extends Omit<BadgeProps, 'tone' | 'children'> 
 }
 
 export function StatusBadge({ status, tone, label, dot = true, ...rest }: StatusBadgeProps) {
+  const resolved = tone ?? statusTone(status);
+  const Icon = STATUS_ICONS[resolved];
   return (
-    <Badge tone={tone ?? statusTone(status)} dot={dot} {...rest}>
+    <Badge tone={resolved} {...rest} className={cn(dot && 'gap-1 pl-1', rest.className)}>
+      {dot && <Icon size={12} strokeWidth={2.2} aria-hidden className="shrink-0" />}
       {label ?? status}
     </Badge>
   );

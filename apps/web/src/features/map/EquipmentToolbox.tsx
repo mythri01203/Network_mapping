@@ -1,36 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Boxes,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   CircleDot,
   Cpu,
-  GripVertical,
   Layers,
   MapPin,
   Network,
-  Plus,
   Radio,
   Router,
-  Search,
   Server,
   Sparkles,
   Split,
   UtilityPole,
   X,
 } from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
 
-import type { Equipment, EquipmentCategory, EquipmentType } from '@fibergis/shared';
+import type { EquipmentCategory, EquipmentType } from '@fibergis/shared';
 
-import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
-import { EQUIPMENT_DRAG_TYPE } from '../../lib/browser';
-import { useMapStore } from '../../stores/mapStore';
 import { addCatalogComponent } from '../../stores/networkActions';
-import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
-import { placementTemplate } from './placement';
 
 export interface ToolboxItem {
   id: string;
@@ -191,86 +180,18 @@ export const DEFAULT_TOOLBOX_ITEMS: ToolboxItem[] = [
   },
 ];
 
-export const EquipmentToolbox: React.FC = () => {
-  const { setActiveTool, setEquipmentTypeToAdd, setEquipmentDraftTemplate } = useMapStore(
-    useShallow((s) => ({
-      setActiveTool: s.setActiveTool,
-      setEquipmentTypeToAdd: s.setEquipmentTypeToAdd,
-      setEquipmentDraftTemplate: s.setEquipmentDraftTemplate,
-    })),
-  );
 
-  const catalog = useNetworkStore((s) => s.catalog) || [];
-  const activeTool = useMapStore((s) => s.activeTool);
-  // Open on a desk; closed on a phone, where it would cover the whole map.
-  const [isOpen, setIsOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
-  const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-
-  // Custom equipment dialog state
-  const [showAddCustomModal, setShowAddCustomModal] = useState(false);
+/**
+ * The "Add Custom Equipment" window: saves a reusable equipment type to the catalogue, so it shows in
+ * the map toolbar's Equipment list. Opened from the button at the end of that list.
+ */
+export function AddCustomEquipmentModal({ onClose }: { onClose: () => void }) {
   const [customName, setCustomName] = useState('');
   const [customType, setCustomType] = useState('Custom Network Node');
   const [customCategory, setCustomCategory] = useState<EquipmentCategory>('Fiber Distribution');
   const [customPorts, setCustomPorts] = useState(8);
   const [customDescription, setCustomDescription] = useState('');
   const [customColor, setCustomColor] = useState('bg-indigo-600');
-
-  // A stored catalogue entry places as itself (a product model links); a built-in item gives its kind and ports.
-  const templateFor = (item: ToolboxItem): Partial<Equipment> => {
-    const stored = catalog.find((c) => c.id === item.id);
-    return placementTemplate(stored ?? { id: item.id, type: item.type, category: item.category, defaultPorts: item.defaultPorts });
-  };
-
-  // Merge default toolbox items with custom components from database
-  const allItems = useMemo<ToolboxItem[]>(() => {
-    const customItems: ToolboxItem[] = catalog.map((c) => ({
-      id: c.id,
-      name: c.name,
-      type: (c.type as EquipmentType) || 'Outdoor Splitter',
-      category: (c.category as EquipmentCategory) || 'Fiber Distribution',
-      defaultPorts: c.defaultPorts,
-      description: c.description || 'Custom network equipment',
-      icon: Sparkles,
-      iconBg: c.iconBg || 'bg-indigo-600',
-      badge: 'Custom',
-      isCustom: true,
-    }));
-    return [...DEFAULT_TOOLBOX_ITEMS, ...customItems];
-  }, [catalog]);
-
-  const filteredItems = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return allItems.filter((item) => {
-      const matchesSearch =
-        !q ||
-        item.name.toLowerCase().includes(q) ||
-        item.type.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q);
-      const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
-  }, [allItems, search, selectedCategory]);
-
-  const handleDragStart = (e: React.DragEvent, item: ToolboxItem) => {
-    e.dataTransfer.setData(EQUIPMENT_DRAG_TYPE, item.type);
-    e.dataTransfer.setData('text/plain', JSON.stringify({ type: item.type, ...templateFor(item) }));
-    e.dataTransfer.effectAllowed = 'copy';
-  };
-
-  const handleClickItem = (item: ToolboxItem) => {
-    setActiveTool('add_equipment');
-    setEquipmentTypeToAdd(item.type);
-    const isPole = item.type.includes('Pole');
-    // Phase 2: no shared name (each item gets its own number) and no product text as notes.
-    setEquipmentDraftTemplate(templateFor(item));
-    if (window.innerWidth < 768) setIsOpen(false);
-    showToast(
-      'info',
-      `Tap the map to place ${isPole ? 'poles' : item.name}`,
-      isPole ? 'Each tap adds the next numbered pole. Tap Done when finished.' : 'Tap the place on the map.',
-    );
-  };
 
   const handleSaveCustomEquipment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -290,147 +211,10 @@ export const EquipmentToolbox: React.FC = () => {
       iconBg: customColor,
       isCustom: true,
     });
-
-    setShowAddCustomModal(false);
-    setCustomName('');
-    setCustomDescription('');
-    setCustomPorts(8);
+    onClose();
   };
 
   return (
-    <>
-      {/* Collapsed Ribbon Pill */}
-      {!isOpen && (
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          className={`absolute top-2 left-2 z-[440] h-[48px] bg-slate-900/95 hover:bg-slate-800 text-white px-3 py-2 rounded-xl shadow-xl border border-slate-700/80 items-center gap-2 text-xs font-semibold backdrop-blur-sm transition-all animate-in fade-in md:top-16 md:left-4 md:h-auto ${activeTool === 'select' ? 'flex' : 'hidden md:flex'}`}
-          title="Open Equipment Toolbox"
-        >
-          <Boxes className="w-4 h-4 text-sky-400" />
-          <span>Equipment Toolbox</span>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
-      )}
-
-      {/* Expanded Left Equipment Toolbox */}
-      {isOpen && (
-        <div className="absolute inset-x-2 top-2 bottom-[68px] z-[460] md:inset-x-auto md:bottom-auto md:top-16 md:left-4 w-auto md:w-80 max-w-[calc(100%-1rem)] md:max-w-[calc(100%-2rem)] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-slate-700/80 overflow-hidden flex flex-col max-h-[82vh] animate-in fade-in slide-in-from-left-4 select-none">
-          {/* Header */}
-          <div className="px-4 py-3 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/80 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
-                <Boxes className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="font-bold text-xs tracking-wide text-white">Equipment Toolbox</h3>
-                <p className="text-[10px] text-slate-400">Drag or click to place on map</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="flex h-[48px] w-[48px] items-center justify-center md:h-auto md:w-auto md:p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Collapse Toolbox"
-              aria-label="Collapse Toolbox"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Search & Category Filter */}
-          <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/40">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search equipment, OLT, FAT, pole..."
-                className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs text-white placeholder:text-slate-500 outline-none focus:border-sky-500 transition-colors"
-              />
-            </div>
-
-            <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px] font-medium">
-              {['All', 'Central Office', 'Fiber Distribution', 'Supporting Infrastructure', 'Customer Equipment'].map(
-                (cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2 py-0.5 rounded-full whitespace-nowrap transition-colors ${
-                      selectedCategory === cat
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {cat.replace(' Infrastructure', '').replace(' Equipment', '')}
-                  </button>
-                ),
-              )}
-            </div>
-          </div>
-
-          {/* Equipment List */}
-          <div className="p-2.5 overflow-y-auto space-y-1.5 flex-1">
-            {filteredItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, item)}
-                  onClick={() => handleClickItem(item)}
-                  className="group flex items-center gap-2.5 p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 hover:border-sky-500/50 cursor-pointer transition-all active:scale-[0.99]"
-                  title={`Click or drag to place ${item.name}`}
-                >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 shrink-0" />
-                  {item.isCustom ? (
-                    <div
-                      className={`w-8 h-8 rounded-lg ${item.iconBg} flex items-center justify-center text-white shrink-0 shadow-xs`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs">
-                      <EquipmentIllustration type={item.type} size={28} />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="font-semibold text-xs text-slate-100 truncate group-hover:text-sky-300 transition-colors">
-                        {item.name}
-                      </span>
-                      {item.badge && (
-                        <span className="text-[9px] font-mono font-bold bg-slate-900/80 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/60 shrink-0">
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-slate-400 truncate">{item.description}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Add Custom Equipment Footer Trigger */}
-          <div className="p-3 border-t border-slate-800 bg-slate-950/60">
-            <button
-              type="button"
-              onClick={() => setShowAddCustomModal(true)}
-              className="w-full py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-sky-950/40"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Custom Equipment</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Add Custom Equipment Modal */}
-      {showAddCustomModal && (
         <div className="modal-sheet fixed inset-0 z-[1250] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col text-slate-800">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -446,7 +230,7 @@ export const EquipmentToolbox: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => setShowAddCustomModal(false)}
+                onClick={onClose}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -546,7 +330,7 @@ export const EquipmentToolbox: React.FC = () => {
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddCustomModal(false)}
+                  onClick={onClose}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
@@ -561,7 +345,5 @@ export const EquipmentToolbox: React.FC = () => {
             </form>
           </div>
         </div>
-      )}
-    </>
   );
-};
+}

@@ -16,6 +16,7 @@ import {
   type LucideIcon,
   Map as MapLucide,
   Menu,
+  Moon,
   Plug,
   Radio,
   Redo2,
@@ -23,6 +24,7 @@ import {
   RotateCcw,
   Search,
   Split,
+  Sun,
   TriangleAlert,
   Undo2,
   Upload,
@@ -65,6 +67,7 @@ import { backupSystem, exportKML, resetToSampleData, restoreSystem } from '../..
 import { getNetworkSnapshot, selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/networkStore';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSelectionStore } from '../../stores/selectionStore';
+import { useThemeStore } from '../../stores/themeStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
 import { useActiveView, useOpenView, useShowOnMap, VIEW_META } from '../views';
@@ -115,6 +118,22 @@ const roleInitials = (role: string) =>
     .join('')
     .slice(0, 2)
     .toUpperCase();
+
+/** Light or dark look for the whole app, one tap. The icon shows what a tap switches to. */
+function ThemeButton() {
+  const theme = useThemeStore((s) => s.theme);
+  const toggle = useThemeStore((s) => s.toggle);
+  const toLight = theme === 'dark';
+  return (
+    <IconButton
+      icon={toLight ? Sun : Moon}
+      label={toLight ? 'Light theme' : 'Dark theme'}
+      variant="dark"
+      onClick={toggle}
+      data-testid="theme-toggle"
+    />
+  );
+}
 
 export const TopNavBar: React.FC = () => {
   const { faults, undo, redo, canUndo, canRedo } = useNetworkStore(
@@ -378,6 +397,7 @@ export const TopNavBar: React.FC = () => {
       {/* Global search */}
       <div ref={searchBoxRef} className="relative mx-auto w-full max-w-xl min-w-0 flex-1">
         <div
+          data-guide="search"
           className={cn(
             'flex h-10 items-center gap-2 rounded-lg border px-2.5 transition-[background-color,border-color,box-shadow] duration-150 md:h-8',
             open
@@ -618,6 +638,7 @@ export const TopNavBar: React.FC = () => {
           onClick={() => setModalOpen('help', true)}
           className="max-md:hidden"
         />
+        <ThemeButton />
 
         <Popover
           align="end"

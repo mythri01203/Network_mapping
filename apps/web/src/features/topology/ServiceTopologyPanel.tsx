@@ -74,7 +74,7 @@ function TreeNode({ n, depth, logical, fold, onShow, onCompare }: TreeNodeProps)
         )}
         <div className="min-w-0 flex-1 py-1.5 md:py-1">
           {KIND_LABEL[n.kind] && !n.label.startsWith(KIND_LABEL[n.kind]) && (
-            <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{KIND_LABEL[n.kind]}</span>
+            <span className="mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">{KIND_LABEL[n.kind]}</span>
           )}
           {n.kind === 'gap' && <span aria-hidden="true">✕ </span>}
           {canAct ? (
@@ -186,7 +186,7 @@ export function TopologyTree({ topo, logical, onLogical, onShow, onCompare }: To
       {roots.length === 0 ? (
         <p className="text-sm text-slate-600">No OLT is recorded.</p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="ui-section-card space-y-1 p-2 md:p-3">
           {roots.map((n) => (
             <TreeNode key={n.key} n={n} depth={0} logical={logical} fold={fold} onShow={onShow} onCompare={onCompare} />
           ))}

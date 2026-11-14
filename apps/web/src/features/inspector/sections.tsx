@@ -31,22 +31,29 @@ interface InspectorSectionProps {
 export function InspectorSection({ title, icon: Icon, aside, defaultOpen = true, children }: InspectorSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="border-b border-slate-100">
+    <section className="ui-section-card mx-3 my-2.5 overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-slate-50"
+        className={cn(
+          'flex w-full items-center gap-2 bg-slate-50/80 px-3 py-2 text-left transition-colors hover:bg-slate-100/80',
+          open && 'border-b border-slate-200/80',
+        )}
       >
-        {Icon && <Icon size={14} strokeWidth={2} className="shrink-0 text-slate-400" />}
-        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</span>
+        {Icon && (
+          <span className="flex size-5 shrink-0 items-center justify-center rounded bg-white text-blue-600 ring-1 ring-slate-200">
+            <Icon size={12} strokeWidth={2.1} />
+          </span>
+        )}
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">{title}</span>
         {aside && <span className="text-xs tabular-nums text-slate-500">{aside}</span>}
         <ChevronDown
           size={14}
           className={cn('shrink-0 text-slate-400 transition-transform duration-150', !open && '-rotate-90')}
         />
       </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
+      {open && <div className="px-3 pb-3 pt-2.5">{children}</div>}
     </section>
   );
 }
@@ -104,7 +111,7 @@ export function RecordLink({ name, id, onSelect }: { name: string; id: string; o
 
 export function Metric({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
+    <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2">
       <div className="truncate text-[11px] text-slate-500">{label}</div>
       <div className={cn('mt-0.5 truncate text-sm font-semibold tabular-nums text-slate-900', className)}>
         {value ?? '—'}

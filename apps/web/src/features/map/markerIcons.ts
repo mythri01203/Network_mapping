@@ -157,13 +157,14 @@ export function equipmentMarkerSize(eq: Pick<Equipment, 'type' | 'category'>): n
 }
 
 export function equipmentMarkerIcon(
-  eq: Pick<Equipment, 'type' | 'category' | 'status' | 'technology'>,
+  eq: Pick<Equipment, 'type' | 'category' | 'status' | 'technology'> & { id?: string },
   state: MarkerState,
 ): L.DivIcon {
   const layer = equipmentLayerKey(eq);
   const isMinor = layer === 'poles' || layer === 'manholes';
   const color = equipmentColor(eq);
-  const key = `eq:${eq.type}:${eq.category}:${eq.technology ?? ''}:${eq.status}:${state.selected ? 1 : 0}${state.traced ? 1 : 0}`;
+  // The id is on the pin so the on-screen guide can point at one exact item.
+  const key = `eq:${eq.id ?? ''}:${eq.type}:${eq.category}:${eq.technology ?? ''}:${eq.status}:${state.selected ? 1 : 0}${state.traced ? 1 : 0}`;
 
   return cached(key, () => {
     const size = equipmentMarkerSize(eq);
@@ -175,7 +176,7 @@ export function equipmentMarkerIcon(
         ? `<span class="gis-pin__status" style="background:${STATUS_COLORS[eq.status] ?? STATUS_COLORS.Active}"></span>`
         : '';
     return L.divIcon({
-      html: `<div class="gis-pin gis-pin--device ${shape} ${stateClasses(state, eq.status)}" style="--pin-color:${color};width:${size}px;height:${size}px">${art}${status}</div>`,
+      html: `<div class="gis-pin gis-pin--device ${shape} ${stateClasses(state, eq.status)}" data-eqtype="${escapeHtml(eq.type)}" data-eqid="${escapeHtml(eq.id ?? '')}" style="--pin-color:${color};width:${size}px;height:${size}px">${art}${status}</div>`,
       className: 'gis-marker gis-marker--equipment',
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],

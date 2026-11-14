@@ -52,7 +52,7 @@ export function MonitoringModal() {
               aria-selected={tab === t.id}
               data-testid={`mon-tab-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`min-h-[48px] rounded-lg px-3 text-xs font-semibold ${tab === t.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'} ${t.id === 'test' ? 'border border-violet-300' : ''}`}
+              className={`min-h-[48px] rounded-lg border px-3.5 text-xs font-semibold transition-colors ${tab === t.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : `bg-white text-slate-700 hover:bg-slate-50 ${t.id === 'test' ? 'border-violet-300' : 'border-slate-200'}`}`}
             >
               {t.label}
             </button>

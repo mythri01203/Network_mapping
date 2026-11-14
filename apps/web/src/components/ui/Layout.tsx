@@ -106,10 +106,10 @@ export interface StatTileProps {
 
 const STAT_TONE: Record<NonNullable<StatTileProps['tone']>, string> = {
   default: 'text-slate-900',
-  good: 'text-emerald-700',
-  warn: 'text-amber-700',
-  bad: 'text-red-700',
-  accent: 'text-blue-700',
+  good: 'text-emerald-700 [--stat-color:var(--color-status-ok)]',
+  warn: 'text-amber-700 [--stat-color:var(--color-status-warn)]',
+  bad: 'text-red-700 [--stat-color:var(--color-status-bad)]',
+  accent: 'text-blue-700 [--stat-color:var(--color-status-info)]',
 };
 
 export function StatTile({ label, value, icon: Icon, hint, tone = 'default', className, onClick }: StatTileProps) {
@@ -119,7 +119,7 @@ export function StatTile({ label, value, icon: Icon, hint, tone = 'default', cla
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'flex flex-col gap-1 rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-left shadow-xs',
+        'ui-stat flex flex-col gap-1 rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-left shadow-xs',
         onClick && 'transition-[border-color,box-shadow] duration-150 hover:border-blue-200 hover:shadow-md',
         className,
       )}
@@ -150,21 +150,21 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
     <div
       className={cn(
         'flex flex-col items-center justify-center text-center',
-        compact ? 'gap-1.5 px-4 py-6' : 'gap-2 px-6 py-12',
+        compact ? 'gap-1.5 px-4 py-6' : 'gap-2.5 px-6 py-12',
         className,
       )}
     >
       {Icon && (
         <div
           className={cn(
-            'flex items-center justify-center rounded-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-400 ring-1 ring-slate-200/70',
-            compact ? 'h-8 w-8' : 'h-10 w-10',
+            'flex items-center justify-center rounded-2xl bg-gradient-to-b from-blue-50 to-slate-100 text-blue-600/80 shadow-xs ring-1 ring-slate-200/80',
+            compact ? 'h-9 w-9' : 'h-12 w-12',
           )}
         >
-          <Icon size={compact ? 16 : 20} strokeWidth={1.8} />
+          <Icon size={compact ? 17 : 22} strokeWidth={1.7} />
         </div>
       )}
-      <p className="text-[13px] font-medium text-slate-700">{title}</p>
+      <p className="text-[13px] font-semibold text-slate-800">{title}</p>
       {description && <p className="max-w-sm text-xs text-slate-500">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>

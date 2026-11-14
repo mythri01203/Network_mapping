@@ -365,6 +365,15 @@ export const selectOspSettings = (state: Pick<NetworkSnapshot, 'settings'>): Osp
   return ospCache.merged;
 };
 
+/**
+ * Ids of records created by a change made on this device since the app opened. Records the server
+ * sends (another device's work, or a map area loaded as the map moves) are never in it. The on-screen
+ * guide uses it so that only what was really made during the guide counts as the guide's own.
+ */
+const madeHere = new Set<string>();
+export const wasMadeHere = (id: string): boolean => madeHere.has(id);
+const MADE_HERE_KEYS = ['equipment', 'cables', 'customers', 'splitters'] as const;
+
 export const useNetworkStore = create<NetworkState>()((set, get) => {
   const initial = loadInitialState();
 
@@ -379,6 +388,11 @@ export const useNetworkStore = create<NetworkState>()((set, get) => {
       return false;
     }
     const after = applyPatch(before, patch);
+    for (const key of MADE_HERE_KEYS) {
+      if (after[key] === before[key]) continue;
+      const had = new Set(before[key].map((r) => r.id));
+      for (const r of after[key]) if (!had.has(r.id)) madeHere.add(r.id);
+    }
     const changed = DATA_KEYS.filter((key) => patch[key] !== undefined && patch[key] !== before[key]);
     if (changed.every((key) => (KEPT_BY_UNDO as readonly string[]).includes(key))) {
       set({ ...patch });

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 
 import { AgentTrackingRuntime } from '../features/agent-tracking/AgentTrackingRuntime';
 import { AuthGate, SetupBanner, ViewerBanner } from '../features/auth/AuthGate';
+import { GuideTour } from '../features/learn/GuideTour';
 import { WelcomeGuide } from '../features/learn/WelcomeGuide';
 import { MapWorkspace } from '../features/map/MapWorkspace';
 import type { MainView } from './mainView';
@@ -92,6 +93,7 @@ const AppContent: React.FC = () => {
       <AgentTrackingRuntime />
       <ModalHost />
       <WelcomeGuide />
+      <GuideTour />
       <ConflictChoiceHost />
       <ConfirmDialogHost />
       <ToastNotifications />
