@@ -273,6 +273,24 @@ Each row is a loanword against a native word, or two candidates. Test them befor
 | `learn.example` | Example picture, not your network | ఉదాహరణ బొమ్మ, మీ నెట్‌వర్క్ కాదు | ಉದಾಹರಣೆ ಚಿತ್ರ, ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ಅಲ್ಲ |
 | `learn.open` | Learn FiberGIS | ఫైబర్ జీఐఎస్ నేర్చుకోండి | ಫೈಬರ್ ಜಿಐಎಸ್ ಕಲಿಯಿರಿ |
 | `learn.draftWords` | Words not yet checked by a native speaker | మాటలు ఇంకా తెలుగు మాట్లాడేవారు తనిఖీ చేయలేదు | ಪದಗಳನ್ನು ಇನ್ನೂ ಕನ್ನಡ ಮಾತನಾಡುವವರು ಪರಿಶೀಲಿಸಿಲ್ಲ |
+| `learn.guide` | Guide | గైడ్ | ಗೈಡ್ |
+| `learn.guideChoose` | What should I show you? | నేను ఏమి చూపించాలి? | ನಾನು ಏನು ತೋರಿಸಲಿ? |
+| `learn.guideMenu` | Tour of every page | ప్రతి పేజీ పరిచయం | ಪ್ರತಿ ಪುಟದ ಪರಿಚಯ |
+| `learn.guideMap` | Map the network step by step | నెట్‌వర్క్‌ను దశలవారీగా మ్యాప్ చేయండి | ನೆಟ್‌ವರ್ಕ್ ಅನ್ನು ಹಂತ ಹಂತವಾಗಿ ನಕ್ಷೆ ಮಾಡಿ |
+| `learn.guideReal` | In Map the network, what you place is saved on your real map. Tap Undo to take back a mistake. | Map the networkలో మీరు పెట్టినది మీ అసలు మ్యాప్‌లో సేవ్ అవుతుంది. తప్పును వెనక్కి తీసుకోవడానికి Undo నొక్కండి. | Map the network ನಲ್ಲಿ ನೀವು ಇಟ್ಟದ್ದು ನಿಮ್ಮ ನಿಜವಾದ ನಕ್ಷೆಯಲ್ಲಿ ಉಳಿಯುತ್ತದೆ. ತಪ್ಪನ್ನು ಹಿಂಪಡೆಯಲು Undo ಒತ್ತಿ. |
+| `learn.yourTurn` | Your turn: do this now. I am waiting. | ఇప్పుడు మీ వంతు: ఇది చేయండి. నేను ఎదురుచూస్తున్నాను. | ಈಗ ನಿಮ್ಮ ಸರದಿ: ಇದನ್ನು ಮಾಡಿ. ನಾನು ಕಾಯುತ್ತಿದ್ದೇನೆ. |
+| `learn.done` | Done. Going on. | అయిపోయింది. ముందుకు వెళ్తున్నాం. | ಆಯಿತು. ಮುಂದೆ ಹೋಗುತ್ತಿದ್ದೇವೆ. |
+| `learn.continue` | Continue where you stopped | ఆపిన చోట నుండి కొనసాగించండి | ನಿಲ್ಲಿಸಿದಲ್ಲಿಂದ ಮುಂದುವರಿಸಿ |
+| `learn.startAgain` | Start again from the beginning | మొదటి నుండి మళ్లీ మొదలుపెట్టండి | ಮೊದಲಿನಿಂದ ಮತ್ತೆ ಶುರು ಮಾಡಿ |
+| `learn.guideTry` | Try it yourself: I wait for you at each step | మీరే చేయండి: ప్రతి దశలో నేను ఎదురుచూస్తాను | ನೀವೇ ಮಾಡಿ: ಪ್ರತಿ ಹಂತದಲ್ಲಿ ನಾನು ಕಾಯುತ್ತೇನೆ |
+| `learn.watching` | Watch: I am doing this step now. | చూడండి: ఈ దశను నేను ఇప్పుడు చేస్తున్నాను. | ನೋಡಿ: ಈ ಹಂತವನ್ನು ನಾನು ಈಗ ಮಾಡುತ್ತಿದ್ದೇನೆ. |
+| `learn.autoFailed` | I could not do this step by myself. Tap Play to try again. | ఈ దశను నేను స్వయంగా చేయలేకపోయాను. మళ్లీ ప్రయత్నించడానికి Play నొక్కండి. | ಈ ಹಂತವನ್ನು ನಾನೇ ಮಾಡಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು Play ಒತ್ತಿ. |
+| `learn.demoNote` | Map the network step by step: I map on your real map by myself. At the end I remove what I made, and no customer is saved. | Map the network step by step: మీ అసలు మ్యాప్‌పై నేనే మ్యాప్ చేస్తాను. చివరలో నేను చేసినవి తీసేస్తాను, కస్టమర్ సేవ్ కాదు. | Map the network step by step: ನಿಮ್ಮ ನಿಜವಾದ ನಕ್ಷೆಯಲ್ಲಿ ನಾನೇ ನಕ್ಷೆ ಮಾಡುತ್ತೇನೆ. ಕೊನೆಯಲ್ಲಿ ನಾನು ಮಾಡಿದ್ದನ್ನು ತೆಗೆಯುತ್ತೇನೆ, ಗ್ರಾಹಕ ಉಳಿಯುವುದಿಲ್ಲ. |
+| `learn.guideClose` | Close guide | గైడ్ మూసివేయండి | ಗೈಡ್ ಮುಚ್ಚಿ |
+| `learn.hideWords` | Make smaller | చిన్నదిగా చేయండి | ಚಿಕ್ಕದಾಗಿ ಮಾಡಿ |
+| `learn.showWords` | Show the words | మాటలు చూపించండి | ಪದಗಳನ್ನು ತೋರಿಸಿ |
+| `learn.guideOnly` | The guide only shows. It does not press anything or change your network. | గైడ్ చూపిస్తుంది మాత్రమే. ఏ బటన్ నొక్కదు, మీ నెట్‌వర్క్‌ను మార్చదు. | ಗೈಡ್ ತೋರಿಸುತ್ತದೆ ಮಾತ್ರ. ಯಾವ ಬಟನ್ ಒತ್ತುವುದಿಲ್ಲ, ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ಬದಲಾಯಿಸುವುದಿಲ್ಲ. |
+| `learn.notOnScreen` | This is not on the screen right now. Read the words to know where it is. | ఇది ఇప్పుడు స్క్రీన్‌పై లేదు. ఎక్కడ ఉందో తెలియడానికి మాటలు చదవండి. | ಇದು ಈಗ ಪರದೆಯಲ್ಲಿ ಇಲ್ಲ. ಎಲ್ಲಿದೆ ಎಂದು ತಿಳಿಯಲು ಮಾತುಗಳನ್ನು ಓದಿ. |
 | `jobs.noPhotoHint` | Write why no photo is possible. The office will see it. | ఫోటో ఎందుకు తీయలేరో రాయండి. ఆఫీసు చూస్తుంది. | ಫೋಟೋ ಏಕೆ ತೆಗೆಯಲು ಆಗುವುದಿಲ್ಲ ಎಂದು ಬರೆಯಿರಿ. ಆಫೀಸ್ ನೋಡುತ್ತದೆ. |
 | `login.notSetUp` | Logins are not set up yet. The office must first make the administrator account on the server computer. Then log in here. | లాగిన్లు ఇంకా సిద్ధం కాలేదు. ముందుగా ఆఫీసు సర్వర్ కంప్యూటర్‌లో అడ్మినిస్ట్రేటర్ ఖాతా చేయాలి. తర్వాత ఇక్కడ లాగిన్ అవ్వండి. | ಲಾಗಿನ್‌ಗಳು ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಮೊದಲು ಆಫೀಸ್ ಸರ್ವರ್ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿ ಆಡ್ಮಿನಿಸ್ಟ್ರೇಟರ್ ಖಾತೆ ಮಾಡಬೇಕು. ನಂತರ ಇಲ್ಲಿ ಲಾಗಿನ್ ಆಗಿ. |
 | `login.kept` | {count} saved on this phone. They are sent after you log in. | {count} ఈ ఫోన్‌లో సేవ్ అయ్యాయి. మీరు లాగిన్ అయ్యాక పంపబడతాయి. | {count} ಈ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿದಿವೆ. ನೀವು ಲಾಗಿನ್ ಆದ ನಂತರ ಕಳುಹಿಸಲಾಗುತ್ತದೆ. |
@@ -303,3 +321,7 @@ speaker or crew check, the same as above. Hindi and Tamil are new to the app and
 
 Technical terms printed on equipment (OLT, FAT, ONT, PON, SC/APC, OM3, Cat6) stay in English on
 purpose. `i18n.test.ts` checks that every key has all five languages with the same placeholders.
+
+## On-screen guide lessons (Guide button on the map)
+
+The steps of the two guides, "Tour of every page" (`menu.*`, 18 steps) and "Map the network step by step" (`map.*`, 35 steps), are lesson scripts in `packages/shared/src/domain/voiceLessons.ts`. Their Telugu and Kannada words are drafts (`reviewed: false`). Since 12 November 2026 the server's automatic voice (`/voice/speak`) also speaks these drafts in Telugu and Kannada, so a native speaker should check both the words and the voice before field staff rely on them. Button names are kept in English inside the Telugu and Kannada words because the screen shows them in English; check with crews whether that is understood.

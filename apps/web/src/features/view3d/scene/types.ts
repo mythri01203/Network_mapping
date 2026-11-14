@@ -147,6 +147,49 @@ export interface SceneBox {
   splitters: { id: string; name: string; ratio: string; level?: number }[];
   ports: SceneBoxPort[];
   status: string;
+  /**
+   * Light levels recorded on the customers whose path goes through this box: lowest, highest,
+   * how many, and whether every one was measured (false: some are calculated).
+   */
+  rx?: { min: number; max: number; n: number; measured: boolean };
+  /** Customers whose recorded path goes through this box. */
+  served?: number;
+  /** One row per splitter in the box, as on the 2D map's badge. Levels are calculated. */
+  badges?: SplitterBadge[];
+  /** Splitter outputs in this box recorded as not occupied: places for a new connection. */
+  freeOutputs?: number;
+  totalOutputs?: number;
+}
+
+export interface SplitterBadge {
+  /** PON port id, or "No PON" when the splitter's input is not traced to one. */
+  pon: string;
+  hex: string;
+  ink: string;
+  ratio: string;
+  /** 1 = nearest the OLT. */
+  stage?: number;
+  used: number;
+  faulty: number;
+  free: number;
+  total: number;
+  /** Calculated level into the splitter and out of each output (dBm). */
+  inDbm?: number;
+  outDbm?: number;
+}
+
+/** One PON port for the panel: colour, where it runs, who is on it, what is free. */
+export interface PonChip {
+  key: string;
+  id: string;
+  hex: string;
+  ink: string;
+  area: string;
+  streets: string[];
+  active: number;
+  inactive: number;
+  free: number;
+  rxRange?: { minDbm: number; maxDbm: number };
 }
 
 export type CableRole = 'feeder' | 'branch' | 'drop' | 'uplink' | 'other';
@@ -168,6 +211,18 @@ export interface SceneCable {
   /** Map line colour or role colour; never a fiber colour claim. */
   colorHex: string;
   customerId?: string;
+  /** Number of fibers in the cable, as recorded (2, 6, 12, 48...). */
+  fiberCount?: number;
+  /** The fiber standard written on the cable record, such as G.652D or G.657A2. */
+  fiberStandard?: string;
+  /**
+   * The PON identifier printed on the cable, as on the 2D map: "PON-04 · 6F 1/6 used" on a chip in
+   * the PON's map colour (a dark trunk colour when the cable carries several PONs).
+   */
+  pon?: { text: string; hex: string; ink: string };
+  /** Fibers (cores) recorded as in use, of those listed on the cable record. */
+  coresUsed?: number;
+  coresListed?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,6 +283,16 @@ export interface SceneHouse {
   /** Several customers at one point are drawn as a block of this many floors. */
   floors: number;
   fault: boolean;
+  /** A customer here has a recorded status other than Active (suspended, disconnected...). */
+  inactive: boolean;
+  /** The lowest light level recorded for a customer here (dBm), and whether it was measured. */
+  rxDbm?: number;
+  rxMeasured?: boolean;
+  /** Fibers in the drop cable to this house, as recorded. */
+  dropFibers?: number;
+  /** Map colour of the PON port serving this house (same as the 2D map). */
+  ponHex?: string;
+  ponInk?: string;
   /** Smallest house number of the customers inside. */
   number: number;
 }
@@ -286,6 +351,8 @@ export interface Scene3D {
   houses: SceneHouse[];
   customers: CustomerPath[];
   pons: PonSummary[];
+  /** Every PON port with its map colour, area, streets and counts (the 2D map's PON list). */
+  ponChips: PonChip[];
   /** Plain-words notes about what is missing or drawn from defaults. */
   notes: SceneText[];
   isDemo: boolean;

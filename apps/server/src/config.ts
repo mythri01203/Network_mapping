@@ -77,6 +77,11 @@ const envSchema = z.object({
   CSP: z.enum(['on', 'off']).default('on'),
   /** Extra image hosts for other map tiles, comma separated (e.g. `https://tiles.example.com`). */
   CSP_IMG_SOURCES: z.string().optional(),
+  /**
+   * Lets the web app load the Google Maps script (street photos in the 3D view). Off by default:
+   * turning it on allows scripts from maps.googleapis.com in the browser.
+   */
+  CSP_GOOGLE_MAPS: booleanFlag.default(false),
 });
 
 export interface AppConfig {
@@ -130,6 +135,7 @@ export interface AppConfig {
   organisationName: string;
   csp: boolean;
   cspImgSources: string[];
+  cspGoogleMaps: boolean;
 }
 
 const parseTrustProxy = (value: string | undefined): boolean | number | string => {
@@ -214,5 +220,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     organisationName: value.ORGANISATION_NAME,
     csp: value.CSP === 'on',
     cspImgSources: list(value.CSP_IMG_SOURCES),
+    cspGoogleMaps: value.CSP_GOOGLE_MAPS,
   };
 }

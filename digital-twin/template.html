@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vijayawada fiber digital twin</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fiber network: 3D digital twin</h1>
+  <p class="sub" id="headline"></p>
+
+  <div class="cards">
+    <div class="card c-act"><b id="nAct">0</b><span>Active customers</span></div>
+    <div class="card c-ina"><b id="nIna">0</b><span>Inactive customers</span></div>
+    <div class="card c-aff"><b id="nAff">0</b><span>Service affected</span></div>
+    <div class="card"><b id="nUsed">0</b><span>Connections placed (box outputs used)</span></div>
+    <div class="card c-free"><b id="nFree">0</b><span>Free for new connections</span></div>
+  </div>
+  <div id="banner" class="ok"></div>
+
+  <div class="bar">
+    <div class="grp"><small>Show</small>
+      <button id="bLive" class="on">Live status</button>
+      <button id="bAge">Cable age</button>
+    </div>
+    <div class="grp"><small>Camera</small>
+      <button id="bOv">Overview</button>
+      <button id="bFault">Fault</button>
+      <button id="bOlt">OLT rack</button>
+      <button id="bCityCam">City</button>
+    </div>
+    <div class="grp">
+      <button id="bLabels" class="on">Box and cable labels</button>
+      <button id="bCity">City context</button>
+      <button id="bReset">Reset</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="side">
+      <div class="panel">
+        <h2>Find</h2>
+        <input type="text" id="q" placeholder="Customer id or name, FAT, FDT…" style="width:100%">
+        <div id="qr" class="note" style="margin-top:4px"></div>
+      </div>
+      <div class="panel">
+        <h2>PON ports: pick one to see only its area</h2>
+        <div id="ponList"></div>
+      </div>
+      <div class="panel">
+        <h2>Show customers</h2>
+        <select id="fCust" style="width:100%">
+          <option value="all">All customers</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+          <option value="affected">Service affected only</option>
+        </select>
+        <h2 style="margin-top:10px">Show fiber types</h2>
+        <label class="ck"><input type="checkbox" id="kFeeder" checked> Feeder 48F</label>
+        <label class="ck"><input type="checkbox" id="kBranch" checked> Branch 12F</label>
+        <label class="ck"><input type="checkbox" id="kDist" checked> Distribution 6F</label>
+        <label class="ck"><input type="checkbox" id="kDrop" checked> House drops 2F</label>
+        <h2 style="margin-top:10px">Show boxes</h2>
+        <label class="ck"><input type="checkbox" id="fFree"> Only boxes with a free output</label>
+      </div>
+      <div class="panel">
+        <h2>Where a new connection can go</h2>
+        <div id="freeList" class="scroll"></div>
+      </div>
+    </div>
+    <div>
+      <div id="view"><div id="hint">Drag to turn · right-drag to move · scroll to zoom · click a house, cable, box or the OLT</div></div>
+      <div id="legend"></div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="panel"><h2 id="pTitle">Click something in the scene</h2><div id="pBody" class="note">Click a cable to see its fibers and cut or restore it. Click a house for its customer, path and light level. Click a FAT or FDT for every splitter output. Click the OLT for its PON ports.</div></div>
+    <div class="panel" id="lmPanel"><h2>Landmarks (approximate)</h2><ul class="lm" id="lm"></ul>
+      <p class="note" style="margin:8px 0 0">Positions are approximate, from public listings. They are drawn only when City context is on.</p></div>
+  </div>
+  <p class="note" id="foot"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>

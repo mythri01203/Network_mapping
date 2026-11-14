@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { CircleAlert, Pause, Play, RotateCcw, Square, Volume2, WifiOff } from 'lucide-react';
+import { CircleAlert, Pause, Play, RotateCcw, Square, Volume2 } from 'lucide-react';
 
 import { isVoiceLanguage } from '@fibergis/shared';
 
 import { useT } from '../../i18n/useT';
-import { useAuthStore } from '../../stores/authStore';
-import { clipFor, useVoiceLibrary } from './voiceLibrary';
+import { speakId } from './voiceLibrary';
 import { useVoicePlayer } from './voicePlayer';
 
 const BIG = 'flex min-h-[64px] min-w-[64px] items-center justify-center gap-2 rounded-2xl border-2 px-4 text-[17px] font-bold';
@@ -19,19 +18,12 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.fl
  */
 export function VoiceGuidePlayer({ lessonKey }: { lessonKey: string }) {
   const { t, lang } = useT();
-  const library = useVoiceLibrary();
-  const mode = useAuthStore((s) => s.mode);
-  const role = useAuthStore((s) => s.account?.role);
   const player = useVoicePlayer();
-  const allowDrafts = mode === 'setup' || role === 'admin';
 
-  useEffect(() => {
-    void useVoiceLibrary.getState().load();
-  }, []);
   // A new step or language: the old voice stops.
   useEffect(() => () => useVoicePlayer.getState().stop(), [lessonKey, lang]);
 
-  const clip = isVoiceLanguage(lang) ? clipFor(library.clips, lessonKey, lang, allowDrafts) : undefined;
+  const clip = isVoiceLanguage(lang) ? { id: speakId(lessonKey, lang) } : undefined;
   const mine = !!clip && player.clipId === clip.id;
   const phase = mine ? player.phase : 'idle';
   const progress = mine && player.duration > 0 ? Math.min(1, player.current / player.duration) : 0;
@@ -39,8 +31,8 @@ export function VoiceGuidePlayer({ lessonKey }: { lessonKey: string }) {
   if (!clip) {
     return (
       <p role="status" data-testid="voice-missing" className="flex items-start gap-2 rounded-2xl border-2 border-slate-300 bg-slate-50 p-3 text-[16px] font-semibold text-slate-800">
-        {library.state === 'offline' ? <WifiOff className="mt-0.5 h-6 w-6 shrink-0" aria-hidden /> : <Volume2 className="mt-0.5 h-6 w-6 shrink-0 text-slate-500" aria-hidden />}
-        {library.state === 'offline' ? t('learn.offline') : t('learn.noVoice')}
+        <Volume2 className="mt-0.5 h-6 w-6 shrink-0 text-slate-500" aria-hidden />
+        {t('learn.noVoice')}
       </p>
     );
   }
@@ -48,11 +40,6 @@ export function VoiceGuidePlayer({ lessonKey }: { lessonKey: string }) {
   const playing = phase === 'playing' || phase === 'loading';
   return (
     <div className="space-y-2" data-testid="voice-player" data-phase={phase}>
-      {clip.status === 'draft' && (
-        <p data-testid="voice-draft" className="rounded-xl bg-amber-50 px-3 py-1.5 text-[15px] font-semibold text-amber-900 ring-1 ring-amber-300">
-          {t('learn.voiceDraft')}
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

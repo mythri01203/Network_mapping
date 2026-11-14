@@ -1,5 +1,6 @@
 import {
   type Attachment,
+  buildPonOverview,
   type Cable,
   type ColorScheme,
   type Customer,
@@ -21,6 +22,7 @@ import {
   splitterCapacity,
 } from '@fibergis/shared';
 
+import { ponColor, TRUNK_COLOR } from '../../map/pon/ponColors';
 import { type CascadeResult, dropFiberColor, walkCascade } from './cascade';
 import { distance, makeProjection, pickOrigin, type Projection, seedOf } from './geoLocal';
 import { summarizePon } from './lossBudget';
@@ -491,11 +493,18 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
         seed: seedOf(c.id),
         floors: 1,
         fault: false,
+        inactive: false,
         number: i + 1,
       };
       houseByCell.set(cellKey, house);
     }
     house.customerIds.push(c.id);
+    if (c.status && c.status !== 'Active') house.inactive = true;
+    if (typeof c.rxOpticalPowerDbm === 'number' && (house.rxDbm === undefined || c.rxOpticalPowerDbm < house.rxDbm)) {
+      house.rxDbm = c.rxOpticalPowerDbm;
+      // Only a reading taken by a meter or the device counts as measured.
+      house.rxMeasured = !!c.rxSource && c.rxSource !== 'calculated';
+    }
     const walked = cascade.paths.get(c.id);
     const dropCable = walked?.dropCableId ? cascade.index.cables.get(walked.dropCableId) : undefined;
     const fiber = dropFiberColor(cascade.index, dropCable, walked?.dropCore);
@@ -584,6 +593,10 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
       endId: c.endEquipmentId,
       colorHex,
       customerId: customer?.customerId,
+      fiberCount: typeof c.fiberCount === 'number' && c.fiberCount > 0 ? c.fiberCount : undefined,
+      fiberStandard: c.fiberStandard || undefined,
+      coresListed: c.cores?.length || undefined,
+      coresUsed: c.cores?.length ? c.cores.filter((k) => k.status === 'In Use').length : undefined,
     });
   }
   if (undrawn) notes.push({ key: 'note.undrawn', values: { n: undrawn } });
@@ -617,6 +630,125 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
     .filter((s) => s.used > 0 || s.levels.length > 0);
   const recordOnly = customers.filter((p) => p.source === 'record').length;
   if (recordOnly) notes.push({ key: 'note.record', values: { n: recordOnly } });
+
+  // Light levels and customer counts per box, from the customers whose path goes through it; and
+  // the size of each house's drop cable.
+  {
+    const record = new Map(input.customers.map((c) => [c.id, c]));
+    const boxById = new Map(boxes.map((b) => [b.id, b]));
+    const houseById = new Map(houses.map((h) => [h.id, h]));
+    for (const s of input.splitters) {
+      const box = s.terminalBoxId ? boxById.get(s.terminalBoxId) : undefined;
+      if (!box || !s.outputPorts?.length) continue;
+      box.totalOutputs = (box.totalOutputs ?? 0) + s.outputPorts.length;
+      box.freeOutputs = (box.freeOutputs ?? 0) + s.outputPorts.filter((o) => o.status !== 'Occupied').length;
+    }
+    const dropSize = new Map(
+      cables.filter((c) => c.customerId && c.fiberCount).map((c) => [c.customerId, c.fiberCount]),
+    );
+    for (const p of customers) {
+      const house = houseById.get(p.houseId);
+      const size = dropSize.get(p.customerId);
+      if (house && size && !house.dropFibers) house.dropFibers = size;
+      const rec = record.get(p.customerId);
+      const seen = new Set<string>();
+      for (const hop of p.hops) {
+        if (hop.kind !== 'splitter' || !hop.boxId || seen.has(hop.boxId)) continue;
+        seen.add(hop.boxId);
+        const box = boxById.get(hop.boxId);
+        if (!box) continue;
+        box.served = (box.served ?? 0) + 1;
+        const rx = rec?.rxOpticalPowerDbm;
+        if (typeof rx !== 'number') continue;
+        const measured = !!rec?.rxSource && rec.rxSource !== 'calculated';
+        box.rx = box.rx
+          ? {
+              min: Math.min(box.rx.min, rx),
+              max: Math.max(box.rx.max, rx),
+              n: box.rx.n + 1,
+              measured: box.rx.measured && measured,
+            }
+          : { min: rx, max: rx, n: 1, measured };
+      }
+    }
+  }
+
+  // The same PON picture as the 2D map ("Network by PON"): each PON port has a map colour, fibers
+  // and houses take the colour of the PON they carry, cables are named by PON and cores used, and
+  // each splitter gets a badge with its outputs and calculated levels.
+  const overview = buildPonOverview(
+    {
+      equipment: input.equipment,
+      cables: input.cables,
+      splitters: input.splitters,
+      closures: input.closures,
+      customers: input.customers,
+    },
+    optical,
+  );
+  const ponByKey = new Map(overview.pons.map((p) => [p.key, p]));
+  const shortPon = (id: string) => id.replace(/^PON-?/i, '');
+  for (const c of cables) {
+    const use = overview.cables.get(c.id);
+    const viaCustomer = c.customerId ? overview.customers.get(c.customerId)?.ponKey : undefined;
+    const keys = use?.ponKeys.length ? use.ponKeys : viaCustomer ? [viaCustomer] : [];
+    const on = keys.map((k) => ponByKey.get(k)).filter((p): p is NonNullable<typeof p> => !!p);
+    if (!on.length) continue;
+    const chip = on.length === 1 ? ponColor(on[0].portNumber) : { hex: TRUNK_COLOR, ink: '#ffffff' };
+    // Trunk and distribution fibers take the PON's colour. A drop keeps the colour code of its
+    // splitter output, so the leads leaving one box can be told apart.
+    if (c.role !== 'drop') c.colorHex = chip.hex;
+    const names = on.length === 1 ? on[0].ponPortId : `PON ${on.map((p) => shortPon(p.ponPortId)).join(', ')}`;
+    const size = c.fiberCount ? ` · ${c.fiberCount}F${use ? ` ${use.coresUsed}/${c.fiberCount} used` : ''}` : '';
+    c.pon = { text: `${names}${size}`, hex: chip.hex, ink: chip.ink };
+  }
+  const boxIndex = new Map(boxes.map((b) => [b.id, b]));
+  for (const s of overview.splitters.values()) {
+    const box = boxIndex.get(s.boxId);
+    if (!box) continue;
+    const pon = s.ponKey ? ponByKey.get(s.ponKey) : undefined;
+    const chip = pon ? ponColor(pon.portNumber) : { hex: '#94a3b8', ink: '#0f172a' };
+    (box.badges ??= []).push({
+      pon: pon?.ponPortId ?? 'No PON',
+      hex: chip.hex,
+      ink: chip.ink,
+      ratio: s.ratio,
+      stage: s.stage,
+      used: s.outputs.used,
+      faulty: s.outputs.faulty,
+      free: s.outputs.free,
+      total: s.outputs.total,
+      inDbm: s.inputDbm,
+      outDbm: s.outputDbm,
+    });
+  }
+  for (const b of boxes) b.badges?.sort((a, z) => (a.stage ?? 99) - (z.stage ?? 99));
+  {
+    const houseIndex = new Map(houses.map((h) => [h.id, h]));
+    for (const p of customers) {
+      const pon = ponByKey.get(overview.customers.get(p.customerId)?.ponKey ?? '');
+      const house = houseIndex.get(p.houseId);
+      if (!pon || !house || house.ponHex) continue;
+      const chip = ponColor(pon.portNumber);
+      house.ponHex = chip.hex;
+      house.ponInk = chip.ink;
+    }
+  }
+  const ponChips = overview.pons.map((p) => {
+    const chip = ponColor(p.portNumber);
+    return {
+      key: p.key,
+      id: p.ponPortId,
+      hex: chip.hex,
+      ink: chip.ink,
+      area: p.areas[0]?.name ?? '',
+      streets: p.streets,
+      active: p.customers.active,
+      inactive: p.customers.total - p.customers.active,
+      free: p.accessOutputs.free,
+      rxRange: p.rxRange,
+    };
+  });
 
   // Bounds of the main network. A record far away from all the others (say a test cable left in
   // another city) would stretch the scene to hundreds of kilometres and crush the network into one
@@ -654,6 +786,7 @@ export function toScene3D(input: Scene3DInput, options: Scene3DOptions = {}): Sc
     houses,
     customers,
     pons,
+    ponChips,
     notes,
     isDemo: !!options.isDemo,
   };

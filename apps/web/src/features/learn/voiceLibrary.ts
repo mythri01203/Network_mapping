@@ -13,6 +13,17 @@ const credentials = (): RequestCredentials => (import.meta.env.VITE_API_URL ? 'i
 
 export const clipAudioUrl = (id: string) => `${base()}/api/v1/voice/audio/${encodeURIComponent(id)}`;
 
+/**
+ * Automatic voice: the server plays the step's saved voice, or makes it with Sarvam the first time.
+ * The player id is `speak:<language>:<lesson key>`; any other id is a saved clip's id.
+ */
+export const speakId = (key: string, lang: VoiceLanguage) => `speak:${lang}:${key}`;
+export function audioUrlOf(id: string): string {
+  const m = /^speak:([a-z]+):(.+)$/.exec(id);
+  if (!m) return clipAudioUrl(id);
+  return `${base()}/api/v1/voice/speak/${encodeURIComponent(m[2]!)}/${encodeURIComponent(m[1]!)}`;
+}
+
 interface VoiceLibraryState {
   clips: VoiceClip[];
   /** loading, ready, or offline (no list: captions only). */
@@ -43,7 +54,16 @@ export const scriptOf = (key: string): LessonScript | undefined => LESSON_SCRIPT
  * The clip to play for a step in a language: approved first; a draft only when the person may hear
  * drafts (the administrator); never an outdated one; never another language's clip.
  */
-export function clipFor(clips: readonly VoiceClip[], key: string, lang: VoiceLanguage, allowDrafts: boolean): VoiceClip | undefined {
-  const usable = clips.filter((c) => c.lessonKey === key && c.language === lang && !c.outdated && c.status !== 'rejected');
-  return usable.find((c) => c.status === 'approved') ?? (allowDrafts ? usable.find((c) => c.status === 'draft') : undefined);
+export function clipFor(
+  clips: readonly VoiceClip[],
+  key: string,
+  lang: VoiceLanguage,
+  allowDrafts: boolean,
+): VoiceClip | undefined {
+  const usable = clips.filter(
+    (c) => c.lessonKey === key && c.language === lang && !c.outdated && c.status !== 'rejected',
+  );
+  return (
+    usable.find((c) => c.status === 'approved') ?? (allowDrafts ? usable.find((c) => c.status === 'draft') : undefined)
+  );
 }

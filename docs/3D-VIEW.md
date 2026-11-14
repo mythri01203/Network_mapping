@@ -98,6 +98,35 @@ The view follows `.claude/skills/fibergis-data-truth`:
   poles, boxes and offices; `world.far`) stands in for them. OLT, FDT and FAT names keep a
   minimum size on screen and the engine hides any that would cover a more important one. The
   overview of a network wider than 300 m looks steeply down, like a map.
+- **Moving around.** Map-style (`engine/controls.ts`): drag moves over the ground, the wheel or a
+  pinch zooms towards the point under the pointer, right-drag / Shift-drag / two-finger twist
+  turns, double-click goes to that spot. On-screen buttons zoom, turn and return to the whole
+  network. Tapping a name label, or from far away a dot, selects that record and flies to it
+  (`Engine.pickOnScreen`). The panels start folded on screens under 1600 px; the fiber panel opens
+  when something is picked. Shadows follow the camera (`followShadows`).
+- **Numbers shown.** All counted from records in `View3DView.tsx`: customers active / not active
+  (recorded status), PON ports, splitter outputs and FAT ports in use / free, cables by fiber
+  count, each PON's customers / free ports; on a box or OLT the customers whose recorded path
+  goes through it ("if this fails, N customers lose service"); on a customer the status, plan and
+  recorded Rx with its source. Trunk and distribution cables carry a "48F · PON-01" label; house
+  dots and number tags show not-active customers in red / amber.
+- **On the objects.** House tags read "219 · 2F · ~-19.1 dBm" (number, drop size, recorded Rx;
+  "~" = calculated, not measured). Box labels carry a second line: outputs used of total, "N FREE",
+  customers served and the Rx range of those customers. Cable labels read "12F G.652D · 1/12 used
+  · PON-05" and can be tapped to open the cable: every fiber with its recorded colour, in use or
+  free, and what it carries. A box's card lists every splitter output the same way. "Where a new
+  connection can go" lists the boxes with a free output, for the chosen PON or all.
+- **Same picture as the 2D "Network by PON".** `toScene3D` calls the shared `buildPonOverview`:
+  trunk and distribution fibers take their PON's map colour (dark trunk colour for several PONs),
+  cable pills read "PON-04 · 6F 1/6 used", each splitter box has the 2D badge (PON chip, ratio and
+  stage, free outputs, calculated level in → out, one square per output), house tags take the PON
+  colour (grey with a red edge and "OFF" when not active), and the panel lists every PON with its
+  area, streets, active / not active and free outputs. Drops keep their output's colour code.
+- **Editing from 3D.** Nothing is written by the 3D code itself. A card's **Edit / tools** opens
+  the app's inspector (`PropertiesPanel`) beside the scene on the selected record; **Add customer
+  here** (on a box with a free output) opens the customer wizard on that box; while the wizard
+  waits for "Pick on map", a tap on the 3D ground gives the position (`onGroundTap`). The demo
+  network cannot be edited.
 - **Stray records.** An item more than 20 km from the middle of the network (`mainBounds` in
   `scene/toScene3D.ts`, only when such items are under 10% of all) is still drawn where it is but
   does not stretch the scene, and is named under "Drawn from defaults or with gaps".
@@ -249,3 +278,19 @@ path, takes screenshots, measures frame rates (above), and fails on any page or 
 | 3 | WebGL fallback | Pass |
 | 3 | No external requests; pinned versions | Pass |
 | 4 | Plain labels with grey technical term, 5-step tour, "?" bubbles, named colour chips, 5 languages | Pass (translations are drafts) |
+
+## Digital Twin page (`/twin`)
+
+A second 3D page, **Digital Twin** (sidebar and the top-bar switch), draws the mapped network as a
+what-if model: the OLT room and rack (one port per PON, patch cords to the ODF), FDT cabinets and
+FAT boxes with one adapter per splitter output, cables that run into the equipment, houses, poles,
+light pulses, and cut / restore with the customers affected. It reads the same records as the 2D
+map (`features/twin/twinData.ts`, which uses `buildPonOverview`), so what is mapped in 2D appears
+there. Nothing is saved from it.
+
+The scene code is the plain scripts in `/digital-twin` (`twin-1-model.js` … `twin-4-ui.js`,
+`template.html`, `twin.css`). The app loads them through the `virtual:fibergis-twin` module
+(`vite.config.ts`) with its own three.js; `npx tsx digital-twin/build-twin.mts` builds the same
+scripts and the database's records into one standalone `digital-twin/index.html` (three.js r128
+from a CDN), which opens with one demonstration cut. No map service is used on this page: roads
+are drawn along the cable routes.

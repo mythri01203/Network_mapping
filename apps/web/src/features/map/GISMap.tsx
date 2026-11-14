@@ -18,7 +18,6 @@ import { selectionLabel, useUiStore } from '../../stores/uiStore';
 import { BikerModePanel } from '../field-work/BikerModePanel';
 import { SelectionLayer } from '../selection/SelectionLayer';
 import { keyForSelection } from '../selection/selectionModel';
-import { EquipmentToolbox } from './EquipmentToolbox';
 import { oltFamily, type OltFilter } from './layerFilters';
 import { BikerRouteLayer } from './layers/BikerRouteLayer';
 import { CableLayer } from './layers/CableLayer';
@@ -117,7 +116,6 @@ export const GISMap: React.FC = () => {
       <PrintCaption />
 
       <div className="gis-no-print">
-        <EquipmentToolbox />
         <MapToolbar
           isBikerMode={isBikerMode}
           onToggleBikerMode={() => useBikerStore.getState().setBikerMode(!isBikerMode)}

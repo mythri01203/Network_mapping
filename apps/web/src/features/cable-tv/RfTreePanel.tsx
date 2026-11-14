@@ -57,7 +57,7 @@ function NodeRow({ node, model }: { node: RfTreeNode; model: RfModel }) {
 export function RfTreePanel({ model }: { model: RfModel }) {
   const { tree } = model;
   if (model.data.rfElements.length === 0) {
-    return <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">Not recorded. No Cable TV items are on record yet. Add them under Items, then link them under Links.</p>;
+    return <p className="ui-empty p-6 text-center text-sm">Not recorded. No Cable TV items are on record yet. Add them under Items, then link them under Links.</p>;
   }
   return (
     <div className="space-y-4">

@@ -1,4 +1,6 @@
 import './index.css';
+// The light or dark look chosen on this device, set before anything is drawn.
+import './stores/themeStore';
 
 import { startOfficeCache } from './lib/officeCache';
 

@@ -5,6 +5,10 @@ import { DEFAULT_FLY_TO_ZOOM, useMapStore } from '../../../stores/mapStore';
 import { createPanes } from './panes';
 import { TILE_PROVIDERS } from './tileProviders';
 
+/** The map on screen, for the on-screen guide's demo, which taps it the way a person would. */
+let liveMap: L.Map | null = null;
+export const activeLeafletMap = () => liveMap;
+
 /**
  * Owns the Leaflet map instance for a container element.
  *
@@ -27,8 +31,10 @@ export function useLeafletMap() {
       L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(instance);
       createPanes(instance);
       mapRef.current = instance;
+      liveMap = instance;
       setMap(instance);
     } else if (!node && mapRef.current) {
+      if (liveMap === mapRef.current) liveMap = null;
       mapRef.current.remove();
       mapRef.current = null;
       setMap(null);

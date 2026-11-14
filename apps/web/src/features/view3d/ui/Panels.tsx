@@ -5,7 +5,7 @@ import type { FiberFilter } from '../engine/fibers';
 import { type Lang3D, type Msg3DKey, t3d, tx } from '../i18n';
 import { TIA598 } from '../scene/models';
 import type { PresetKey } from '../scene/presets';
-import type { ColorChip, CustomerPath, PonSummary, Scene3D, SceneBox, SceneText } from '../scene/types';
+import type { ColorChip, CustomerPath, PonChip, PonSummary, Scene3D, SceneBox, SceneText } from '../scene/types';
 import { mutedClass, panelClass, PRESET_ORDER, type Tone } from './style';
 
 /** Panels of the 3D view. Every button has a visible label; colours always come with names. */
@@ -131,6 +131,161 @@ export function PresetPanel({
 
 const filterKey = (f: FiberFilter) =>
   f.kind === 'level' ? `level:${f.level}` : f.kind === 'pon' ? `pon:${f.ponKey}` : f.kind;
+
+/** A button on a card. `primary` draws it highlighted. */
+export interface CardAction {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
+/** One fiber of a cable or one output of a splitter. */
+export interface PortRow {
+  key: string;
+  n: number;
+  chip?: ColorChip;
+  /** "In use" or "FREE", in the person's language. */
+  state: string;
+  free: boolean;
+  /** What it carries or who is on it, from the record. */
+  text?: string;
+}
+
+/** Boxes with a free splitter output: tap one to go to it. */
+export function FreePlaces({
+  tone,
+  lang,
+  title,
+  places,
+  onGo,
+}: {
+  tone: Tone;
+  lang: Lang3D;
+  title: string;
+  places: { id: string; name: string; free: number; total: number; ratio: string }[];
+  onGo: (id: string) => void;
+}) {
+  const muted = mutedClass(tone);
+  return (
+    <section className="space-y-1">
+      <div className="text-[13px] font-semibold">{t3d(lang, 'info.freePlaces')}</div>
+      <div className={`text-[11px] ${muted}`}>{title}</div>
+      {places.length === 0 ? (
+        <p className={`text-[12px] ${muted}`}>{t3d(lang, 'info.freeNone')}</p>
+      ) : (
+        <ul className="max-h-[200px] space-y-1 overflow-y-auto pr-1">
+          {places.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onGo(p.id)}
+                className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border px-2 text-left text-[12.5px] ${
+                  tone.dark ? 'border-white/15 hover:bg-white/10' : 'border-black/15 hover:bg-black/5'
+                }`}
+              >
+                <span className="min-w-0 truncate">
+                  {p.name} <span className={muted}>{p.ratio}</span>
+                </span>
+                <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 font-semibold text-emerald-700">
+                  {p.free} {t3d(lang, 'info.freeOne')} / {p.total}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** A label and its value; `tone` colours the value (bad = red, good = green). */
+export type Fact = [label: string, value: string, tone?: 'good' | 'bad'];
+
+export function Facts({ tone, facts }: { tone: Tone; facts?: Fact[] }) {
+  if (!facts?.length) return null;
+  const muted = mutedClass(tone);
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-[12.5px]">
+      {facts.map(([label, value, kind]) => (
+        <div key={label} className="contents">
+          <dt className={muted}>{label}</dt>
+          <dd className={kind === 'bad' ? 'font-semibold text-red-500' : kind === 'good' ? 'text-emerald-600' : ''}>
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The whole network in numbers, and every PON port with its customers and free ports. */
+export function NetworkSummary({
+  tone,
+  lang,
+  facts,
+  pons,
+  activePon,
+  onPon,
+}: {
+  tone: Tone;
+  lang: Lang3D;
+  facts: Fact[];
+  pons: PonChip[];
+  activePon: string | null;
+  onPon: (key: string) => void;
+}) {
+  const muted = mutedClass(tone);
+  return (
+    <section className="space-y-1.5">
+      <div className="text-[13px] font-semibold">{t3d(lang, 'info.title')}</div>
+      <Facts tone={tone} facts={facts} />
+      {pons.length > 0 && (
+        <div>
+          <div className={`mb-1 text-[11px] uppercase tracking-wide ${muted}`}>{t3d(lang, 'info.ponList')}</div>
+          <ul className="space-y-1">
+            {pons.map((p) => (
+              <li key={p.key}>
+                <button
+                  type="button"
+                  aria-pressed={activePon === p.key}
+                  onClick={() => onPon(p.key)}
+                  className={`w-full rounded-lg border px-2 py-1.5 text-left text-[12px] leading-tight ${
+                    activePon === p.key
+                      ? 'border-emerald-600 bg-emerald-500/10'
+                      : tone.dark
+                        ? 'border-white/15 hover:bg-white/10'
+                        : 'border-black/15 hover:bg-black/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] font-bold"
+                        style={{ background: p.hex, color: p.ink }}
+                      >
+                        {p.id}
+                      </span>
+                      <span className="truncate font-semibold">{p.area}</span>
+                    </span>
+                    <span className={`shrink-0 font-semibold ${p.free > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {p.free} {t3d(lang, 'info.free')}
+                    </span>
+                  </div>
+                  {p.streets.length > 0 && <div className={`truncate ${muted}`}>{p.streets.join(', ')}</div>}
+                  <div className={muted}>
+                    {p.active} {t3d(lang, 'info.active')} · {p.inactive} {t3d(lang, 'info.inactive')}
+                    {p.rxRange && ` · Rx ~${p.rxRange.minDbm.toFixed(1)} … ${p.rxRange.maxDbm.toFixed(1)} dBm`}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className={`text-[11px] ${muted}`}>{t3d(lang, 'info.dots')}</p>
+    </section>
+  );
+}
 
 export function MappingPanel({
   tone,
@@ -317,6 +472,8 @@ export function CustomerCard({
   lang,
   path,
   others,
+  facts,
+  actions,
   onShow2d,
   onClose,
   onOther,
@@ -325,6 +482,10 @@ export function CustomerCard({
   lang: Lang3D;
   path: CustomerPath;
   others: CustomerPath[];
+  /** More recorded facts about the customer: status, plan, light level. */
+  facts?: Fact[];
+  /** Work that can be done on this record (edit, add a customer). */
+  actions?: CardAction[];
   onShow2d?: () => void;
   onClose: () => void;
   onOther: (id: string) => void;
@@ -371,6 +532,7 @@ export function CustomerCard({
         {path.source === 'fiber' ? t3d(lang, 'fromFiber') : t3d(lang, 'fromRecord')}
         {!path.complete && ` · ${t3d(lang, 'gaps')}`}
       </div>
+      <Facts tone={tone} facts={facts} />
       <div className="text-[12px]">
         <span className={muted}>{t3d(lang, 'live')}: </span>
         <span className={path.live?.fault ? 'font-semibold text-red-500' : ''}>
@@ -386,11 +548,18 @@ export function CustomerCard({
           ))}
         </div>
       )}
-      {onShow2d && (
-        <Btn tone={tone} onClick={onShow2d}>
-          {t3d(lang, 'openIn2d')}
-        </Btn>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {actions?.map((a) => (
+          <Btn key={a.label} tone={tone} on={a.primary} onClick={a.onClick}>
+            {a.label}
+          </Btn>
+        ))}
+        {onShow2d && (
+          <Btn tone={tone} onClick={onShow2d}>
+            {t3d(lang, 'openIn2d')}
+          </Btn>
+        )}
+      </div>
     </section>
   );
 }
@@ -403,6 +572,10 @@ export function EquipmentCard({
   status,
   box,
   extra,
+  facts,
+  warning,
+  rows,
+  actions,
   onShow2d,
   onClose,
 }: {
@@ -413,6 +586,14 @@ export function EquipmentCard({
   status?: string;
   box?: SceneBox;
   extra?: string;
+  /** More recorded facts: outputs used and free, customers served. */
+  facts?: Fact[];
+  /** What a failure here would mean, in plain words. */
+  warning?: string;
+  /** One row per fiber or splitter output: number, colour, used or free, what it carries. */
+  rows?: { title: string; items: PortRow[] };
+  /** Work that can be done on this record (edit, add a customer). */
+  actions?: CardAction[];
   onShow2d?: () => void;
   onClose: () => void;
 }) {
@@ -458,12 +639,44 @@ export function EquipmentCard({
           </>
         )}
       </dl>
-      {extra && <div className={`text-[11.5px] ${muted}`}>{extra}</div>}
-      {onShow2d && (
-        <Btn tone={tone} onClick={onShow2d}>
-          {t3d(lang, 'openIn2d')}
-        </Btn>
+      <Facts tone={tone} facts={facts} />
+      {warning && <div className="rounded-md bg-amber-500/15 px-2 py-1 text-[12px] font-medium">{warning}</div>}
+      {rows && rows.items.length > 0 && (
+        <div>
+          <div className={`mb-1 text-[11px] uppercase tracking-wide ${muted}`}>{rows.title}</div>
+          <ul className="max-h-[240px] space-y-0.5 overflow-y-auto pr-1">
+            {rows.items.map((r) => (
+              <li key={r.key} className="flex items-center gap-1.5 text-[12px]">
+                <span className="w-5 shrink-0 text-right tabular-nums">{r.n}</span>
+                {r.chip && <Chip chip={r.chip} tone={tone} small />}
+                <span
+                  className={`shrink-0 rounded px-1 text-[11px] font-semibold ${
+                    r.free ? 'bg-emerald-500/20 text-emerald-700' : tone.dark ? 'bg-white/10' : 'bg-black/10'
+                  }`}
+                >
+                  {r.state}
+                </span>
+                <span className={`min-w-0 truncate ${muted}`} title={r.text}>
+                  {r.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+      {extra && <div className={`text-[11.5px] ${muted}`}>{extra}</div>}
+      <div className="flex flex-wrap gap-1.5">
+        {actions?.map((a) => (
+          <Btn key={a.label} tone={tone} on={a.primary} onClick={a.onClick}>
+            {a.label}
+          </Btn>
+        ))}
+        {onShow2d && (
+          <Btn tone={tone} onClick={onShow2d}>
+            {t3d(lang, 'openIn2d')}
+          </Btn>
+        )}
+      </div>
     </section>
   );
 }

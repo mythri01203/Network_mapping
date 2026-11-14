@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   type LucideIcon,
   MousePointer2,
+  Plus,
   Radio,
   Redo2,
   Ruler,
@@ -20,6 +21,7 @@ import {
   Undo2,
   UserPlus,
   UtilityPole,
+  Volume2,
   X,
 } from 'lucide-react';
 import { Link } from 'react-router';
@@ -29,6 +31,7 @@ import type { CableType, CatalogComponent, EquipmentType } from '@fibergis/share
 
 import { EquipmentIllustration } from '../../components/icons/EquipmentIllustration';
 import { cn, Switch } from '../../components/ui';
+import { useT } from '../../i18n/useT';
 import { EQUIPMENT_DRAG_TYPE, isTypingTarget } from '../../lib/browser';
 import { useMapStore } from '../../stores/mapStore';
 import { deleteCable, deleteEquipment } from '../../stores/networkActions';
@@ -36,7 +39,9 @@ import { selectCanRedo, selectCanUndo, useNetworkStore } from '../../stores/netw
 import { useUiStore } from '../../stores/uiStore';
 import { cableStyle } from '../../theme/network';
 import { BUILT_IN_COMPONENTS } from '../catalog/componentCatalog';
+import { useLearnStore } from '../learn/learnStore';
 import { SelectToolsButton } from '../selection/SelectionMenus';
+import { AddCustomEquipmentModal } from './EquipmentToolbox';
 import { formatArea, formatDistance } from './markerIcons';
 import { placementTemplate } from './placement';
 import { usePlacementDialog } from './placementDialogStore';
@@ -162,7 +167,15 @@ function Divider() {
 /* Equipment picker                                                    */
 /* ------------------------------------------------------------------ */
 
-function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) => void; onClose: () => void }) {
+function EquipmentPicker({
+  onPick,
+  onClose,
+  onAddCustom,
+}: {
+  onPick: (c: CatalogComponent) => void;
+  onClose: () => void;
+  onAddCustom: () => void;
+}) {
   const customComponents = useNetworkStore((s) => s.catalog);
   const { selectedEquipmentTypeToAdd, activeTool } = useMapStore(
     useShallow((s) => ({ selectedEquipmentTypeToAdd: s.equipmentTypeToAdd, activeTool: s.activeTool })),
@@ -331,6 +344,18 @@ function EquipmentPicker({ onPick, onClose }: { onPick: (c: CatalogComponent) =>
           ))}
         </div>
 
+        <div className="border-t border-slate-100 p-2">
+          <button
+            type="button"
+            onClick={onAddCustom}
+            data-testid="equipment-add-custom"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-500 md:min-h-10"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Add Custom Equipment
+          </button>
+        </div>
+
         <div className="hidden items-center justify-between border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500 md:flex">
           <span>Click to place on the map, or drag an item onto it.</span>
           <span className="flex items-center gap-1">
@@ -440,7 +465,9 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
   );
 
   const [menu, setMenu] = useState<null | 'equipment' | 'cable'>(null);
+  const [addingCustom, setAddingCustom] = useState(false);
   const closeMenu = () => setMenu(null);
+  const { t } = useT();
   const rootRef = useOutsideClose(menu !== null, (v) => !v && closeMenu());
 
   const resetDrawing = () => {
@@ -517,6 +544,20 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
           <Camera className="h-5 w-5" strokeWidth={2} aria-hidden />
           Field capture
         </Link>
+        {/* The on-screen guide with voice: where things are, and how to map from the OLT to a house. */}
+        <button
+          type="button"
+          data-guide="guide-button"
+          data-testid="open-guide"
+          onClick={() => {
+            closeMenu();
+            useLearnStore.getState().openTour('choose');
+          }}
+          className="flex h-[48px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-blue-50 px-3 text-[14px] font-bold text-blue-800 ring-1 ring-blue-200 transition-colors hover:bg-blue-100 md:h-9 md:text-[13px]"
+        >
+          <Volume2 className="h-5 w-5 md:h-[18px] md:w-[18px]" strokeWidth={2.2} aria-hidden />
+          {t('learn.guide')}
+        </button>
         <ToolButton
           icon={MousePointer2}
           label="Select"
@@ -606,7 +647,17 @@ export function MapToolbar({ isBikerMode, onToggleBikerMode }: MapToolbarProps) 
       {menu === 'cable' && (
         <CablePicker onPick={pickCable} className="absolute inset-x-2 bottom-full mb-2 max-h-[60vh] overflow-y-auto md:hidden" />
       )}
-      {menu === 'equipment' && <EquipmentPicker onPick={pickEquipment} onClose={closeMenu} />}
+      {menu === 'equipment' && (
+        <EquipmentPicker
+          onPick={pickEquipment}
+          onClose={closeMenu}
+          onAddCustom={() => {
+            closeMenu();
+            setAddingCustom(true);
+          }}
+        />
+      )}
+      {addingCustom && <AddCustomEquipmentModal onClose={() => setAddingCustom(false)} />}
     </div>
   );
 }

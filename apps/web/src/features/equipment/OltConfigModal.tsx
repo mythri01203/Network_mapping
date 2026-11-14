@@ -46,6 +46,7 @@ import { updateEquipment } from '../../stores/networkActions';
 import { useNetworkStore } from '../../stores/networkStore';
 import { showToast } from '../../stores/toastStore';
 import { useUiStore } from '../../stores/uiStore';
+import { useLearnStore } from '../learn/learnStore';
 
 type ConfigTab = 'basic' | 'tech' | 'ports' | 'colors' | 'splitters' | 'cables' | 'summary';
 
@@ -79,6 +80,9 @@ export const OltConfigModal: React.FC = () => {
       closeOltConfigModal: s.closeOltConfigModal,
     })),
   );
+  // While an on-screen guide runs, the window stands to the side and the map stays clear, so the
+  // OLT just placed can be seen.
+  const guiding = useLearnStore((s) => s.tour !== null && s.tour !== 'choose');
 
   const { allEquipment, allCables, networkSplitters, allCustomers, settings } = useNetworkStore(
     useShallow((s) => ({
@@ -406,8 +410,12 @@ export const OltConfigModal: React.FC = () => {
   };
 
   return (
-    <div className="modal-sheet fixed inset-0 z-[1600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl text-white flex flex-col overflow-hidden my-auto max-h-[90vh]">
+    <div
+      className={`modal-sheet fixed inset-0 z-[1600] flex items-center p-4 overflow-y-auto animate-in fade-in duration-200 ${
+        guiding ? 'justify-end bg-transparent pointer-events-none' : 'justify-center bg-black/60 backdrop-blur-sm'
+      }`}
+    >
+      <div className={`w-full ${guiding ? 'max-w-2xl pointer-events-auto' : 'max-w-4xl'} bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl text-white flex flex-col overflow-hidden my-auto max-h-[90vh]`}>
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">

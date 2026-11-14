@@ -75,7 +75,7 @@ function createHalo(cable: Cable, kind: Exclude<HaloKind, null>): L.Polyline {
     opacity: 0.6,
     lineCap: 'round',
     lineJoin: 'round',
-    className: kind === 'traced' ? 'fiber-trace-active' : '',
+    className: kind === 'traced' ? 'fiber-trace-active' : 'fiber-select-halo',
   });
 }
 

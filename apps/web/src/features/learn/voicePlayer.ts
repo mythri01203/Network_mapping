@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { clipAudioUrl } from './voiceLibrary';
+import { audioUrlOf } from './voiceLibrary';
 
 /**
  * One voice at a time (learning assistant, Stage 2). It only starts when the person taps Play: no
@@ -78,7 +78,7 @@ export const useVoicePlayer = create<PlayerState>()((set, get) => {
         return;
       }
       a.pause();
-      a.src = clipAudioUrl(clipId);
+      a.src = audioUrlOf(clipId);
       a.currentTime = 0;
       set({ clipId, current: 0, duration: 0 });
       start(a);

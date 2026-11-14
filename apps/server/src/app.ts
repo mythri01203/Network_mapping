@@ -68,13 +68,19 @@ const PASSWORD_CHANGE_PATHS = new Set(['/health', '/auth/status', '/auth/logout'
  * CDNs. Extra tile hosts come from `CSP_IMG_SOURCES`.
  */
 function cspDirectives(config: AppConfig) {
+  // Google Maps (street photos in the 3D view) only when `CSP_GOOGLE_MAPS=true`: its script, the
+  // hosts it fetches from and the hosts its pictures come from.
+  const g = config.cspGoogleMaps;
+  const googleScripts = g ? ['https://maps.googleapis.com', 'https://maps.gstatic.com'] : [];
+  const googleImages = g ? ['https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.ggpht.com', 'https://*.googleusercontent.com'] : [];
+  const googleConnect = g ? ['https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com'] : [];
   return {
     defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+    scriptSrc: ["'self'", "'wasm-unsafe-eval'", ...googleScripts],
     styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com', 'https://fonts.googleapis.com'],
     fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
-    imgSrc: ["'self'", 'data:', 'blob:', 'https://*.google.com', 'https://tile.openstreetmap.org', 'https://unpkg.com', ...config.cspImgSources],
-    connectSrc: ["'self'", 'https://unpkg.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
+    imgSrc: ["'self'", 'data:', 'blob:', 'https://*.google.com', 'https://tile.openstreetmap.org', 'https://unpkg.com', ...googleImages, ...config.cspImgSources],
+    connectSrc: ["'self'", 'https://unpkg.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', ...googleConnect],
     mediaSrc: ["'self'", 'blob:'],
     workerSrc: ["'self'", 'blob:'],
     manifestSrc: ["'self'"],

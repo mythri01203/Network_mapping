@@ -214,18 +214,18 @@ export function PropertiesPanel() {
 
   return (
     <aside aria-label="Inspector" className={PANEL_CLASS}>
-      <header className="shrink-0 border-b border-slate-200 px-4 pt-3.5 pb-3">
+      <header className="shrink-0 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white px-4 pt-3.5 pb-3">
         <div className="flex items-start gap-3">
           <span
             className={cn(
-              'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset',
+              'flex size-12 shrink-0 items-center justify-center rounded-xl shadow-xs ring-1 ring-inset',
               header.tint,
             )}
           >
             {header.illustration ? (
-              <EquipmentIllustration type={header.illustration} size={30} />
+              <EquipmentIllustration type={header.illustration} size={40} />
             ) : (
-              <Icon size={18} strokeWidth={1.9} />
+              <Icon size={22} strokeWidth={1.8} />
             )}
           </span>
           <div className="min-w-0 flex-1">
@@ -272,13 +272,13 @@ export function PropertiesPanel() {
           </div>
         </div>
         {(header.status || header.tags.length > 0) && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-12">
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-[60px]">
             {header.status && <StatusBadge status={header.status} />}
             {header.tags}
           </div>
         )}
         {header.location && (
-          <p className="mt-2 flex items-center gap-1.5 truncate pl-12 text-xs text-slate-500">
+          <p className="mt-2 flex items-center gap-1.5 truncate pl-[60px] text-xs text-slate-500">
             <MapPin size={12} className="shrink-0 text-slate-400" />
             <span className="truncate">{header.location}</span>
           </p>

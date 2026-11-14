@@ -10,7 +10,7 @@ import type { Kit } from './kit';
  */
 
 export const HOUSE = { w: 4.1, h: 3.06, d: 3.74, roof: 1.7 } as const;
-const MAX_TAGS = 2048;
+const MAX_TAGS = 1200;
 /** Common house paints: cream, pale yellow, pink, pale green, sky blue, white, peach. */
 const WALL_PAINTS = [0xf1e7d0, 0xf3e3a8, 0xeec9c0, 0xcfe3c4, 0xc6dcea, 0xf4f1ea, 0xf0cfa8];
 
@@ -212,9 +212,10 @@ export class HouseLayer {
   buildTags(kit: Kit, labels: THREE.Group) {
     if (typeof document === 'undefined' || !this.houses.length) return;
     const count = Math.min(MAX_TAGS, this.houses.length);
-    const cols = 32;
+    // Each tag: house number, drop cable size, light level ("~" = calculated, not measured).
+    const cols = 10;
     const rows = Math.ceil(count / cols);
-    const cw = 64;
+    const cw = 192;
     const ch = 32;
     const canvas = document.createElement('canvas');
     canvas.width = cols * cw;
@@ -223,16 +224,26 @@ export class HouseLayer {
     if (!g) return;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = '600 20px system-ui, sans-serif';
+    g.font = '600 18px system-ui, sans-serif';
     const cells = new Float32Array(count * 2);
     for (let i = 0; i < count; i += 1) {
       const x = (i % cols) * cw;
       const y = Math.floor(i / cols) * ch;
-      g.fillStyle = this.houses[i].fault ? 'rgba(160,20,20,.9)' : 'rgba(10,16,22,.82)';
+      // Active: the PON's map colour. Not active: grey with a red edge. Live fault: red.
+      const hh = this.houses[i];
+      g.fillStyle = hh.fault ? 'rgba(160,20,20,.95)' : hh.inactive ? '#475569' : (hh.ponHex ?? 'rgba(10,16,22,.82)');
       g.fillRect(x + 2, y + 2, cw - 4, ch - 4);
-      g.fillStyle = '#fff';
+      if (hh.inactive && !hh.fault) {
+        g.fillStyle = '#ef4444';
+        g.fillRect(x + 2, y + 2, 8, ch - 4);
+      }
+      g.fillStyle = hh.fault || hh.inactive ? '#fff' : (hh.ponInk ?? '#fff');
       const extra = this.houses[i].customerIds.length > 1 ? `+${this.houses[i].customerIds.length - 1}` : '';
-      g.fillText(`${this.houses[i].number}${extra}`, x + cw / 2, y + ch / 2 + 1);
+      const hs = this.houses[i];
+      const parts = [`${hs.inactive ? 'OFF ' : ''}${hs.number}${extra}`];
+      if (hs.dropFibers) parts.push(`${hs.dropFibers}F`);
+      if (hs.rxDbm !== undefined) parts.push(`${hs.rxMeasured ? '' : '~'}${hs.rxDbm.toFixed(1)} dBm`);
+      g.fillText(parts.join(' · '), x + cw / 2, y + ch / 2 + 1);
       cells[i * 2] = x / canvas.width;
       cells[i * 2 + 1] = 1 - (y + ch) / canvas.height;
     }
@@ -247,7 +258,7 @@ export class HouseLayer {
         uniforms: {
           map: { value: tex },
           cellSize: { value: new THREE.Vector2(cw / canvas.width, ch / canvas.height) },
-          size: { value: new THREE.Vector2(1.6, 0.8) },
+          size: { value: new THREE.Vector2(4.2, 0.7) },
         },
         vertexShader: `
           attribute vec2 cell;
@@ -257,7 +268,11 @@ export class HouseLayer {
           void main() {
             vUv = cell + uv * cellSize;
             vec4 mv = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-            mv.xy += position.xy * size;
+            // Readable from the street: the tag grows with distance up to 350 m away, then
+            // shrinks again so the overview is not covered in tags.
+            float grow = max(1.0, min(-mv.z, 350.0) * 0.022);
+            mv.y += (grow - 1.0) * size.y * 0.5;
+            mv.xy += position.xy * size * grow;
             gl_Position = projectionMatrix * mv;
           }`,
         fragmentShader: `

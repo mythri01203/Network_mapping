@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import {
+  Box,
   Boxes,
   Cable,
   ClipboardList,
@@ -31,7 +32,18 @@ export interface ViewMeta {
 
 export const VIEW_META: Record<MainView, ViewMeta> = {
   map: { path: '/', label: 'Network Map', description: 'GIS workspace for the outside plant', icon: MapIcon },
-  view3d: { path: '/3d', label: '3D View', description: 'Every mapped item drawn in 3D, from the same records', icon: Cuboid },
+  view3d: {
+    path: '/3d',
+    label: '3D View',
+    description: 'Every mapped item drawn in 3D, from the same records',
+    icon: Cuboid,
+  },
+  twin: {
+    path: '/twin',
+    label: 'Digital Twin',
+    description: 'The mapped network in realistic 3D: OLT rack, boxes, fibers, power levels, what-if cuts',
+    icon: Box,
+  },
   topology: { path: '/topology', label: 'Topology', description: 'Logical OLT to ONT hierarchy', icon: Network },
   olt_rack: { path: '/olt-rack', label: 'OLT Rack', description: 'Central office chassis and PON ports', icon: Server },
   inventory: { path: '/equipment', label: 'Equipment', description: 'All network equipment', icon: Boxes },

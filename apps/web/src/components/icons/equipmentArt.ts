@@ -17,6 +17,7 @@ const DEFS = `<defs>
 <linearGradient id="cn" x2="1" y2="0"><stop stop-color="#8e8b82"/><stop offset=".45" stop-color="#d3d0c7"/><stop offset="1" stop-color="#85827a"/></linearGradient>
 <linearGradient id="wd" x2="1" y2="0"><stop stop-color="#6d4528"/><stop offset=".45" stop-color="#b07c50"/><stop offset="1" stop-color="#633e23"/></linearGradient>
 <linearGradient id="pv" x2="0" y2="1"><stop stop-color="#fb923c"/><stop offset="1" stop-color="#c2500f"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1.1" stdDeviation="1" flood-color="#0f172a" flood-opacity=".3"/></filter>
 </defs>`;
 
 const LED = '#22c55e';
@@ -28,7 +29,8 @@ const FIBERS = ['#2563eb', '#f97316', '#16a34a', '#92400e', '#64748b', '#e2e8f0'
 
 const rect = (x: number, y: number, w: number, h: number, fill: string, rx = 0) =>
   `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"${rx ? ` rx="${rx}"` : ''}/>`;
-const dot = (cx: number, cy: number, r: number, fill: string) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"/>`;
+const dot = (cx: number, cy: number, r: number, fill: string) =>
+  `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"/>`;
 const shape = (d: string, fill: string) => `<path d="${d}" fill="${fill}"/>`;
 const line = (d: string, stroke: string, width = 2) =>
   `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -45,21 +47,90 @@ const rackUnit = (y: number, h: number, fill: string) =>
   dot(59, y + h - 3.5, 1.1, '#cbd5e1');
 
 const scPorts = (x: number, y: number, n: number, pitch: number, fill = SC_BLUE) =>
-  times(n, (i) => rect(x + i * pitch, y, pitch - 1.6, 6.5, fill, 0.8) + rect(x + i * pitch + 1.2, y + 2, pitch - 4, 2.5, INK));
+  times(
+    n,
+    (i) => rect(x + i * pitch, y, pitch - 1.6, 6.5, fill, 0.8) + rect(x + i * pitch + 1.2, y + 2, pitch - 4, 2.5, INK),
+  );
 const rjPorts = (x: number, y: number, n: number, pitch: number) =>
-  times(n, (i) => rect(x + i * pitch, y, pitch - 1.4, 6, '#e2e8f0', 0.6) + rect(x + i * pitch + 1, y + 1.2, pitch - 3.4, 3.6, INK));
+  times(
+    n,
+    (i) =>
+      rect(x + i * pitch, y, pitch - 1.4, 6, '#e2e8f0', 0.6) + rect(x + i * pitch + 1, y + 1.2, pitch - 3.4, 3.6, INK),
+  );
 const leds = (x: number, y: number, n: number, pitch: number, fill = LED) =>
   times(n, (i) => dot(x + i * pitch, y, 1.2, fill));
 
-const olt =
-  rackUnit(10, 44, url('dk')) +
-  times(3, (i) => {
-    const y = 15 + i * 12.5;
-    return rect(8, y, 48, 10.5, url('st'), 1.5) + rjPorts(11, y + 2.2, 6, 5.6) + leds(47, y + 5.2, 2, 4, i === 2 ? AMBER : LED);
-  });
+/** A row of SFP cages with a fiber plugged into each. */
+const sfp = (x: number, y: number, n: number, pitch: number, plug = SC_BLUE) =>
+  times(
+    n,
+    (i) =>
+      rect(x + i * pitch, y, pitch - 1.2, 5, '#0b1220', 0.7) +
+      rect(x + i * pitch + 0.9, y + 1.1, pitch - 3, 2.8, plug, 0.4),
+  );
+/** A cooling fan behind its grille. */
+const fan = (cx: number, cy: number, r: number) =>
+  dot(cx, cy, r, '#0b1220') +
+  dot(cx, cy, r - 1.1, '#334155') +
+  line(`M${cx - r + 1.6} ${cy}H${cx + r - 1.6}M${cx} ${cy - r + 1.6}V${cy + r - 1.6}`, '#0b1220', 1) +
+  dot(cx, cy, 1.1, '#94a3b8');
+/** One fiber splitting into three: the mark on boxes that hold a splitter. */
+const fiberMark = (x: number, y: number, color = '#1d4ed8') =>
+  line(
+    `M${x} ${y + 7}H${x + 4}C${x + 8} ${y + 7} ${x + 7} ${y} ${x + 12} ${y}M${x + 4} ${y + 7}H${x + 12}M${x + 4} ${y + 7}C${x + 8} ${y + 7} ${x + 7} ${y + 14} ${x + 12} ${y + 14}`,
+    color,
+    1.7,
+  );
 
+const olt =
+  rackUnit(8, 48, url('dk')) +
+  rect(9, 11, 37, 4.5, '#0b1220', 1) +
+  rect(11, 12.4, 9, 1.7, '#60a5fa', 0.5) +
+  leds(39.5, 13.2, 2, 3) +
+  times(2, (i) => {
+    const y = 18 + i * 12;
+    return (
+      rect(9, y, 37, 10.5, url('st'), 1.2) + leds(12.6, y + 2, 8, 4.2) + sfp(11, y + 4, 8, 4.2, i ? '#16a34a' : SC_BLUE)
+    );
+  }) +
+  rect(9, 42, 37, 10.5, url('st'), 1.2) +
+  rjPorts(11, 44.5, 2, 5.4) +
+  sfp(24, 45, 4, 5, AMBER) +
+  rect(48, 11, 8, 41.5, '#1b2533', 1) +
+  fan(52, 18, 3.4) +
+  fan(52, 31.7, 3.4) +
+  fan(52, 45.4, 3.4);
+
+/** A 1U patch panel: a label strip over twelve adapters. */
 const patchPanel =
-  rackUnit(17, 30, url('st')) + scPorts(9, 21, 8, 5.9) + scPorts(9, 33, 8, 5.9, '#16a34a') + rect(9, 29, 46, 1.2, '#64748b');
+  rackUnit(20, 24, url('st')) +
+  rect(9, 23.5, 46, 3.6, '#ffffff', 0.8) +
+  times(12, (i) => rect(10.4 + i * 3.9, 24.6, 1.6, 1.3, '#94a3b8')) +
+  times(
+    12,
+    (i) => rect(9 + i * 3.9, 30, 3, 8, i < 6 ? '#0284c7' : '#16a34a', 0.6) + rect(9.6 + i * 3.9, 32.2, 1.8, 3.4, INK),
+  ) +
+  rect(9, 40, 46, 1.2, '#64748b');
+
+/** An optical distribution frame: a tall frame of adapter trays with the patch cords down one side. */
+const odf =
+  rect(10, 3, 44, 58, url('ir'), 2.5) +
+  rect(10, 3, 44, 1.6, '#ffffff33', 1) +
+  times(4, (i) => {
+    const y = 7 + i * 13;
+    return (
+      rect(13, y, 33, 10.5, url('st'), 1) +
+      times(
+        8,
+        (k) =>
+          rect(15 + k * 3.8, y + 2.6, 2.8, 4.8, i % 2 ? '#16a34a' : SC_BLUE, 0.5) +
+          rect(15.6 + k * 3.8, y + 3.9, 1.6, 2.2, INK),
+      ) +
+      rect(15, y + 8.6, 29, 0.8, '#64748b')
+    );
+  }) +
+  line('M50 10V55', AMBER, 1.7) +
+  times(4, (i) => line(`M46 ${12.5 + i * 13}H50`, AMBER, 1.4));
 
 const coreSwitch =
   rackUnit(18, 28, url('dk')) +
@@ -69,20 +140,38 @@ const coreSwitch =
   scPorts(47, 22, 1, 8) +
   scPorts(47, 34, 1, 8);
 
+/** A rack router: optical uplink cages, copper ports and a small display. */
 const router =
-  line('M14 26 10 7', '#334155', 3) +
-  line('M50 26 54 7', '#334155', 3) +
-  rect(4, 25, 56, 25, url('dk'), 4) +
-  rect(4, 25, 56, 2, '#ffffff33', 1) +
-  rjPorts(10, 37, 6, 5.8) +
-  leds(11, 31, 6, 5.8) +
-  rect(47, 30, 8, 13, '#94a3b8', 1) +
-  rect(49, 33, 4, 7, INK);
+  rackUnit(19, 26, url('dk')) +
+  rect(2, 19, 60, 2.6, url('bl'), 1) +
+  sfp(9, 25.5, 4, 5.2, AMBER) +
+  rjPorts(32, 25.2, 4, 5.6) +
+  rect(9, 35, 12, 6, '#052e16', 0.8) +
+  line('M11 39.2 13.5 37l2 1.6 3-2.4', '#4ade80', 1) +
+  leds(26, 38, 6, 4.4) +
+  dot(53.5, 38, 2.2, '#0b1220') +
+  dot(53.5, 38, 1, AMBER);
+
+/** A small desktop router: five copper ports and one optical cage in a white case. */
+const smallRouter =
+  rect(10, 44, 6, 2.5, '#475569', 1) +
+  rect(48, 44, 6, 2.5, '#475569', 1) +
+  rect(5, 21, 54, 24, url('wh'), 3.5) +
+  rect(5, 21, 54, 2, '#ffffff', 2) +
+  leds(13.5, 26.5, 5, 6) +
+  dot(48, 26.5, 1.2, '#2563eb') +
+  rect(9, 30, 46, 11, '#1f2937', 1.6) +
+  rjPorts(11, 32.5, 5, 6) +
+  sfp(44, 33, 1, 8.2, AMBER);
 
 const firewall =
   rackUnit(14, 36, url('dk')) +
   rect(9, 19, 34, 26, url('pv'), 1.5) +
-  line('M9 27.7H43M9 36.3H43M20 19V27.7M32 19V27.7M14 27.7V36.3M26 27.7V36.3M38 27.7V36.3M20 36.3V45M32 36.3V45', '#7c2d12', 1.3) +
+  line(
+    'M9 27.7H43M9 36.3H43M20 19V27.7M32 19V27.7M14 27.7V36.3M26 27.7V36.3M38 27.7V36.3M20 36.3V45M32 36.3V45',
+    '#7c2d12',
+    1.3,
+  ) +
   leds(50, 23, 1, 0) +
   leds(50, 30, 1, 0, AMBER) +
   rect(47, 36, 8, 8, INK, 1);
@@ -99,7 +188,11 @@ const headendRack =
   rect(10, 3, 44, 58, url('ir'), 3) +
   times(4, (i) => {
     const y = 8 + i * 13;
-    return rect(14, y, 36, 10.5, i % 2 ? url('st') : url('dk'), 1.5) + rect(17, y + 3, 14, 4.5, '#052e16') + leds(36, y + 5.2, 3, 4.5);
+    return (
+      rect(14, y, 36, 10.5, i % 2 ? url('st') : url('dk'), 1.5) +
+      rect(17, y + 3, 14, 4.5, '#052e16') +
+      leds(36, y + 5.2, 3, 4.5)
+    );
   });
 
 const cabinet = (body: string, doubleDoor: boolean, rails: boolean) =>
@@ -108,24 +201,43 @@ const cabinet = (body: string, doubleDoor: boolean, rails: boolean) =>
   rect(8, 4, 48, 6, '#475569', 2) +
   rect(8, 4, 48, 1.6, '#ffffff44', 1) +
   (doubleDoor ? rect(31.4, 10, 1.2, 46, '#1e293b') : '') +
-  times(4, (i) => rect(15, 13 + i * 3, 12, 1.4, '#1e293b99') + (doubleDoor ? rect(37, 13 + i * 3, 12, 1.4, '#1e293b99') : '')) +
+  times(
+    4,
+    (i) => rect(15, 13 + i * 3, 12, 1.4, '#1e293b99') + (doubleDoor ? rect(37, 13 + i * 3, 12, 1.4, '#1e293b99') : ''),
+  ) +
   (doubleDoor
     ? rect(26, 30, 3, 9, '#e2e8f0', 1) + rect(35, 30, 3, 9, '#e2e8f0', 1)
     : rect(46, 28, 3.4, 11, '#e2e8f0', 1)) +
-  (rails ? rect(15, 42, 26, 9, '#ffffffd0', 1) + rect(18, 45, 20, 1.4, '#334155') + rect(18, 48, 13, 1.4, '#334155') : '');
+  (rails
+    ? rect(15, 42, 26, 9, '#ffffffd0', 1) + rect(18, 45, 20, 1.4, '#334155') + rect(18, 48, 13, 1.4, '#334155')
+    : '');
 
+/** An outdoor access terminal: a latched lid over a row of drop ports with the drops leaving below. */
 const terminalShell = (body: string) =>
-  rect(15, 6, 34, 52, body, 5) +
-  rect(15, 6, 34, 2.2, '#ffffff66', 2) +
-  rect(19, 12, 26, 22, '#ffffff70', 2) +
-  shape('M33 15 26 25h5l-1.5 7 8-11h-5.5z', '#1d4ed8') +
-  rect(15, 37, 34, 1.3, '#47556999') +
-  rect(29, 35, 6, 5, '#475569', 1) +
-  scPorts(19, 43, 4, 6.8) +
-  times(4, (i) => rect(20.2 + i * 6.8, 50, 3.4, 8, FIBERS[i], 1));
+  rect(26, 2, 12, 5, '#475569', 1.5) +
+  rect(15, 6, 34, 50, body, 5) +
+  rect(15, 6, 34, 2.2, '#ffffff', 2) +
+  rect(12.5, 15, 3.5, 8, '#64748b', 1) +
+  rect(48, 15, 3.5, 8, '#64748b', 1) +
+  rect(19, 11, 26, 21, '#ffffff8c', 2) +
+  fiberMark(26, 14.5) +
+  rect(15, 35.5, 34, 1.2, '#47556999') +
+  rect(29, 33.6, 6, 5, '#475569', 1) +
+  scPorts(19, 41.5, 4, 6.8) +
+  times(4, (i) => rect(20.2 + i * 6.8, 49, 3.4, 13, FIBERS[i], 1));
 
 const terminalBox = terminalShell(url('wh'));
-const fiberTerminal = terminalShell(url('st'));
+/** A small indoor termination box: fiber in at the top, two outlets behind a flip cover. */
+const fiberTerminal =
+  line('M32 0V14', AMBER, 3) +
+  rect(13, 12, 38, 40, url('wh'), 4) +
+  rect(13, 12, 38, 2.2, '#ffffff', 2) +
+  rect(13, 34, 38, 1.1, '#94a3b8') +
+  rect(19, 18, 26, 9, '#e2e8f0', 1.5) +
+  rect(22, 20.6, 14, 1.4, '#64748b') +
+  rect(22, 23.4, 9, 1.4, '#64748b') +
+  scPorts(20, 39.5, 2, 12.5) +
+  dot(46, 16.5, 1.2, LED);
 
 const poleBox =
   rect(8, 0, 11, 64, url('cn')) +
@@ -133,21 +245,25 @@ const poleBox =
   rect(5, 44, 17, 3, '#334155', 1) +
   rect(21, 9, 35, 45, url('wh'), 4) +
   rect(21, 9, 35, 2, '#ffffff', 2) +
-  shape('M40 14 33 25h5l-2 8 9-12h-6z', '#1d4ed8') +
+  fiberMark(32.5, 15.5) +
   scPorts(25, 38, 4, 7) +
   times(4, (i) => rect(26.2 + i * 7, 45, 3.6, 14, FIBERS[i], 1));
 
 const wallBox =
-  rect(0, 0, 64, 64, '#b9674a') +
-  line('M0 13H64M0 26H64M0 39H64M0 52H64M16 0V13M48 0V13M32 13V26M0 13M16 26V39M48 26V39M32 39V52M16 52V64M48 52V64', '#e7d3c5', 1.4) +
+  rect(0, 0, 64, 64, '#b9674a', 7) +
+  line(
+    'M0 13H64M0 26H64M0 39H64M0 52H64M16 0V13M48 0V13M32 13V26M0 13M16 26V39M48 26V39M32 39V52M16 52V64M48 52V64',
+    '#e7d3c5',
+    1.4,
+  ) +
   rect(13, 8, 38, 48, url('wh'), 4) +
   rect(13, 8, 38, 2, '#ffffff', 2) +
-  shape('M33 14 26 25h5l-2 8 9-12h-6z', '#1d4ed8') +
+  fiberMark(26, 15.5) +
   scPorts(18, 40, 4, 7.2) +
   rect(19, 49, 26, 3, '#94a3b8', 1);
 
 const undergroundBox =
-  rect(0, 22, 64, 42, '#8a6a4a') +
+  rect(0, 19, 64, 45, '#8a6a4a', 6) +
   dot(9, 35, 1.6, '#6d5238') +
   dot(55, 42, 2, '#6d5238') +
   dot(12, 56, 2, '#6d5238') +
@@ -257,7 +373,13 @@ const electricPole =
   line('M8 11 2 13M56 11 62 13', '#334155', 1.2) +
   rect(28, 3, 8, 61, url('cn')) +
   rect(8, 16, 48, 4.5, '#475569', 1) +
-  times(3, (i) => rect(9.5 + i * 20.5, 8, 4, 8, '#7c3a1d', 1) + rect(8.2 + i * 20.5, 10, 6.6, 1.6, '#a8552c') + rect(8.2 + i * 20.5, 13, 6.6, 1.6, '#a8552c')) +
+  times(
+    3,
+    (i) =>
+      rect(9.5 + i * 20.5, 8, 4, 8, '#7c3a1d', 1) +
+      rect(8.2 + i * 20.5, 10, 6.6, 1.6, '#a8552c') +
+      rect(8.2 + i * 20.5, 13, 6.6, 1.6, '#a8552c'),
+  ) +
   rect(19, 30, 26, 22, url('gy'), 3) +
   rect(19, 30, 26, 2, '#ffffff77', 1) +
   times(3, (i) => rect(22 + i * 7.5, 26, 3.5, 4, '#7c3a1d', 1)) +
@@ -278,7 +400,7 @@ const handhole =
   rect(27, 11, 10, 4, '#111827', 1);
 
 const chamber =
-  rect(0, 12, 64, 52, '#8a6a4a') +
+  rect(0, 8, 64, 56, '#8a6a4a', 6) +
   rect(0, 8, 64, 6, '#5f7f4b') +
   rect(7, 16, 50, 45, url('cn'), 2) +
   rect(13, 21, 38, 34, '#1f2937', 1) +
@@ -351,8 +473,8 @@ const slackLoop =
   rect(54, 21, 5, 16, '#f59e0b', 1) +
   line('M32 43V62', '#1f2937', 4);
 
-const homeDevice = (fiber: boolean) =>
-  (fiber ? line('M50 45C58 45 56 57 62 60', AMBER, 3) : '') +
+const ont =
+  line('M50 45C58 45 56 57 62 60', AMBER, 3) +
   rect(6, 16, 52, 32, url('wh'), 5) +
   rect(6, 16, 52, 2.4, '#ffffff', 2) +
   rect(6, 40, 52, 8, '#cbd5e1', 3) +
@@ -360,7 +482,19 @@ const homeDevice = (fiber: boolean) =>
   dot(40, 27, 1.4, AMBER) +
   rect(44, 22, 9, 10, url('bl'), 2) +
   dot(48.5, 27, 2, '#e2e8f0') +
-  (fiber ? rect(46, 41, 7, 5, SC_BLUE, 1) : rect(12, 42, 28, 2, '#94a3b8', 1));
+  rect(46, 41, 7, 5, SC_BLUE, 1) +
+  rect(12, 42, 26, 2, '#94a3b8', 1);
+
+const onu =
+  line('M50 38H62', AMBER, 2.6) +
+  rect(6, 19, 52, 28, url('dk'), 4.5) +
+  rect(6, 19, 52, 2.2, '#ffffff33', 2) +
+  leds(13, 26, 6, 5.2) +
+  dot(50, 26, 1.3, AMBER) +
+  rect(9, 31, 46, 12, '#0b1220', 1.6) +
+  rjPorts(11, 34, 4, 6.4) +
+  rect(41, 34, 8, 6, SC_BLUE, 1) +
+  rect(43, 35.6, 4, 2.8, INK);
 
 const wifiRouter =
   rect(9, 7, 3.6, 26, '#1f2937', 1.8) +
@@ -449,16 +583,23 @@ const tapOff =
 
 const ART: Record<EquipmentType, string> = {
   OLT: olt,
-  ODF: patchPanel,
+  ODF: odf,
   'Fiber Patch Panel': patchPanel,
   'Core Switch': coreSwitch,
   Router: router,
-  'MikroTik Router': router,
+  'MikroTik Router': smallRouter,
   Firewall: firewall,
   'Optical Transmitter': transmitter,
   'Headend Equipment': headendRack,
-  FDMS: cabinet(url('gn'), true, true),
-  FDT: cabinet(url('gn'), false, true),
+  FDMS:
+    cabinet(url('gn'), true, true) +
+    rect(22, 1, 20, 4, '#334155', 1) +
+    times(4, (i) => rect(24.5 + i * 4.2, 2, 2.2, 2, '#94a3b8')),
+  FDT:
+    cabinet(url('gn'), false, true) +
+    shape('M21 26 15.5 36h11z', '#facc15') +
+    rect(20.4, 29.5, 1.2, 3.4, INK) +
+    dot(21, 34.2, 0.7, INK),
   FAT: terminalBox,
   'Fiber Distribution Cabinet': cabinet(url('gy'), true, false),
   'Fiber Terminal Box': fiberTerminal,
@@ -485,8 +626,8 @@ const ART: Record<EquipmentType, string> = {
   'Building Entry Point': buildingEntry,
   'Junction Point': junctionPoint,
   'Fiber Slack Loop': slackLoop,
-  ONT: homeDevice(true),
-  ONU: homeDevice(false),
+  ONT: ont,
+  ONU: onu,
   'Wi-Fi Router': wifiRouter,
   'Optical Modem': modem,
   'Customer Terminal': customerTerminal,
@@ -501,7 +642,7 @@ const ART: Record<EquipmentType, string> = {
 /** Complete SVG markup for an equipment type. Unknown custom types get a generic device. */
 export function equipmentSvg(type: string | null | undefined): string {
   const art = (type && ART[type as EquipmentType]) || terminalBox;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${DEFS}${art}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${DEFS}<g filter="url(#sh)">${art}</g></svg>`;
 }
 
 const urlCache = new Map<string, string>();

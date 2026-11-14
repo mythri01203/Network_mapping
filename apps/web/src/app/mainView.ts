@@ -2,6 +2,7 @@
 export type MainView =
   | 'map'
   | 'view3d'
+  | 'twin'
   | 'topology'
   | 'olt_rack'
   | 'inventory'

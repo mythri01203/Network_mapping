@@ -17,6 +17,11 @@ export interface EngineEvents {
   /** The person moved the camera, so no preset is active any more. */
   onUserMove?: () => void;
   onStats?: (s: { fps: number; pixelRatio: number }) => void;
+  /**
+   * A tap on the ground, in local metres. Return true to take it (the person is choosing a
+   * place, such as a new customer's house); nothing is then selected.
+   */
+  onGroundTap?: (point: { x: number; z: number }) => boolean;
   /** The street map under the scene: loading, shown, or could not load (offline). */
   onGround?: (state: GroundState) => void;
 }
@@ -39,7 +44,7 @@ export function webglAvailable(): boolean {
   }
 }
 
-const SKY = { dark: 0x0b0f14, light: 0xcfdbe6 } as const;
+const SKY = { dark: 0x0b0f14, light: 0xdfe9f1 } as const;
 const MAX_DPR = 2;
 
 export class View3DEngine {
@@ -98,7 +103,7 @@ export class View3DEngine {
     canvas.setAttribute('role', 'img');
     canvas.setAttribute(
       'aria-label',
-      '3D network view. Drag to turn, right-drag or Shift-drag to move, scroll or pinch to zoom. Arrow keys turn, plus and minus zoom.',
+      '3D network view. Drag to move, right-drag or Shift-drag to turn, scroll or pinch to zoom, double-click to go closer. Arrow keys turn, plus and minus zoom.',
     );
     host.appendChild(canvas);
 
@@ -147,6 +152,7 @@ export class View3DEngine {
     this.rig = new OrbitRig(this.camera, canvas);
     this.rig.onUserMove = () => this.events.onUserMove?.();
     this.rig.onTap = (x, y) => this.pickAt(x, y);
+    this.rig.onDoubleTap = (x, y) => this.flyToGround(x, y);
 
     // Development only: lets `npm run check:3d` look inside (draw calls, toggles).
     if (import.meta.env.DEV) (window as unknown as { __view3dEngine?: unknown }).__view3dEngine = this;
@@ -178,12 +184,9 @@ export class View3DEngine {
     const ext = Math.max(20, scene.extent);
     this.rig.maxDistance = ext * 8 + 200;
     this.scene3.fog = new THREE.Fog(this.opts.dark ? SKY.dark : SKY.light, ext * 2.6, ext * 9 + 220);
-    // Shadows cover the area around the centre; the sun follows the scene's size.
-    const s = Math.min(160, ext * 1.4);
-    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: s * 5 });
-    this.sun.shadow.camera.updateProjectionMatrix();
-    this.sun.position.set(scene.center.x + s * 0.6, s * 1.6, scene.center.z + s);
-    this.sun.target.position.set(scene.center.x, 0, scene.center.z);
+    // Shadows cover the area the camera looks at and follow it (`followShadows`).
+    this.shadowAt = null;
+    this.followShadows(true);
     const rack = scene.racks[0]?.position ?? scene.center;
     this.fill.position.set(rack.x, 2.5, rack.z + 2.5);
     this.world.rebuildGallery(this.ponKey, this.currentCustomer(), this.opts.labels);
@@ -339,6 +342,58 @@ export class View3DEngine {
     }
   }
 
+  private shadowAt: THREE.Vector3 | null = null;
+  private shadowSize = 0;
+
+  /**
+   * Keeps the sun's shadow box around what the camera looks at, sized to the camera distance, so
+   * poles, boxes and houses cast shadows anywhere in a network kilometres wide. The shadow map is
+   * drawn again only when the camera has moved a good part of the box.
+   */
+  private followShadows(force = false) {
+    const t = this.rig.target;
+    const dist = this.camera.position.distanceTo(t);
+    const s = THREE.MathUtils.clamp(dist * 1.2, 30, 220);
+    const moved = this.shadowAt ? Math.hypot(t.x - this.shadowAt.x, t.z - this.shadowAt.z) : Infinity;
+    const resized = Math.abs(s - this.shadowSize) > this.shadowSize * 0.35;
+    if (!force && moved < this.shadowSize * 0.3 && !resized) return;
+    this.shadowAt = t.clone();
+    this.shadowSize = s;
+    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: s * 6 });
+    this.sun.shadow.camera.updateProjectionMatrix();
+    this.sun.position.set(t.x + s * 0.7, s * 1.9, t.z + s * 0.9);
+    this.sun.target.position.set(t.x, 0, t.z);
+    this.sun.target.updateMatrixWorld();
+    this.refreshShadows();
+  }
+
+  /** A soft sky: deeper blue overhead, pale at the horizon (flat colour at night). */
+  private skyTexture: THREE.Texture | null = null;
+  private makeSky(dark: boolean): THREE.Texture | THREE.Color {
+    this.skyTexture?.dispose();
+    this.skyTexture = null;
+    const c = document.createElement('canvas');
+    c.width = 4;
+    c.height = 256;
+    const g = c.getContext('2d');
+    if (!g) return new THREE.Color(dark ? SKY.dark : SKY.light);
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    if (dark) {
+      grad.addColorStop(0, '#05080d');
+      grad.addColorStop(1, '#141c26');
+    } else {
+      grad.addColorStop(0, '#5b9bd8');
+      grad.addColorStop(0.55, '#a9cdea');
+      grad.addColorStop(1, '#dfe9f1');
+    }
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 4, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    this.skyTexture = t;
+    return t;
+  }
+
   /** Draws the shadow map once on the next frame. */
   private refreshShadows() {
     this.renderer.shadowMap.needsUpdate = true;
@@ -374,7 +429,7 @@ export class View3DEngine {
 
   private applyTheme() {
     const sky = this.opts.dark ? SKY.dark : SKY.light;
-    this.scene3.background = new THREE.Color(sky);
+    this.scene3.background = this.makeSky(this.opts.dark);
     if (this.scene3.fog) (this.scene3.fog as THREE.Fog).color.setHex(sky);
     this.hemi.intensity = this.opts.dark ? 0.5 : 0.9;
     this.ground?.setDark(this.opts.dark);
@@ -382,8 +437,92 @@ export class View3DEngine {
     this.renderer.toneMappingExposure = this.opts.dark ? 1 : 1.05;
   }
 
+  /** The point on the ground the camera looks at, in local metres. */
+  lookingAt(): { x: number; z: number } {
+    return { x: this.rig.target.x, z: this.rig.target.z };
+  }
+
+  /** On-screen buttons: zoom in or out a step, turn left or right. */
+  nav(action: 'in' | 'out' | 'left' | 'right') {
+    if (action === 'in') this.rig.zoom(0.6);
+    else if (action === 'out') this.rig.zoom(1.6);
+    else this.rig.rotate(action === 'left' ? -70 : 70, 0);
+  }
+
+  /** Double click on the ground: go there, three times closer. */
+  private flyToGround(clientX: number, clientY: number) {
+    const g = this.rig.groundAt(clientX, clientY);
+    if (!g) return;
+    const o = this.camera.position.clone().sub(this.rig.target);
+    o.setLength(Math.max(25, o.length() * 0.33));
+    const t = new THREE.Vector3(g.x, 1, g.z);
+    this.rig.flyTo(t, t.clone().add(o), this.opts.reducedMotion);
+    this.events.onUserMove?.();
+  }
+
+  /**
+   * What a tap hits on screen before any 3D test: a name label, or (from far away, when they
+   * stand in for the models) the dot of a box, an office or a house. Null when nothing is near.
+   */
+  private pickOnScreen(clientX: number, clientY: number): PickInfo | null {
+    const w = this.world;
+    const d = this.data;
+    if (!w || !d) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const k = rect.height / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)));
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const at = (x: number, y: number, z: number): [number, number] | null => {
+      const p = this.tmp.set(x, y, z).project(this.camera);
+      if (p.z > 1 || p.z < -1) return null;
+      return [((p.x + 1) / 2) * rect.width, ((1 - p.y) / 2) * rect.height];
+    };
+    if (w.kit.labels.visible)
+      for (const o of w.kit.labels.children) {
+        const pick = o.userData.pick as PickInfo | undefined;
+        if (!pick || !o.visible) continue;
+        const dist = o.position.distanceTo(this.camera.position);
+        const s = at(o.position.x, o.position.y, o.position.z);
+        if (!s) continue;
+        const hw = (o.scale.x * k) / Math.max(0.01, dist) / 2;
+        const hh = (o.scale.y * k) / Math.max(0.01, dist) / 2;
+        if (Math.abs(px - s[0]) <= hw + 2 && Math.abs(py - s[1]) <= hh + 2) return pick;
+      }
+    if (!w.far.visible) return null;
+    let best: PickInfo | null = null;
+    let bestD = 16;
+    const near = (x: number, y: number, z: number, pick: PickInfo, bias = 0) => {
+      const s = at(x, y, z);
+      if (!s) return;
+      const dd = Math.hypot(px - s[0], py - s[1]) - bias;
+      if (dd < bestD) {
+        bestD = dd;
+        best = pick;
+      }
+    };
+    for (const r of d.racks) {
+      const olt = r.items.find((i) => i.kind === 'olt');
+      if (olt?.kind === 'olt') near(r.position.x, 4, r.position.z, { kind: 'equipment', id: olt.olt.equipmentId }, 4);
+    }
+    for (const b of d.boxes)
+      near(b.position.x, b.model === 'fat' ? 6 : 6.5, b.position.z, { kind: 'equipment', id: b.id }, 2);
+    for (const h of d.houses) near(h.position.x, 3, h.position.z, { kind: 'house', houseId: h.id });
+    return best;
+  }
+
   private pickAt(clientX: number, clientY: number) {
     if (!this.world) return;
+    if (this.events.onGroundTap) {
+      const g = this.rig.groundAt(clientX, clientY);
+      if (g && this.events.onGroundTap({ x: g.x, z: g.z })) return;
+    }
+    const onScreen = this.pickOnScreen(clientX, clientY);
+    if (onScreen) {
+      // Picked by its name or dot from far away: go to it so it can be seen.
+      if (onScreen.kind === 'equipment') this.focusEquipment(onScreen.id);
+      this.events.onPick(onScreen);
+      return;
+    }
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
@@ -469,6 +608,7 @@ export class View3DEngine {
         if (this.frameNo % 32 === 1) {
           const at = this.rig.target;
           this.ground.focus({ x: at.x, z: at.z }, this.camera.position.distanceTo(at));
+          this.followShadows();
         }
       }
     }
@@ -516,6 +656,7 @@ export class View3DEngine {
     this.world?.dispose();
     this.world = null;
     this.ground.dispose();
+    this.skyTexture?.dispose();
     this.env?.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();

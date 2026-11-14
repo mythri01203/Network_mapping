@@ -96,6 +96,11 @@ async function open(path, viewport = { width: 1440, height: 900 }, deviceScaleFa
   await page.goto(`${URL}${path}`);
   await page.locator('canvas').first().waitFor({ timeout: 30_000 });
   await page.waitForTimeout(1500);
+  // The extra options and the fiber panel start folded so the scene is visible: open both.
+  const more = page.getByRole('button', { name: 'More options' });
+  if ((await more.count()) && (await more.getAttribute('aria-expanded')) === 'false') await more.click();
+  const fiber = page.getByRole('button', { name: /Fiber map/ });
+  if ((await fiber.count()) && (await fiber.getAttribute('aria-expanded')) === 'false') await fiber.click();
   return page;
 }
 

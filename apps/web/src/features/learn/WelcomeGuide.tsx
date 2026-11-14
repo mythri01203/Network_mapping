@@ -3,8 +3,8 @@ import { ArrowLeft, ArrowRight, Check, GraduationCap, X } from 'lucide-react';
 
 import { isVoiceLanguage, WELCOME_LESSON } from '@fibergis/shared';
 
-import { LANGUAGES } from '../../i18n/format';
-import { LANGUAGE_NAMES, useFieldLanguage, useT } from '../../i18n/useT';
+import { useT } from '../../i18n/useT';
+import { LanguagePicker } from './LanguagePicker';
 import { useLearnStore } from './learnStore';
 import { VoiceGuidePlayer } from './VoiceGuidePlayer';
 import { scriptOf } from './voiceLibrary';
@@ -12,33 +12,11 @@ import { WelcomePicture } from './WelcomePictures';
 
 const BIG = 'flex min-h-[64px] flex-1 items-center justify-center gap-2 rounded-2xl border-2 px-4 text-[18px] font-bold';
 
-/** Three big language buttons, each in its own script. Remembered on this device. */
-function LanguageChoice() {
-  const lang = useFieldLanguage((s) => s.lang);
-  const setLang = useFieldLanguage((s) => s.setLang);
-  return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Language">
-      {LANGUAGES.map((code) => (
-        <button
-          key={code}
-          type="button"
-          lang={code}
-          aria-pressed={lang === code}
-          onClick={() => setLang(code)}
-          className={`min-h-[64px] rounded-2xl border-2 px-3 text-[20px] font-bold ${lang === code ? 'border-blue-900 bg-blue-800 text-white' : 'border-slate-400 bg-white text-slate-900'}`}
-        >
-          {LANGUAGE_NAMES[code]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /**
- * The welcome lesson (learning assistant, Stage 2): language, then five short steps with a
- * picture, the words and the voice. Shown once on a new device; afterwards from Help, "Learn
- * FiberGIS". It covers the screen on a phone and is a centred card on a computer. Nothing here
- * changes the network.
+ * The welcome lesson (learning assistant, Stage 2): short steps with a picture, the words and the
+ * voice. The language is picked on each step, right beside the voice. Shown once on a new device;
+ * afterwards from Help, "Learn FiberGIS". It covers the screen on a phone and is a centred card on
+ * a computer. Nothing here changes the network.
  */
 export function WelcomeGuide() {
   const { t, lang } = useT();
@@ -52,8 +30,8 @@ export function WelcomeGuide() {
 
   const open = welcomeOpen || !welcomeSeen;
   const total = WELCOME_LESSON.length;
-  // Step 0 is the language choice; 1..total are the lesson steps.
-  const step = Math.min(Math.max(welcomeStep, 0), total);
+  // Steps 0..total-1 are the lesson steps.
+  const step = Math.min(Math.max(welcomeStep, 0), total - 1);
 
   useEffect(() => {
     if (open) first.current?.focus();
@@ -63,7 +41,7 @@ export function WelcomeGuide() {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeWelcome();
-      if (e.key === 'ArrowRight' && step < total) setWelcomeStep(step + 1);
+      if (e.key === 'ArrowRight' && step < total - 1) setWelcomeStep(step + 1);
       if (e.key === 'ArrowLeft' && step > 0) setWelcomeStep(step - 1);
     };
     window.addEventListener('keydown', onKey);
@@ -72,7 +50,7 @@ export function WelcomeGuide() {
 
   if (!open) return null;
 
-  const key = step > 0 ? WELCOME_LESSON[step - 1] : null;
+  const key = WELCOME_LESSON[step];
   const script = key ? scriptOf(key) : undefined;
   const words = script && isVoiceLanguage(lang) ? script.text[lang] : undefined;
 
@@ -99,26 +77,20 @@ export function WelcomeGuide() {
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" lang={lang}>
-          {step === 0 ? (
-            <>
-              <WelcomePicture lessonKey="welcome.intro" />
-              <h3 className="text-[20px] font-bold text-slate-900">{t('learn.chooseLanguage')}</h3>
-              <LanguageChoice />
-            </>
-          ) : (
             <>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[15px] font-semibold text-slate-600" data-testid="welcome-step">
-                  {t('learn.step', { n: step, total })}
+                  {t('learn.step', { n: step + 1, total })}
                 </span>
                 <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[13px] font-medium text-slate-600">{t('learn.example')}</span>
               </div>
               <div className="flex gap-1" aria-hidden>
                 {WELCOME_LESSON.map((k, i) => (
-                  <span key={k} className={`h-1.5 flex-1 rounded-full ${i < step ? 'bg-blue-600' : 'bg-slate-200'}`} />
+                  <span key={k} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-blue-600' : 'bg-slate-200'}`} />
                 ))}
               </div>
               <div className="rounded-3xl bg-gradient-to-b from-slate-50 to-white p-3 ring-1 ring-slate-100">{key && <WelcomePicture lessonKey={key} />}</div>
+              <LanguagePicker />
               {key && <VoiceGuidePlayer lessonKey={key} />}
               <p className="text-[19px] leading-relaxed text-slate-900" data-testid="welcome-words">
                 {words?.text}
@@ -134,7 +106,6 @@ export function WelcomeGuide() {
               )}
               {words && !words.reviewed && <p className="text-[13px] text-slate-500">{t('learn.draftWords')}</p>}
             </>
-          )}
         </div>
 
         <div className="flex gap-2 border-t border-slate-100 p-3 sm:p-4">
@@ -144,9 +115,9 @@ export function WelcomeGuide() {
               {t('learn.back')}
             </button>
           )}
-          {step < total ? (
+          {step < total - 1 ? (
             <button ref={first} type="button" onClick={() => setWelcomeStep(step + 1)} data-testid="welcome-next" className={`${BIG} ui-brand border-blue-800 bg-blue-700 text-white`}>
-              {step === 0 ? t('learn.start') : t('learn.next')}
+              {t('learn.next')}
               <ArrowRight className="h-6 w-6" aria-hidden />
             </button>
           ) : (

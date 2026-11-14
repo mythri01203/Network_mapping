@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cuboid, Map as MapIcon } from 'lucide-react';
+import { Box, Cuboid, Map as MapIcon } from 'lucide-react';
 
 import { useUiStore } from '../../stores/uiStore';
 import { useActiveView, useOpenView, useShowOnMap } from '../views';
@@ -40,6 +40,7 @@ export const MapModeSwitch: React.FC = () => {
     >
       {item(active === 'map', '2D Map', '2D', <MapIcon size={14} />, go2d)}
       {item(active === 'view3d', '3D View', '3D', <Cuboid size={14} />, () => openView('view3d'))}
+      {item(active === 'twin', 'Digital Twin', 'Twin', <Box size={14} />, () => openView('twin'))}
     </div>
   );
 };
